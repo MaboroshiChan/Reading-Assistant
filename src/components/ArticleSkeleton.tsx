@@ -38,6 +38,20 @@ export interface ArticleFrameworkProps {
   SidebarComponent?: React.ComponentType;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const loadArticleFromFile = async (filePath: string): Promise<string> => {
+  try {
+    const response = await fetch(filePath);
+    if (!response.ok) {
+      throw new Error(`Failed to load article from ${filePath}`);
+    }
+    return await response.text();
+  } catch (error) {
+    console.error(error);
+    return '<p>Error loading article content.</p>';
+  }
+}
+
 // Article Framework/Skeleton Component
 const ArticleFramework: React.FC<ArticleFrameworkProps> = ({ 
   // Core content props
