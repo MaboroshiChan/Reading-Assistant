@@ -1,0 +1,10 @@
+.sentence-frame {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 8px; /* Rounded corners */
+  transition: background-color 0.2s ease;
+}
+
+.sentence-frame.hovered {
+  background-color: rgba(200, 220, 255, 0.25); /* Light blue highlight */
+}

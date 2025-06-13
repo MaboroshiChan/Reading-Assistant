@@ -1,0 +1,14 @@
+{
+    "id": 1,
+    "raw_text": "This is an example of a JSON file that contains multiple text fragments.",
+    "sentence_labels": [
+        {"text": "This"},
+        {"text": "is", "label": "verb"},
+        {"text": "an example of a JSON file"},
+        {"text": "that contains"},
+        {"nested": [
+            {"text": "multiple"},
+            {"text": "text fragments"}
+        ], "label": "noun_phrase"}
+    ]
+}

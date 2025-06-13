@@ -1,0 +1,32 @@
+src/
+├── analysis/                 # 📘 Text and semantic logic
+│   ├── semantic/             # Semantic analysis logic
+│   │   ├── Sentence.ts
+│   │   ├── Paragraph.ts
+│   │   ├── RoleTagger.ts
+│   │   └── Analyzer.ts
+│   └── structure/            # Document hierarchy models
+│       ├── Document.ts
+│       ├── Section.ts
+│       └── TextObject.ts
+├── components/               # 🧩 UI components
+│   ├── TextBlock.tsx         # A single paragraph or sentence
+│   ├── AnnotationLayer.tsx   # Renders hoverable overlays
+│   └── Sidebar.tsx           # Outline, tags, filters
+├── context/                  # 🧠 Global state
+│   ├── AnalysisContext.tsx
+│   └── SelectionContext.tsx
+├── data/                     # 📄 Raw text / annotation samples
+│   └── exampleText.json
+├── hooks/                    # 🪝 UI-logic glue
+│   └── useSemanticEngine.ts
+├── pages/
+│   └── Reader.tsx            # Main reading interface
+├── services/                 # ⚙️ Backend sync, API, db
+│   └── storage.ts
+├── styles/                   # 🎨 CSS or Tailwind base
+│   └── theme.css
+├── types/                    # 📐 TypeScript definitions
+│   └── roles.d.ts
+├── App.tsx
+└── main.tsx
