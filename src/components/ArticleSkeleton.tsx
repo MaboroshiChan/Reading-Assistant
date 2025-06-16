@@ -1,5 +1,7 @@
 import React, { useState, type ReactNode, type CSSProperties } from 'react';
 import './css/ArticleSkeleton.css';
+import { SemanticParagraph } from './SermanticParagraph';
+import { Paragraph } from '../analysis/structure/Paragraph';
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -257,6 +259,16 @@ export type LayoutType = 'default' | 'wide' | 'minimal';
 export type ThemeType = 'light' | 'dark';
 export type FontFamilyType = 'serif' | 'sans-serif';
 
+const ExampleParagraph: React.FC = () => {
+  const exampleContent = 'Hello world! This is an example paragraph to demonstrate the ArticleFramework component.';
+  const exampleParagraph = new Paragraph(1, exampleContent);
+  exampleParagraph.setMainIdea('This is the main idea of the paragraph.');
+
+  return (
+    <SemanticParagraph paragraph={exampleParagraph} />
+  );
+}
+
 // Example usage component
 const ExampleArticle: React.FC = () => {
   const handleShare = (): void => {
@@ -271,13 +283,13 @@ const ExampleArticle: React.FC = () => {
     console.log('Like:', liked);
   };
 
+  /** 
   const [article, setArticle] = React.useState<string>('');
 
   React.useEffect(() => {
     loadArticleFromFile('examples/TestArticles/notes-on-flirt.md').then(setArticle);
   }, []);
-
-  const ExampleComponent = <>{article}</>
+  */
 
   return (
     <ArticleFramework
@@ -290,7 +302,7 @@ const ExampleArticle: React.FC = () => {
       readTime="5 min read"
       image="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=400&fit=crop"
       imageAlt="Article header image"
-      content={ExampleComponent}
+      content={<ExampleParagraph />}
       layout="default"
       theme="light"
       accentColor="#007acc"

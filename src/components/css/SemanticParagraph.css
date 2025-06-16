@@ -1,0 +1,37 @@
+/* SemanticParagraph.css */
+.semantic-paragraph {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-left: 4px solid #cccccc;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+  position: relative;
+}
+
+.semantic-paragraph:hover {
+  background-color: #f0f0ff;
+}
+
+/* Optional tags for relationship indicators (e.g., explanation, rebuttal) */
+.semantic-paragraph[data-relation="explanation"] {
+  border-left-color: #4caf50;
+}
+
+.semantic-paragraph[data-relation="rebuttal"] {
+  border-left-color: #f44336;
+}
+
+.semantic-paragraph-label {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #666;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+/* Optional highlighting of paragraph on selection or active state */
+.semantic-paragraph.active {
+  background-color: #e0e0ff;
+  border-left-color: #3f51b5;
+}
