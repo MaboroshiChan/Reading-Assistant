@@ -38,15 +38,15 @@ export interface ArticleFrameworkProps {
   SidebarComponent?: React.ComponentType;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const loadArticleFromFile = async (filePath: string): Promise<string> => {
+export const loadArticleFromFile = async (filePath: string): Promise<string> => {
   try {
     const response = await fetch(filePath);
     if (!response.ok) {
       throw new Error(`Failed to load article from ${filePath}`);
     }
     return await response.text();
-  } catch (error) {
+  } 
+  catch (error) {
     console.error(error);
     return '<p>Error loading article content.</p>';
   }
@@ -271,6 +271,14 @@ const ExampleArticle: React.FC = () => {
     console.log('Like:', liked);
   };
 
+  const [article, setArticle] = React.useState<string>('');
+
+  React.useEffect(() => {
+    loadArticleFromFile('examples/TestArticles/notes-on-flirt.md').then(setArticle);
+  }, []);
+
+  const ExampleComponent = <>{article}</>
+
   return (
     <ArticleFramework
       title="Your Article Title Here"
@@ -282,12 +290,7 @@ const ExampleArticle: React.FC = () => {
       readTime="5 min read"
       image="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=400&fit=crop"
       imageAlt="Article header image"
-      content={`
-        <p>This is your article content. You can use HTML or pass React components.</p>
-        <h2>Section Heading</h2>
-        <p>More content here with proper TypeScript support...</p>
-        <blockquote>This is a quote that stands out from the rest of the content.</blockquote>
-      `}
+      content={ExampleComponent}
       layout="default"
       theme="light"
       accentColor="#007acc"
