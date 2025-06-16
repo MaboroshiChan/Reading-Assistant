@@ -12,6 +12,12 @@ export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
   const id = paragraph.getId();
   const mainIdea = paragraph.getMainIdea();
 
+  console.log("Rendering SemanticParagraph", {
+    id,
+    mainIdea,
+    sentences: paragraph.getSentences()
+  });
+
   return (
     <div
       className="semantic-paragraph"
