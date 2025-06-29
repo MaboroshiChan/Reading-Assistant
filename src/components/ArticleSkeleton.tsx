@@ -260,12 +260,23 @@ export type ThemeType = 'light' | 'dark';
 export type FontFamilyType = 'serif' | 'sans-serif';
 
 const ExampleParagraph: React.FC = () => {
-  const exampleContent = 'Hello world! This is an example paragraph to demonstrate the ArticleFramework component.';
-  const exampleParagraph = new Paragraph(1, exampleContent);
-  exampleParagraph.setMainIdea('This is the main idea of the paragraph.');
+  const paragraph1 = 'In general, any element of a cognitive model can correspond to a conceptual category. To be more specific, suppose schema theory in the sense of Rumelhart (1975) were taken as characterizing propositional models. Each schema is a network of nodes and links. Every node in a schema would then correspond to a conceptual category. The properties of the category would depend on many factors: the role of that node in the given schema, its relationship to other nodes in the schema, the relationship of that schema to other schemas, and the overall interaction of that schema with other aspects of the conceptual system. As we will see, there is more to ICMs than can be represented in schema theory.';
+  const paragraph2 = paragraph1;
+  const Paragraph3 = paragraph2;
+
+  const paragraphs = [
+    new Paragraph(1, paragraph1),
+    new Paragraph(2, paragraph2),
+    new Paragraph(3, Paragraph3)
+  ];
+
 
   return (
-    <SemanticParagraph paragraph={exampleParagraph} />
+    <div className="example-paragraphs">
+      {paragraphs.map((paragraph: Paragraph) => (
+        <SemanticParagraph key={paragraph.getId()} paragraph={paragraph} />
+      ))}
+    </div>
   );
 }
 
