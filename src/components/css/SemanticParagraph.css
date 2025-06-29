@@ -1,13 +1,14 @@
 /* SemanticParagraph.css */
 .semantic-paragraph {
-  margin: 1rem 0;
-  padding: 1rem;
-  border-left: 4px solid #cccccc;
-  background-color: #f9f9f9;
-  border-radius: 8px;
+  text-align: left;
+  line-height: 1.6;
+  word-wrap: break-word;
+  white-space: normal;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;                 /* Rounded corners */
   transition: background-color 0.3s ease;
-  position: relative;
 }
+
 
 .semantic-paragraph:hover {
   background-color: #f0f0ff;
@@ -23,11 +24,12 @@
 }
 
 .semantic-paragraph-label {
-  font-size: 0.85rem;
-  font-weight: bold;
-  color: #666;
-  margin-bottom: 0.5rem;
   display: block;
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #444;
+  margin-bottom: 0.4rem;
+  text-align: left;
 }
 
 /* Optional highlighting of paragraph on selection or active state */

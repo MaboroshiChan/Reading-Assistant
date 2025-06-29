@@ -3,7 +3,7 @@ import { Sentence } from "../analysis/structure/Sentence";
 //import { SemanticToken } from "./SemanticToken";
 import "./css/SemanticSentence.css"; // Assuming you have a CSS file for styling
 import "./css/SemanticLabels.css"; // Assuming you have a CSS file for styling labels
-import { SemanticSentenceLabels } from "./SentenceLabels";
+//import { SemanticSentenceLabels } from "./SentenceLabels";
 
 interface SentenceProps {
   sentence: Sentence;
@@ -12,7 +12,7 @@ interface SentenceProps {
 export const SemanticSentence: React.FC<SentenceProps> = ({ sentence }) => {
   const [hovered, setHovered] = useState(false);
   return (
-    <div
+    <span
       data-function={sentence.function}
       data-type={sentence.type}
       data-purpose={sentence.purpose}
@@ -21,7 +21,7 @@ export const SemanticSentence: React.FC<SentenceProps> = ({ sentence }) => {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <SemanticSentenceLabels labels={sentence.getSentenceLabels()} />
-    </div>
+      {sentence.getRawText()}
+    </span>
   );
 };
