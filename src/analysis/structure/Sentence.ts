@@ -44,7 +44,10 @@ export class Sentence {
     this.purpose = options.purpose;
     this.mood = options.mood;
     this.relation = options.relation;
-    this.sentence_labels = []; // Initialize with an empty array
+    this.sentence_labels = [{
+      text: rawText, // Default label is the raw text of the sentence
+      label: options.function // Use function as the default label
+    }]; // Initialize with an empty array
   }
 
   private tokenize(text: string): Token[] {

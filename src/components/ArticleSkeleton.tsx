@@ -2,6 +2,8 @@ import React, { useState, type ReactNode, type CSSProperties } from 'react';
 import './css/ArticleSkeleton.css';
 import { SemanticParagraph } from './SermanticParagraph';
 import { Paragraph } from '../analysis/structure/Paragraph';
+import example2 from  '../../examples/example2.json';
+import { Sentence } from '../analysis/structure/Sentence';
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -270,6 +272,17 @@ const ExampleParagraph: React.FC = () => {
     new Paragraph(3, Paragraph3)
   ];
 
+  const sentence = Sentence.fromSentenceLabels(example2['sentence_labels'], {
+    id: 1,
+    function: 'statement',
+    type: 'declarative',
+    purpose: 'informative',
+    mood: 'neutral'
+  });
+  const paragraph4 = new Paragraph(4, 'This is a sample paragraph with a sentence label.');
+  paragraph4.addSentence(sentence);
+
+  paragraphs.push(paragraph4);
 
   return (
     <div className="example-paragraphs">

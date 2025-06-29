@@ -90,5 +90,5 @@ export const SemanticSentenceLabels: React.FC<SentenceLabelsProps> = ({
   const nodes = render(labels);
   emit(nodes, ".", "CLOSE");                 // TODO: This is bug
 
-  return <div className="semantic-sentence-labels">{nodes}</div>;
+  return <span className="semantic-sentence-labels">{nodes}</span>;
 };

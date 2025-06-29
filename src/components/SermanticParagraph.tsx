@@ -1,8 +1,9 @@
 import React from "react";
-import { SemanticSentence } from "./SemanticSentence";
+//import { SemanticSentence } from "./SemanticSentence";
 import { Paragraph } from "../analysis/structure/Paragraph"; // adjust the import path as needed
 import "./css/SemanticParagraph.css";
 import type { Sentence } from "../analysis/structure/Sentence";
+import { SemanticSentenceLabels } from "./SentenceLabels";
 
 interface ParagraphProps {
   paragraph: Paragraph;
@@ -24,15 +25,15 @@ export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
       id={id !== undefined ? `paragraph-${id}` : undefined}
       data-main-idea={mainIdea || undefined}
     >
-      {mainIdea && (
-        <span className="semantic-paragraph-label">
-          {mainIdea}
-        </span>
-      )}
 
-      {paragraph.getSentences().map((sentence: Sentence) => (
-        <SemanticSentence key={sentence.id} sentence={sentence} />
-      ))}
+      {
+        paragraph.getSentences().map((sentence: Sentence, index: number) => (
+          <span key={index} className="semantic-sentence-container">
+            <SemanticSentenceLabels labels={sentence.getSentenceLabels()} />{" "}
+          </span>
+        ))
+      }
+
     </div>
   );
 };
