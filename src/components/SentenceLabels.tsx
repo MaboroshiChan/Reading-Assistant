@@ -88,7 +88,7 @@ export const SemanticSentenceLabels: React.FC<SentenceLabelsProps> = ({
 
   /* Build full sentence; helper always appends final “?” if absent. */
   const nodes = render(labels);
-  emit(nodes, ".", "CLOSE");                 // TODO: This is bug
+  // emit(nodes, ".", "CLOSE");                 // TODO: This is bug
 
   return <span className="semantic-sentence-labels">{nodes}</span>;
 };

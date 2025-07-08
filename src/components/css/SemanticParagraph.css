@@ -27,7 +27,7 @@
   display: block;
   font-size: 0.9rem;
   font-weight: bold;
-  color: #444;
+  color: #08f654;
   margin-bottom: 0.4rem;
   text-align: left;
 }
@@ -35,5 +35,5 @@
 /* Optional highlighting of paragraph on selection or active state */
 .semantic-paragraph.active {
   background-color: #e0e0ff;
-  border-left-color: #3f51b5;
+  border-left-color: #05e36d;
 }

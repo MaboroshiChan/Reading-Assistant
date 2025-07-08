@@ -5,15 +5,10 @@
 
 .label-noun_phrase {
   border: 1px solid green;
-  padding: 2px 4px;
   border-radius: 4px;
   display: inline-block;
 }
 
-.label-conditional {
-  margin: 0px;
-  border: 0px;
-}
 
 .semantic-sentence-labels {
   display: inline;
@@ -27,21 +22,21 @@
   font-size: 1rem;
 }
 
-.semantic-sentence-container {
-  display: inline;
-  margin-right: 4px;
+.semantic-sentence-container > span {
+  padding: 2px; /* 和 hover 时一样 */
   border-radius: 4px;
-  padding: 1px 3px;
 }
 
 .semantic-sentence-container > span:hover {
-  background-color: rgba(95, 17, 239, 0.462); /* light beige on hover */
+  background-color: rgba(4, 253, 25, 0.462);
 }
 
-.nested-group {
-  display: inline-block;
-  margin-right: 0px;
-  background-color: rgba(173, 216, 230, 0.4); /* light blue */
+.nested-group > span {
+  padding: 2px;
   border-radius: 4px;
-  padding: 1px 3px;
+  transition: background-color 0.2s ease;
+}
+
+.nested-group > span:hover {
+  background-color: rgba(15, 179, 233, 0.2); /* 更浅更柔和的蓝色 */
 }
