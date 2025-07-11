@@ -9,8 +9,6 @@ Please return the output as a single valid JSON object following this schema:
     "subject": "<main subject>",
     "predicate": "<main verb or predicate>",
     "object": "<object, if any>",
-    "complements": ["<optional complements>"],
-    "contrast_clause": "<if there is a contrast clause like 'rather than', include it>"
   },
   "semantics": {
     "main_verb": "<main verb>",

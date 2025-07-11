@@ -7,16 +7,15 @@ interface SentenceLabelsProps {
 }
 
 export interface LLMAnalysis {
+  id: number;
   sentence: string;
+  structure: {
+    subject: string,
+    predicate: string,
+    object: string,
+  },
   semantics: {
-    keywords: { word: string; type: "concept" | "event" | "entity" | "goal" | "modifier" }[];
-    semantic_roles: {
-      agent: string;
-      patient: string;
-      instrument?: string;
-    };
-    main_verb: string;
-    proposition: string;
+    semantic_roles: { text_piece: string; type: "concept" | "event" | "entity" | "goal" | "modifier" | "location" }[];
   };
   pragmatics: {
     modality: "factual" | "hypothetical" | "evaluative" | "general truth";
@@ -141,11 +140,45 @@ export const SemanticSentenceLabels: React.FC<SentenceLabelsProps> = ({
  */
 export const collectHighlightPhrases = (data: LLMAnalysis): { word: string; source: string }[] => {
   return [
-    ...data.semantics.keywords.map(k => ({ word: k.word, source: "keyword" })),
+    ...data.semantics.semantic_roles.map(k => ({ word: k.text_piece, source: "keyword" })),
     ...data.pragmatics.focus.map(word => ({ word, source: "focus" })),
   ];
 };
 
+
+export const extractStructureSpans = (
+  sentence: string,
+  structure: {
+    subject?: string;
+    predicate?: string;
+    object?: string;
+  }
+): { start: number; end: number; label: string; id: string; linkedBy?: string }[] => {
+  const lowerSentence = sentence.toLowerCase();
+  const result: { start: number; end: number; label: string; id: string; linkedBy?: string }[] = [];
+
+  const match = (text: string | undefined, label: string, id: string) => {
+    if (!text) return;
+    const phrase = text.toLowerCase();
+    const idx = lowerSentence.indexOf(phrase);
+    if (idx !== -1) {
+      result.push({ start: idx, end: idx + phrase.length, label, id });
+    }
+  };
+
+  match(structure.subject, "subject", "subj-1");
+  match(structure.object, "object", "obj-1");
+  match(structure.predicate, "verb", "verb-1");
+
+  // 给动词加 links
+  const verb = result.find(r => r.label === "verb");
+  if (verb) {
+    const linked = result.filter(r => r.label === "subject" || r.label === "object");
+    verb.linkedBy = linked.map(l => l.id).join(",");
+  }
+
+  return result;
+};
 
 // --------------------------------------------------
 // 3. 查找所有匹配区间（支持短语、重叠）
@@ -246,11 +279,11 @@ export const Highlighter: React.FC<HighlighterProps> = ({ data }) => {
     word: string;
     source: string;
   }[] = collectHighlightPhrases(data);
-  const spans:  {
+  const spans: {
     start: number;
     end: number;
     label: string;
-}[] = findHighlightSpans(sentence, phrases);
+  }[] = findHighlightSpans(sentence, phrases);
   const layers: string[][] = buildHighlightLayers(sentence.length, spans);
   const nodes: React.ReactNode[] = buildHighlightedNodes(sentence, layers);
 
@@ -304,7 +337,7 @@ export const Highlighter: React.FC<HighlighterProps> = ({ data }) => {
       });
     };
   }, [containerSelector]); // 依赖项可以设为容器选择器
-  
 
-  return <p className="highlighted-sentence">{nodes}</p>;
+
+  return <p className="highlighted-sentence">{nodes}</p>; // need to add ID 
 };

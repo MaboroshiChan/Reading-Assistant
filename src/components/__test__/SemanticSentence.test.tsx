@@ -48,27 +48,26 @@ describe('SemanticSentence', () => {
 describe('Highlight module', () => {
   const mockLLMAnalysis: LLMAnalysis = {
     sentence: "Natural language processing significantly improves human-computer interaction.",
+    structure: {
+      subject: 'Natural language',
+      predicate: 'improves',
+      object: 'human-computer interaction'
+    },
     semantics: {
-      main_verb: "improves",
-      proposition: "improve(nlp, interaction)",
-      keywords: [
-        { word: "natural language", type: "concept" },
-        { word: "language processing", type: "concept" },
-        { word: "human-computer interaction", type: "concept" },
-        { word: "significantly", type: "concept" }
-      ],
-      semantic_roles: {
-        agent: "natural language processing",
-        patient: "human-computer interaction",
-        instrument: ""
-      }
+      semantic_roles: [
+        {
+          type: "concept",
+          text_piece: 'Natural language'
+        }
+      ]
     },
     pragmatics: {
       modality: "factual",
       tone: "analytical",
       emphasis: true,
       focus: ["processing", "significantly"]
-    }
+    },
+    id: 0
   };
 
   describe("Highlighter internal functions", () => {
