@@ -5,6 +5,32 @@ interface SentenceLabelsProps {
   labels: SentenceLabels;
 }
 
+export interface LLMAnalysis {
+  sentence: string;
+  semantics: {
+    keywords: { word: string; type: "concept" | "event" | "entity" | "goal" }[];
+    semantic_roles: {
+      agent: string;
+      patient: string;
+      location?: string;
+      instrument?: string;
+    };
+    main_verb: string;
+    proposition: string;
+  };
+  pragmatics: {
+    modality: "factual" | "hypothetical" | "evaluative" | "general truth";
+    tone: "neutral" | "analytical" | "emotional" | "assertive" | "doubtful";
+    emphasis: boolean;
+    focus: string[];
+  };
+  // 其他字段（structure, discourse, meta）可以继续加
+}
+
+export interface HighlighterProps {
+  data: LLMAnalysis;
+}
+
 //* ------------------------------------------------------------- */
 /*  Spacing rules (identical to fromSentenceLabels)              */
 /* ------------------------------------------------------------- */
@@ -91,4 +117,135 @@ export const SemanticSentenceLabels: React.FC<SentenceLabelsProps> = ({
   // emit(nodes, ".", "CLOSE");                 // TODO: This is bug
 
   return <span className="semantic-sentence-labels">{nodes}</span>;
+};
+/**
+ * These functions turns json labeling into react components, including highlighting and cards
+ * The component should search keywords and do highlighting jobs
+ */
+
+/**
+ * 
+ * @param props: contains keywords 
+ * @returns highlighting components
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// --------------------------------------------------
+// 2. 收集所有关键词 & 焦点词 → phrase 列表
+// --------------------------------------------------
+/**
+ * 提取 LLM 分析结果中的关键词（semantics.keywords）与焦点词（pragmatics.focus），
+ * 合并成一个统一的短语列表，并标注来源（keyword / focus）。
+ *
+ * @param data LLMAnalysis 对象
+ * @returns 包含短语和来源的对象数组
+ */
+export const collectHighlightPhrases = (data: LLMAnalysis): { word: string; source: string }[] => {
+  return [
+    ...data.semantics.keywords.map(k => ({ word: k.word, source: "keyword" })),
+    ...data.pragmatics.focus.map(word => ({ word, source: "focus" })),
+  ];
+};
+
+
+// --------------------------------------------------
+// 3. 查找所有匹配区间（支持短语、重叠）
+// --------------------------------------------------
+/**
+ * 在句子中查找每个短语的所有出现位置（支持重叠匹配），并返回起止位置及标签。
+ *
+ * @param sentence 原始句子
+ * @param phrases 所有短语及其来源标签
+ * @returns 所有匹配片段的位置数组（含 start, end, label）
+ */
+export const findHighlightSpans = (
+  sentence: string,
+  phrases: { word: string; source: string }[]
+): { start: number; end: number; label: string }[] => {
+  const result: { start: number; end: number; label: string }[] = [];
+  const lowerSentence = sentence.toLowerCase();
+
+  for (const { word, source } of phrases) {
+    const phrase = word.toLowerCase();
+    let index = 0;
+    while (index < lowerSentence.length) {
+      const found = lowerSentence.indexOf(phrase, index);
+      if (found === -1) break;
+      result.push({ start: found, end: found + phrase.length, label: source });
+      index = found + 1;
+    }
+  }
+
+  result.sort((a, b) =>
+    a.start !== b.start ? a.start - b.start : b.end - a.end
+  );
+  return result;
+};
+
+
+// --------------------------------------------------
+// 4. 把 spans 映射为字符层 labels（二维数组）
+// --------------------------------------------------
+export const buildHighlightLayers = (
+  sentenceLength: number,
+  spans: { start: number; end: number; label: string }[]
+): string[][] => {
+  const layers: string[][] = Array.from({ length: sentenceLength }, () => []);
+  spans.forEach(({ start, end, label }) => {
+    for (let i = start; i < end; i++) {
+      layers[i].push(label);
+    }
+  });
+  return layers;
+};
+
+// --------------------------------------------------
+// 5. 根据 layers 构建嵌套 React 节点
+// --------------------------------------------------
+export const buildHighlightedNodes = (
+  sentence: string,
+  layers: string[][]
+): React.ReactNode[] => {
+  const result: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < sentence.length) {
+    const active = layers[i];
+    let j = i + 1;
+    while (
+      j < sentence.length &&
+      JSON.stringify(layers[j]) === JSON.stringify(active)
+    ) {
+      j++;
+    }
+
+    const chunk = sentence.slice(i, j);
+    let node: React.ReactNode = chunk;
+
+    for (const label of [...active].reverse()) {
+      node = (
+        <span className={`highlight highlight-${label}`} key={`${i}-${label}`}>
+          {node}
+        </span>
+      );
+    }
+
+    result.push(<React.Fragment key={i}>{node}</React.Fragment>);
+    i = j;
+  }
+
+  return result;
+};
+
+// --------------------------------------------------
+// 6. 主组件（整合）
+// --------------------------------------------------
+export const Highlighter: React.FC<HighlighterProps> = ({ data }) => {
+  const { sentence } = data;
+
+  const phrases = collectHighlightPhrases(data);
+  const spans = findHighlightSpans(sentence, phrases);
+  const layers = buildHighlightLayers(sentence.length, spans);
+  const nodes = buildHighlightedNodes(sentence, layers);
+
+  return <p className="highlighted-sentence">{nodes}</p>;
 };
