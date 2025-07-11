@@ -68,3 +68,15 @@ The comma belongs to the set of tokens, but should not response to mouse hoverin
 “Wendy had just read Fifty Shades of Grey, the first book in the trilogy of erotica that was approaching, in America, twenty million copies sold, that was breaking records for weekly sales rates, that Wendy and so many others labeled and laughed about as “mommy porn.”
 
 This is a long sentence.
+
+# Process graph
+
+```mermaid
+flowchart TD
+  A[页面加载（React）] --> B[渲染原始句子（无高亮）]
+  B --> C[发起 LLM 请求（sentence + prompt）]
+  C --> D[LLM 返回结构化 JSON（关键词、焦点词等）]
+  D --> E[调用 Highlighter 组件，传入 JSON]
+  E --> F[处理逻辑：<br/>1. 收集短语<br/>2. 查找匹配位置<br/>3. 构建标签层<br/>4. 渲染嵌套高亮]
+  F --> G[高亮句子渲染完成<br/>原地替换原始句子]
+```

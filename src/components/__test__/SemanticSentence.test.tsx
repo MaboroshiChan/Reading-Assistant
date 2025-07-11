@@ -60,7 +60,6 @@ describe('Highlight module', () => {
       semantic_roles: {
         agent: "natural language processing",
         patient: "human-computer interaction",
-        location: "",
         instrument: ""
       }
     },
@@ -108,6 +107,7 @@ describe('Highlight module', () => {
     const phrases = collectHighlightPhrases(mockLLMAnalysis);
     const spans = findHighlightSpans(sentence, phrases);
     const layers = buildHighlightLayers(sentence.length, spans);
+    console.log(layers)
 
     // "processing" 被标记为 keyword 和 focus
     const processingStart = sentence.toLowerCase().indexOf("processing");

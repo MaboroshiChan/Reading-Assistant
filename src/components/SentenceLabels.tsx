@@ -8,11 +8,10 @@ interface SentenceLabelsProps {
 export interface LLMAnalysis {
   sentence: string;
   semantics: {
-    keywords: { word: string; type: "concept" | "event" | "entity" | "goal" }[];
+    keywords: { word: string; type: "concept" | "event" | "entity" | "goal" | "modifier" }[];
     semantic_roles: {
       agent: string;
       patient: string;
-      location?: string;
       instrument?: string;
     };
     main_verb: string;
