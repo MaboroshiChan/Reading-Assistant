@@ -1,0 +1,25 @@
+.highlight {
+  padding: 0 2px;
+  border-radius: 3px;
+  transition: background-color 0.3s;
+  background-color: transparent; /* 默认无背景 */
+}
+
+/* 关键词高亮样式，仅在 hover 时显示 */
+.highlight-keyword:hover {
+  background-color: rgba(255, 255, 0, 0.4);
+}
+
+/* 聚焦高亮样式，仅在 hover 时显示 */
+.highlight-focus:hover {
+  background-color: rgba(0, 200, 255, 0.3);
+}
+
+/* 根据语义类型自定义额外颜色 */
+/* 可选：按语义类型分别配色 */
+.verb.hovered        { background-color: rgba(255, 100, 100, 0.3); }
+.noun.hovered        { background-color: rgba(100, 200, 255, 0.3); }
+.modifier.hovered    { background-color: rgba(0, 255, 100, 0.3); }
+.connective.hovered  { background-color: rgba(255, 200, 0,   0.3); }
+.phrase.hovered      { background-color: rgba(180, 100, 255, 0.3); }
+.clause.hovered      { background-color: rgba(255, 255, 0,   0.2); }

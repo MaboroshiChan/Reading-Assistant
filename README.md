@@ -80,3 +80,39 @@ flowchart TD
   E --> F[处理逻辑：<br/>1. 收集短语<br/>2. 查找匹配位置<br/>3. 构建标签层<br/>4. 渲染嵌套高亮]
   F --> G[高亮句子渲染完成<br/>原地替换原始句子]
 ```
+
+# Hovering Rules
+
+1. verbs/predicates -> subject and object
+2. nouns <-> modifier 
+3. phrases: preposition/paticiples
+4. connective words <-> subsentence
+
+| 类型    | 标签名（class）    | 描述                  | 可选属性                                    |
+| ----- | ------------- | ------------------- | --------------------------------------- |
+| 词元    | `.highlight`  | 所有可高亮的最小语言单位（如词、短语） | `data-role`, `data-group`, `data-links` |
+| 动词/谓词 | `.verb`       | 表达动作或状态的词           | `data-links="subj-1,obj-2"`             |
+| 名词    | `.noun`       | 实体或概念               | `data-links="mod-1,mod-2"`              |
+| 修饰语   | `.modifier`   | 修饰名词的定语/状语          | 可被名词 link                               |
+| 连接词   | `.connective` | 连词/从属连接词            | `data-links="clause-1"`                 |
+| 子句    | `.clause`     | 独立或从属句              | `id="clause-1"`                         |
+| 词组    | `.phrase`     | 介词短语/分词结构等整体        | `data-group="phrase-1"`                 |
+
+```html
+<!-- Verb with subject and object -->
+<span class="highlight verb" data-links="subj-1,obj-1">gave</span>
+<span class="highlight noun" id="subj-1">She</span>
+<span class="highlight noun" id="obj-1">a gift</span>
+
+<!-- Noun with modifiers -->
+<span class="highlight noun" data-links="mod-1">gift</span>
+<span class="highlight modifier" id="mod-1">beautiful</span>
+
+<!-- Phrase group -->
+<span class="highlight phrase" data-group="phrase-1">Walking</span>
+<span class="highlight phrase" data-group="phrase-1">along the beach</span>
+
+<!-- Connective word linking a clause -->
+<span class="highlight connective" data-links="clause-1">because</span>
+<span class="highlight clause" id="clause-1">she was happy</span>
+```

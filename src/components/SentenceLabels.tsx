@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { type SentenceLabels } from "../analysis/structure/Sentence";
-import React from "react";
+import React, { useEffect } from "react";
 
 interface SentenceLabelsProps {
   labels: SentenceLabels;
@@ -54,7 +55,7 @@ export const SemanticSentenceLabels: React.FC<SentenceLabelsProps> = ({
     if (
       out.length &&                  // not the first token overall
       lastKind !== "OPEN" &&         // previous token allows a trailing space
-      kind      !== "CLOSE"          // current token allows a leading space
+      kind !== "CLOSE"          // current token allows a leading space
     ) {
       out.push(" ");
     }
@@ -241,10 +242,69 @@ export const buildHighlightedNodes = (
 export const Highlighter: React.FC<HighlighterProps> = ({ data }) => {
   const { sentence } = data;
 
-  const phrases = collectHighlightPhrases(data);
-  const spans = findHighlightSpans(sentence, phrases);
-  const layers = buildHighlightLayers(sentence.length, spans);
-  const nodes = buildHighlightedNodes(sentence, layers);
+  const phrases: {
+    word: string;
+    source: string;
+  }[] = collectHighlightPhrases(data);
+  const spans:  {
+    start: number;
+    end: number;
+    label: string;
+}[] = findHighlightSpans(sentence, phrases);
+  const layers: string[][] = buildHighlightLayers(sentence.length, spans);
+  const nodes: React.ReactNode[] = buildHighlightedNodes(sentence, layers);
+
+  const containerSelector = ".highlighted-sentence"
+
+  useEffect(() => {
+    // SSR 安全检查
+    if (typeof window === "undefined") return;
+
+    // 获取容器元素
+    const container: any = document.querySelector(containerSelector);
+    if (!container) return;
+
+    // 获取所有 .highlight 元素
+    const elements = container.querySelectorAll(".highlight");
+
+    // 为每个元素添加 hover 监听器
+    elements.forEach((el: { addEventListener: (arg0: string, arg1: { (): void; (): void; }) => void; classList: { add: (arg0: string) => void; }; dataset: { links: { split: (arg0: string) => never[]; }; group: any; }; }) => {
+      el.addEventListener("mouseenter", () => {
+        el.classList.add("hovered");
+
+        // 高亮 data-links 指向的所有元素
+        const links = el.dataset.links?.split(",") || [];
+        links.forEach((id: string) => {
+          const target = document.getElementById(id);
+          if (target) target.classList.add("hovered");
+        });
+
+        // 高亮 data-group 同组元素
+        const group = el.dataset.group;
+        if (group) {
+          container.querySelectorAll(`[data-group='${group}']`).forEach((e: { classList: { add: (arg0: string) => any; }; }) =>
+            e.classList.add("hovered")
+          );
+        }
+      });
+
+      el.addEventListener("mouseleave", () => {
+        // 清除所有高亮
+        container
+          .querySelectorAll(".highlight")
+          .forEach((e: { classList: { remove: (arg0: string) => any; }; }) => e.classList.remove("hovered"));
+      });
+    });
+
+    // 清理函数：组件卸载时移除监听器（可选，也可用 cloneNode 方式）
+    return () => {
+      elements.forEach((el: { cloneNode: (arg0: boolean) => any; replaceWith: (arg0: any) => void; }) => {
+        const clone = el.cloneNode(true);
+        el.replaceWith(clone);
+      });
+    };
+  }, [containerSelector]); // 依赖项可以设为容器选择器
+  
 
   return <p className="highlighted-sentence">{nodes}</p>;
 };
