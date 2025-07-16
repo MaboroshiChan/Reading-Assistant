@@ -23,3 +23,9 @@
 .connective.hovered  { background-color: rgba(255, 200, 0,   0.3); }
 .phrase.hovered      { background-color: rgba(180, 100, 255, 0.3); }
 .clause.hovered      { background-color: rgba(255, 255, 0,   0.2); }
+
+
+.highlighted-sentence .hovered {
+  background-color: rgba(0, 200, 255, 0.3);
+}
+/* 可按需定义 .structure-subject, .semantic-entity 等 */

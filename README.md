@@ -110,7 +110,7 @@ flowchart TD
 </span>
 
 <!-- 谓词 + 结构联动 -->
-<span class="highlight structure-verb semantic-predicate" data-links="subj-1,obj-1">
+<span class="highlight structure-verb semantic-causative" data-links="subj-1,obj-1">
   improves
 </span>
 

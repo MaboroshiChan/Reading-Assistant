@@ -156,9 +156,9 @@ export const extractStructureSpans = (
   const match = (text: string | undefined, label: string, id: string) => {
     if (!text) return;
     const phrase = text.toLowerCase();
-    const idx = lowerSentence.indexOf(phrase);
+    const idx = lowerSentence.indexOf(phrase); // 查找短语在句子中的位置
     if (idx !== -1) {
-      result.push({ start: idx, end: idx + phrase.length, label, id });
+      result.push({ start: idx, end: idx + phrase.length, label, id }); // 添加 id
     }
   };
 
@@ -176,55 +176,169 @@ export const extractStructureSpans = (
   return result;
 };
 
-// --------------------------------------------------
-// 3. 查找所有匹配区间（支持短语、重叠）
-// --------------------------------------------------
-/**
- * 在句子中查找每个短语的所有出现位置（支持重叠匹配），并返回起止位置及标签。
- *
- * @param sentence 原始句子
- * @param phrases 所有短语及其来源标签
- * @returns 所有匹配片段的位置数组（含 start, end, label）
- */
-export const findHighlightSpans = (
+export const extractSemanticSpans = (
   sentence: string,
-  phrases: { word: string; source: string }[]
-): { start: number; end: number; label: string }[] => {
-  const result: { start: number; end: number; label: string }[] = [];
-  const lowerSentence = sentence.toLowerCase();
-
-  for (const { word, source } of phrases) {
-    const phrase = word.toLowerCase();
-    let index = 0;
-    while (index < lowerSentence.length) {
-      const found = lowerSentence.indexOf(phrase, index);
-      if (found === -1) break;
-      result.push({ start: found, end: found + phrase.length, label: source });
-      index = found + 1;
-    }
+  semantics: {
+    semantic_roles: {
+      text_piece: string;
+      type: "concept" | "event" | "entity" | "goal" | "modifier" | "location" | "agent" | "receiver" | "predicate";
+    }[];
   }
+): {
+  start: number;
+  end: number;
+  label: string;
+  id: string;
+  linkedBy?: string;
+}[] => {
+  const spans: {
+    start: number;
+    end: number;
+    label: string;
+    id: string;
+    linkedBy?: string;
+  }[] = [];
 
-  result.sort((a, b) =>
-    a.start !== b.start ? a.start - b.start : b.end - a.end
-  );
-  return result;
+  const lower = sentence.toLowerCase();
+
+  // 记录 id 分配
+  const roleCount: Record<string, number> = {};
+  const predicateIndices: number[] = [];
+
+  semantics.semantic_roles.forEach(({ text_piece, type }) => {
+    const phrase = text_piece.toLowerCase();
+    let pos = 0;
+
+    while (true) {
+      const found = lower.indexOf(phrase, pos);
+      if (found === -1) break;
+
+      const count = (roleCount[type] = (roleCount[type] || 0) + 1);
+      const id = `semantic-${type}-${count}`;
+      const label = `semantic-${type}`;
+
+      const span = {
+        start: found,
+        end: found + phrase.length,
+        label,
+        id,
+      };
+
+      spans.push(span);
+
+      // 如果是谓词，记录下标
+      if (type === "predicate") {
+        predicateIndices.push(spans.length - 1);
+      }
+
+      pos = found + phrase.length;
+    }
+  });
+
+  // 给每个 predicate 填上 linkedBy → 指向 subject/object id
+  predicateIndices.forEach(predIdx => {
+    const predicateSpan = spans[predIdx];
+    const linkedIds = spans
+      .filter(s => s.label === "semantic-subject" || s.label === "semantic-object")
+      .map(s => s.id);
+    predicateSpan.linkedBy = linkedIds.join(",");
+  });
+
+  return spans;
 };
 
 
-// --------------------------------------------------
-// 4. 把 spans 映射为字符层 labels（二维数组）
-// --------------------------------------------------
-export const buildHighlightLayers = (
-  sentenceLength: number,
-  spans: { start: number; end: number; label: string }[]
-): string[][] => {
-  const layers: string[][] = Array.from({ length: sentenceLength }, () => []);
-  spans.forEach(({ start, end, label }) => {
-    for (let i = start; i < end; i++) {
-      layers[i].push(label);
+interface UnifiedSpan {
+  start: number;
+  end: number;
+  label: string[];      // 多标签支持
+  id?: string;          // 给需要联动的 span 设置 ID
+  linkedBy?: string;    // 给谓词 span 设置 data-links
+}
+
+export const extractUnifiedSpans = (
+  sentence: string,
+  structure: { subject: string; predicate: string; object: string },
+  semantics: {
+    semantic_roles: {
+      text_piece: string;
+      type: "concept" | "event" | "entity" | "goal" | "modifier" | "location" | "subject" | "object" | "predicate";
+    }[];
+  }
+): UnifiedSpan[] => {
+  const lower = sentence.toLowerCase();
+  const spans: UnifiedSpan[] = [];
+  const idMap: Record<string, string> = {};
+  let idCounter = 1;
+
+  // Helper to add or merge spans
+  const addOrMergeSpan = (start: number, end: number, label: string, isStructural = false): string | undefined => {
+    const existing = spans.find(s => s.start === start && s.end === end);
+    if (existing) {
+      if (!existing.label.includes(label)) existing.label.push(label);
+      return existing.id;
+    } else {
+      const newSpan: UnifiedSpan = {
+        start,
+        end,
+        label: [label],
+      };
+      if (isStructural || label.startsWith("structure-")) {
+        const newId = `span-${idCounter++}`;
+        newSpan.id = newId;
+        idMap[label] = newId;
+        return newId;
+      }
+      spans.push(newSpan);
+      return undefined;
+    }
+  };
+
+  // --- 1. Structure: subject / predicate / object
+  const structureRoles: { value: string; label: string }[] = [
+    { value: structure.subject, label: "structure-subject" },
+    { value: structure.predicate, label: "structure-predicate" },
+    { value: structure.object, label: "structure-object" },
+  ];
+
+  structureRoles.forEach(({ value, label }) => {
+    if (!value) return;
+    const idx = lower.indexOf(value.toLowerCase());
+    if (idx !== -1) {
+      addOrMergeSpan(idx, idx + value.length, label, true);
     }
   });
-  return layers;
+
+  // --- 2. Semantics
+  semantics.semantic_roles.forEach(({ text_piece, type }) => {
+    const label = `semantic-${type}`;
+    const phrase = text_piece.toLowerCase();
+    let pos = 0;
+    while (pos < lower.length) {
+      const idx = lower.indexOf(phrase, pos);
+      if (idx === -1) break;
+      addOrMergeSpan(idx, idx + phrase.length, label);
+      pos = idx + phrase.length;
+    }
+  });
+
+  // --- 3. Add linkedBy to predicate spans
+  spans.forEach(span => {
+    if (span.label.includes("structure-predicate")) {
+      const linkedIds = spans
+        .filter(s =>
+          s.label.includes("structure-subject") ||
+          s.label.includes("structure-object")
+        )
+        .map(s => s.id)
+        .filter(Boolean);
+      if (linkedIds.length) {
+        span.linkedBy = linkedIds.join(",");
+      }
+    }
+  });
+
+  return spans;
 };
 
 // --------------------------------------------------
@@ -268,73 +382,66 @@ export const buildHighlightedNodes = (
 // --------------------------------------------------
 // 6. 主组件（整合）
 // --------------------------------------------------
-export const Highlighter: React.FC<HighlighterProps> = ({ data }) => {
-  const { sentence } = data;
+export const Highlighter: React.FC<{ data: LLMAnalysis }> = ({ data }) => {
+  const { sentence, structure, semantics } = data;
 
-  const phrases: {
-    word: string;
-    source: string;
-  }[] = collectHighlightPhrases(data);
-  const spans: {
-    start: number;
-    end: number;
-    label: string;
-  }[] = findHighlightSpans(sentence, phrases);
-  const layers: string[][] = buildHighlightLayers(sentence.length, spans);
-  const nodes: React.ReactNode[] = buildHighlightedNodes(sentence, layers);
+  const spans: UnifiedSpan[] = extractUnifiedSpans(sentence, structure, semantics);
+  spans.sort((a, b) => a.start - b.start);
 
-  const containerSelector = ".highlighted-sentence"
+  const highlightedNodes: React.ReactNode[] = [];
+  let cursor = 0;
 
-  // 换标签
+  for (const span of spans) {
+    if (cursor < span.start) {
+      highlightedNodes.push(<span key={cursor}>{sentence.slice(cursor, span.start)}</span>);
+    }
+
+    const spanText = sentence.slice(span.start, span.end);
+    const classNames = span.label.map(l => `highlight ${l}`).join(" ");
+    highlightedNodes.push(
+      <span
+        key={`${span.start}-${span.end}`}
+        className={classNames}
+        id={span.id}
+        data-links={span.linkedBy}
+      >
+        {spanText}
+      </span>
+    );
+    cursor = span.end;
+  }
+
+  if (cursor < sentence.length) {
+    highlightedNodes.push(<span key={cursor}>{sentence.slice(cursor)}</span>);
+  }
+
   useEffect(() => {
-    // SSR 安全检查
-    if (typeof window === "undefined") return;
-
-    // 获取容器元素
-    const container: any = document.querySelector(containerSelector);
+    const container = document.querySelector(".highlighted-sentence");
     if (!container) return;
+    const all = container.querySelectorAll(".highlight");
 
-    // 获取所有 .highlight 元素
-    const elements = container.querySelectorAll(".highlight");
-
-    // 为每个元素添加 hover 监听器
-    elements.forEach((el: { addEventListener: (arg0: string, arg1: { (): void; (): void; }) => void; classList: { add: (arg0: string) => void; }; dataset: { links: { split: (arg0: string) => never[]; }; group: any; }; }) => {
+    all.forEach(el => {
       el.addEventListener("mouseenter", () => {
         el.classList.add("hovered");
-
-        // 高亮 data-links 指向的所有元素
-        const links = el.dataset.links?.split(",") || [];
-        links.forEach((id: string) => {
+        const links = el.getAttribute("data-links")?.split(",") ?? [];
+        links.forEach(id => {
           const target = document.getElementById(id);
           if (target) target.classList.add("hovered");
         });
-
-        // 高亮 data-group 同组元素
-        const group = el.dataset.group;
-        if (group) {
-          container.querySelectorAll(`[data-group='${group}']`).forEach((e: { classList: { add: (arg0: string) => any; }; }) =>
-            e.classList.add("hovered")
-          );
-        }
       });
 
       el.addEventListener("mouseleave", () => {
-        // 清除所有高亮
-        container
-          .querySelectorAll(".highlight")
-          .forEach((e: { classList: { remove: (arg0: string) => any; }; }) => e.classList.remove("hovered"));
+        all.forEach(e => e.classList.remove("hovered"));
       });
     });
 
-    // 清理函数：组件卸载时移除监听器（可选，也可用 cloneNode 方式）
     return () => {
-      elements.forEach((el: { cloneNode: (arg0: boolean) => any; replaceWith: (arg0: any) => void; }) => {
+      all.forEach(el => {
         const clone = el.cloneNode(true);
         el.replaceWith(clone);
       });
     };
-  }, [containerSelector]); // 依赖项可以设为容器选择器
+  }, []);
 
-
-  return <p className="highlighted-sentence">{nodes}</p>; // need to add ID 
+  return <p className="highlighted-sentence">{highlightedNodes}</p>;
 };
