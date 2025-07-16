@@ -117,10 +117,6 @@ export const SemanticSentenceLabels: React.FC<SentenceLabelsProps> = ({
 
   return <span className="semantic-sentence-labels">{nodes}</span>;
 };
-/**
- * These functions turns json labeling into react components, including highlighting and cards
- * The component should search keywords and do highlighting jobs
- */
 
 /**
  * 
@@ -289,6 +285,7 @@ export const Highlighter: React.FC<HighlighterProps> = ({ data }) => {
 
   const containerSelector = ".highlighted-sentence"
 
+  // 换标签
   useEffect(() => {
     // SSR 安全检查
     if (typeof window === "undefined") return;

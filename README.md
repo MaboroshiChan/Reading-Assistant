@@ -99,20 +99,23 @@ flowchart TD
 | 词组    | `.phrase`     | 介词短语/分词结构等整体        | `data-group="phrase-1"`                 |
 
 ```html
-<!-- Verb with subject and object -->
-<span class="highlight verb" data-links="subj-1,obj-1">gave</span>
-<span class="highlight noun" id="subj-1">She</span>
-<span class="highlight noun" id="obj-1">a gift</span>
+<!-- 对主语 -->
+<span class="highlight structure-noun semantic-agent" id="subj-1">
+  Natural language processing
+</span>
 
-<!-- Noun with modifiers -->
-<span class="highlight noun" data-links="mod-1">gift</span>
-<span class="highlight modifier" id="mod-1">beautiful</span>
+<!-- 修饰语，无结构标签 -->
+<span class="highlight semantic-modifier" data-group="adv-1">
+  significantly
+</span>
 
-<!-- Phrase group -->
-<span class="highlight phrase" data-group="phrase-1">Walking</span>
-<span class="highlight phrase" data-group="phrase-1">along the beach</span>
+<!-- 谓词 + 结构联动 -->
+<span class="highlight structure-verb semantic-predicate" data-links="subj-1,obj-1">
+  improves
+</span>
 
-<!-- Connective word linking a clause -->
-<span class="highlight connective" data-links="clause-1">because</span>
-<span class="highlight clause" id="clause-1">she was happy</span>
+<!-- 宾语 -->
+<span class="highlight structure-noun semantic-object" id="obj-1">
+  human-computer interaction
+</span>.
 ```
