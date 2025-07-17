@@ -1,9 +1,36 @@
 import React, { useState, type ReactNode, type CSSProperties } from 'react';
 import './css/ArticleSkeleton.css';
+import './css/Highlighted.css';
 import { SemanticParagraph } from './SermanticParagraph';
 import { Paragraph } from '../analysis/structure/Paragraph';
 import example2 from  '../../examples/example2.json';
 import { Sentence } from '../analysis/structure/Sentence';
+import type { LLMAnalysis } from './SentenceLabels';
+import { Highlighter } from './SentenceLabels';
+
+const exampleAnalysis: LLMAnalysis = {
+  id: 1,
+  sentence: "Natural language processing significantly improves human-computer interaction.",
+  structure: {
+    subject: "Natural language processing",
+    predicate: "improves",
+    object: "human-computer interaction"
+  },
+  semantics: {
+    semantic_roles: [
+      { text_piece: "Natural language processing", type: "entity" },
+      { text_piece: "improves", type: "event" },
+      { text_piece: "human-computer interaction", type: "concept" },
+      { text_piece: "significantly", type: "modifier" }
+    ]
+  },
+  pragmatics: {
+    modality: "factual",
+    tone: "analytical",
+    emphasis: true,
+    focus: ["improves", "human-computer interaction"]
+  }
+};
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -289,6 +316,7 @@ const ExampleParagraph: React.FC = () => {
       {paragraphs.map((paragraph: Paragraph) => (
         <SemanticParagraph key={paragraph.getId()} paragraph={paragraph} />
       ))}
+      <Highlighter data={exampleAnalysis} />
     </div>
   );
 }
