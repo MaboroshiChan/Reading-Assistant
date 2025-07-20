@@ -8,6 +8,8 @@ import { Sentence } from '../analysis/structure/Sentence';
 import type { LLMAnalysis } from './SentenceLabels';
 import { Highlighter } from './SentenceLabels';
 
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const exampleAnalysis: LLMAnalysis = {
   id: 1,
   sentence: "Natural language processing significantly improves human-computer interaction.",
@@ -29,6 +31,38 @@ const exampleAnalysis: LLMAnalysis = {
     tone: "analytical",
     emphasis: true,
     focus: ["improves", "human-computer interaction"]
+  }
+};
+
+const exampleAnalysis2: LLMAnalysis = {
+  id: 2,
+  sentence: "The properties of the category would depend on many factors: the role of that node in the given schema, its relationship to other nodes in the schema, the relationship of that schema to other schemas, and the overall interaction of that schema with other aspects of the conceptual system.",
+  structure: {
+    subject: "The properties of the category",
+    predicate: "would depend",
+    object: "many factors"
+  },
+  semantics: {
+    semantic_roles: [
+      { text_piece: "The properties of the category", type: "entity" },
+      { text_piece: "would depend", type: "event" },
+      { text_piece: "many factors", type: "concept" },
+      { text_piece: "the role of that node in the given schema", type: "concept" },
+      { text_piece: "its relationship to other nodes in the schema", type: "concept" },
+      { text_piece: "the relationship of that schema to other schemas", type: "concept" },
+      { text_piece: "the overall interaction of that schema with other aspects of the conceptual system", type: "concept" }
+    ]
+  },
+  pragmatics: {
+    modality: "hypothetical",
+    tone: "analytical",
+    emphasis: false,
+    focus: [
+      "would depend",
+      "many factors",
+      "the role of that node in the given schema",
+      "its relationship to other nodes in the schema"
+    ]
   }
 };
 
@@ -316,7 +350,7 @@ const ExampleParagraph: React.FC = () => {
       {paragraphs.map((paragraph: Paragraph) => (
         <SemanticParagraph key={paragraph.getId()} paragraph={paragraph} />
       ))}
-      <Highlighter data={exampleAnalysis} />
+      <Highlighter data={exampleAnalysis2} />
     </div>
   );
 }

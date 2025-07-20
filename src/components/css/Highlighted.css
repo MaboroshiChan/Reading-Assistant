@@ -1,8 +1,10 @@
-.highlighted-sentence {
-  padding: 0 2px;
-  border-radius: 3px;
+.highlighted-sentence > span {
   transition: background-color 0.3s;
   background-color: transparent; /* 默认无背景 */
+  border-radius: 4px;
+  padding-top: 1px; /* 提前就设好 */
+  padding-bottom: 2px;
+  display: inline;
 }
 
 /* 关键词高亮样式，仅在 hover 时显示 */
@@ -12,7 +14,7 @@
 
 /* 聚焦高亮样式，仅在 hover 时显示 */
 .highlight-focus:hover {
-  background-color: rgba(0, 200, 255, 0.3);
+  background-color: rgba(200, 255, 0, 0.3);
 }
 
 /* 根据语义类型自定义额外颜色 */
@@ -26,6 +28,7 @@
 
 
 .highlighted-sentence .hovered {
-  background-color: rgba(0, 200, 255, 0.3);
+  background-color: rgba(0, 255, 100, 0.3);
+  transition: background-color 0.2s ease;
 }
 /* 可按需定义 .structure-subject, .semantic-entity 等 */
