@@ -19,6 +19,7 @@ export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
     sentences: paragraph.getSentences()
   });
 
+  // SemanticSentenceLabels needs to be replaced with the Hightlighter Component.
   return (
     <div
       className="semantic-paragraph"
