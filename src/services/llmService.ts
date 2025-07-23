@@ -43,13 +43,17 @@ async function readPromptFile(): Promise<string> {
 export function generateLLMAnalysis(text: string): Promise<LLMAnalysis[]> {
     return readPromptFile()
         .then(prompt => {
-            const fullPrompt = `${prompt}\n\nText to analyze:\n${text}`;
+            const fullPrompt = `${prompt}\n\nParagraph:\n${text}`;
             return generateText(fullPrompt);
         })
         .then(response => {
             if (response) {
-                // 假设 response 是一个 JSON 字符串，解析它
-                return JSON.parse(response) as LLMAnalysis[];
+                const parsed = JSON.parse(response);
+                if (Array.isArray(parsed.sentences)) {
+                    return parsed.sentences as LLMAnalysis[];
+                } else {
+                    throw new Error("Parsed response does not contain a 'sentences' array");
+                }
             } else {
                 return [];
             }
