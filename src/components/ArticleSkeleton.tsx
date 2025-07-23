@@ -5,7 +5,7 @@ import { SemanticParagraph } from './SermanticParagraph';
 import { Paragraph } from '../analysis/structure/Paragraph';
 import example2 from  '../../examples/example2.json';
 import { Sentence } from '../analysis/structure/Sentence';
-import type { LLMAnalysis } from './SentenceLabels';
+import type { LLMAnalysis } from '../analysis/structure/Sentence';
 import { Highlighter } from './SentenceLabels';
 
 

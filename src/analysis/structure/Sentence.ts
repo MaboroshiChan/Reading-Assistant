@@ -13,6 +13,26 @@ export type SentenceLabel =
 
 export type SentenceLabels = SentenceLabel[];
 
+export interface LLMAnalysis {
+  id: number;
+  sentence: string;
+  structure: {
+    subject: string,
+    predicate: string,
+    object: string,
+  },
+  semantics: {
+    semantic_roles: { text_piece: string; type: "concept" | "event" | "entity" | "goal" | "modifier" | "location" }[];
+  };
+  pragmatics: {
+    modality: "factual" | "hypothetical" | "evaluative" | "general truth";
+    tone: "neutral" | "analytical" | "emotional" | "assertive" | "doubtful";
+    emphasis: boolean;
+    focus: string[];
+  };
+  // 其他字段（structure, discourse, meta）可以继续加
+}
+
 export class Sentence {
   id: number;
   private rawText: string;

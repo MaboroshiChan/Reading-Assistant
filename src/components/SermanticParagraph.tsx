@@ -3,7 +3,8 @@ import React from "react";
 import { Paragraph } from "../analysis/structure/Paragraph"; // adjust the import path as needed
 import "./css/SemanticParagraph.css";
 import type { Sentence } from "../analysis/structure/Sentence";
-import { SemanticSentenceLabels } from "./SentenceLabels";
+import { Highlighter } from "./SentenceLabels";
+import type { LLMAnalysis } from "../analysis/structure/Sentence"; // Assuming this is the correct import path for LLMAnalysis
 
 interface ParagraphProps {
   paragraph: Paragraph;
@@ -12,12 +13,6 @@ interface ParagraphProps {
 export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
   const id = paragraph.getId();
   const mainIdea = paragraph.getMainIdea();
-
-  console.log("Rendering SemanticParagraph", {
-    id,
-    mainIdea,
-    sentences: paragraph.getSentences()
-  });
 
   // SemanticSentenceLabels needs to be replaced with the Hightlighter Component.
   return (
@@ -30,11 +25,11 @@ export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
       {
         paragraph.getSentences().map((sentence: Sentence, index: number) => (
           <span key={index} className="semantic-sentence-container">
-            <SemanticSentenceLabels labels={sentence.getSentenceLabels()} />{" "}
+            <Highlighter data={}/>
           </span>
         ))
       }
-
+      
     </div>
   );
 };

@@ -1,30 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { type SentenceLabels } from "../analysis/structure/Sentence";
 import React, { useEffect } from "react";
+import type { LLMAnalysis } from "../analysis/structure/Sentence";
 
 interface SentenceLabelsProps {
   labels: SentenceLabels;
 }
 
-export interface LLMAnalysis {
-  id: number;
-  sentence: string;
-  structure: {
-    subject: string,
-    predicate: string,
-    object: string,
-  },
-  semantics: {
-    semantic_roles: { text_piece: string; type: "concept" | "event" | "entity" | "goal" | "modifier" | "location" }[];
-  };
-  pragmatics: {
-    modality: "factual" | "hypothetical" | "evaluative" | "general truth";
-    tone: "neutral" | "analytical" | "emotional" | "assertive" | "doubtful";
-    emphasis: boolean;
-    focus: string[];
-  };
-  // 其他字段（structure, discourse, meta）可以继续加
-}
 
 export interface HighlighterProps {
   data: LLMAnalysis;
