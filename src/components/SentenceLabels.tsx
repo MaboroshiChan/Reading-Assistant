@@ -287,10 +287,9 @@ export const extractUnifiedSpans = (
         const newId = `span-${idCounter++}`;
         newSpan.id = newId;
         idMap[label] = newId;
-        return newId;
       }
       spans.push(newSpan);
-      return undefined;
+      return newSpan.id;
     }
   };
 
@@ -387,6 +386,7 @@ export const Highlighter: React.FC<{ data: LLMAnalysis }> = ({ data }) => {
 
   const spans: UnifiedSpan[] = extractUnifiedSpans(sentence, structure, semantics);
   spans.sort((a, b) => a.start - b.start);
+  console.log("Extracted spans:", spans);
 
   const highlightedNodes: React.ReactNode[] = [];
   let cursor = 0;

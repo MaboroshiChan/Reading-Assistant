@@ -17,18 +17,33 @@
   background-color: rgba(200, 255, 0, 0.3);
 }
 
-/* 根据语义类型自定义额外颜色 */
-/* 可选：按语义类型分别配色 */
-.verb.hovered        { background-color: rgba(255, 100, 100, 0.3); }
-.noun.hovered        { background-color: rgba(100, 200, 255, 0.3); }
-.modifier.hovered    { background-color: rgba(0, 255, 100, 0.3); }
-.connective.hovered  { background-color: rgba(255, 200, 0,   0.3); }
-.phrase.hovered      { background-color: rgba(180, 100, 255, 0.3); }
-.clause.hovered      { background-color: rgba(255, 255, 0,   0.2); }
-
 
 .highlighted-sentence .hovered {
   background-color: rgba(0, 255, 100, 0.3);
   transition: background-color 0.2s ease;
+}
+
+.highlight.structure-subject {
+  transition: background-color 0.3s ease;
+}
+
+.highlight.structure-subject.hovered {
+  background-color: rgba(173, 216, 230, 0.5); /* LightBlue */
+}
+
+.highlight.structure-predicate {
+  transition: background-color 0.3s ease;
+}
+
+.highlight.structure-predicate.hovered {
+  background-color: rgba(144, 238, 144, 0.5); /* LightGreen */
+}
+
+.highlight.structure-object {
+  transition: background-color 0.3s ease;
+}
+
+.highlight.structure-object.hovered {
+  background-color: rgba(255, 182, 193, 0.5); /* LightPink */
 }
 /* 可按需定义 .structure-subject, .semantic-entity 等 */
