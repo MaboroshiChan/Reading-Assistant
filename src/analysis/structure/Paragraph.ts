@@ -1,6 +1,8 @@
 // src/analysis/structure/Paragraph.ts
 
 import { Sentence } from "../structure/Sentence";
+import type { LLMAnalysis } from "../structure/Sentence";
+import {generateLLMAnalysis} from "../../services/llmService"; // Adjust the import path as needed
 
 export class Paragraph {
   private sentences: Sentence[];
@@ -8,6 +10,7 @@ export class Paragraph {
   private id?: number; // Optional ID for the paragraph
   //TODO: Array of IDs for the paragraphs, useful for tracking or referencing
   private raw_text?: string;
+  private analysis: LLMAnalysis[]; // Optional LLM analysis for the paragraph
 
   constructor(id?: number, text?: string) {
     this.id = id;
@@ -28,6 +31,7 @@ export class Paragraph {
       this.sentences = []; // Initialize with an empty array if no text is provided
       this.raw_text = ""; // Initialize raw_text as an empty string if no text is provided
     }
+    this.analysis = []; // Initialize analysis as an empty array
   }
 
   public addSentence(sentence: Sentence) {
@@ -50,5 +54,25 @@ export class Paragraph {
     return this.id;
   }
 
+  public getLLMAnalysis(): LLMAnalysis[] {
+    return this.analysis;
+  }
+
+  public generateLLMAnalysis(): Promise<LLMAnalysis[]> {
+    if (this.raw_text) {
+      return generateLLMAnalysis(this.raw_text)
+        .then((analysis: LLMAnalysis[]) => {
+          this.analysis = analysis;
+          return analysis;
+        })
+        .catch((error: unknown) => {
+          console.error("Error generating LLM analysis for paragraph:", error);
+          return [];
+        });
+    } else {
+      console.warn("No raw text available for LLM analysis.");
+      return Promise.resolve([]);
+    }
+  }
 
 }

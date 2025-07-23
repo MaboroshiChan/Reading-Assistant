@@ -1,6 +1,7 @@
 import { OpenAI } from "openai/client.js";
 import * as fs from "fs/promises";
 import * as path from "path";
+import type { LLMAnalysis } from "../analysis/structure/Sentence"; // Adjust the import path as needed
 
 // 初始化 OpenAI 客户端
 const openai = new OpenAI({
@@ -26,16 +27,35 @@ export async function generateText(prompt: string): Promise<string | null> {
     }
 }
 
-// 读取 prompt.txt 并调用 LLM
-export async function llmService(): Promise<string | null> {
+// 读取 prompt.txt ../../prompts/system-prompt.txt
+async function readPromptFile(): Promise<string> {
     try {
-        const promptPath = path.resolve(__dirname, "../../prompts/system-prompt.txt");
-        const prompt = await fs.readFile(promptPath, "utf-8");
-
-        const result = await generateText(prompt);
-        return result;
+        const filePath = path.join(__dirname, "../../prompts/system-prompt.txt");
+        const data = await fs.readFile(filePath, "utf-8");
+        return data;
     } catch (error) {
-        console.error("Error in llmService:", error);
+        console.error("Error reading prompt file:", error);
         throw error;
     }
+}
+
+// 生成 LLM 分析结果
+export function generateLLMAnalysis(text: string): Promise<LLMAnalysis[]> {
+    return readPromptFile()
+        .then(prompt => {
+            const fullPrompt = `${prompt}\n\nText to analyze:\n${text}`;
+            return generateText(fullPrompt);
+        })
+        .then(response => {
+            if (response) {
+                // 假设 response 是一个 JSON 字符串，解析它
+                return JSON.parse(response) as LLMAnalysis[];
+            } else {
+                return [];
+            }
+        })
+        .catch(error => {
+            console.error("Error generating LLM analysis:", error);
+            return [];
+        });
 }
