@@ -2,7 +2,6 @@ import React from "react";
 //import { SemanticSentence } from "./SemanticSentence";
 import { Paragraph } from "../analysis/structure/Paragraph"; // adjust the import path as needed
 import "./css/SemanticParagraph.css";
-import type { Sentence } from "../analysis/structure/Sentence";
 import { Highlighter } from "./SentenceLabels";
 import type { LLMAnalysis } from "../analysis/structure/Sentence"; // Assuming this is the correct import path for LLMAnalysis
 
@@ -23,13 +22,19 @@ export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
     >
 
       {
-        paragraph.getSentences().map((sentence: Sentence, index: number) => (
-          <span key={index} className="semantic-sentence-container">
-            <Highlighter data={}/>
-          </span>
-        ))
+        paragraph.generateLLMAnalysis().then((analysis: LLMAnalysis[]) => {
+          return analysis.map((sentenceAnalysis, index) => {
+            return (
+              <div key={index} className="semantic-sentence">
+                <Highlighter data={sentenceAnalysis} />
+              </div>
+            );
+          });
+        }).catch(error => {
+          console.error("Error generating LLM analysis:", error);
+          return <div>Error generating analysis</div>;
+        })
       }
-      
     </div>
   );
 };
