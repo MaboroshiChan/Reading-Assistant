@@ -31,7 +31,7 @@ export async function generateText(prompt: string): Promise<string | null> {
 // 读取 prompt.txt ../../prompts/system-prompt.txt
 async function readPromptFile(): Promise<string> {
     try {
-        const filePath = path.join(__dirname, "../../prompts/system-prompt.txt");
+        const filePath = path.join(__dirname, "../prompts/system-prompt.txt");
         const data = await fs.readFile(filePath, "utf-8");
         console.log("Prompt file read successfully:", filePath);
         return data;

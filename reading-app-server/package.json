@@ -17,6 +17,7 @@
     "openai": "^5.10.2"
   },
   "devDependencies": {
-    "@types/node": "^24.1.0"
+    "@types/node": "^24.1.0",
+    "tsx": "^4.20.3"
   }
 }
