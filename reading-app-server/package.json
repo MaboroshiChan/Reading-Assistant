@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx index.ts" 
+    "dev": "tsx index.ts"
   },
   "keywords": [],
   "author": "",
@@ -15,5 +15,8 @@
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
     "openai": "^5.10.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0"
   }
 }
