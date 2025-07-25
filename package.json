@@ -9,5 +9,16 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MaboroshiChan/Reading-Assistant.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MaboroshiChan/Reading-Assistant/issues"
+  },
+  "homepage": "https://github.com/MaboroshiChan/Reading-Assistant#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  }
 }
