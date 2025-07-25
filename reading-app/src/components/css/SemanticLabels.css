@@ -1,0 +1,42 @@
+.label-verb {
+  color: pink;
+  font-weight: bold;
+}
+
+.label-noun_phrase {
+  border: 1px solid green;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+
+.semantic-sentence-labels {
+  display: inline;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  font-size: 1;
+}
+
+.semantic-sentence-labels > span {
+  font-size: 1rem;
+}
+
+.semantic-sentence-container > span {
+  padding: 2px; /* 和 hover 时一样 */
+  border-radius: 4px;
+}
+
+.semantic-sentence-container > span:hover {
+  background-color: rgba(4, 253, 25, 0.462);
+}
+
+.nested-group > span {
+  padding: 2px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.nested-group > span:hover {
+  background-color: rgba(15, 179, 233, 0.2); /* 更浅更柔和的蓝色 */
+}

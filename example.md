@@ -1,0 +1,3 @@
+# Example
+
+The tiny **drug company**, Emotional Brain **had enlisted** **centers** all over the country, clinics run by psychologists and gynecologists and everyday physicians, some taking part just *because* medical trials were a facet of their practice, others *because* **they** **believed** **that** **EB’s inventions**, Lybrido and Libridos, **might prove** distinct enough from the earlier chemicals of other companies, **might be** ingenious enough in their composition *and* precise enough in how they would be prescribed, to be the first aphrodisiac to make it past the FDA, the first to give doctors something, something reliably successful and government approved, to offer women like Wendy.

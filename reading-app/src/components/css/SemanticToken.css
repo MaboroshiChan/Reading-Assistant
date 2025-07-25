@@ -1,0 +1,9 @@
+.token {
+  padding: 0px;             /* Add padding so the background looks nice */
+  transition: background-color 0.2s ease;
+  border-radius: 6px;            /* Makes the corners rounded */
+}
+
+.token:hover {
+  background-color: rgba(180, 180, 255, 0.3);  /* Light blue highlight */
+}

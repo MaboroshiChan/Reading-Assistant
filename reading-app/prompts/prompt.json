@@ -1,0 +1,39 @@
+{
+  "id": "s1",
+  "sentence": "<original sentence>",
+  "structure": {
+    "subject": "<main subject>",
+    "predicate": "<main verb or predicate>",
+    "object": "<object, if any>",
+    "complements": ["<optional complements>"],
+    "contrast_clause": "<if there is a contrast clause like 'rather than', include it>"
+  },
+  "semantics": {
+    "main_verb": "<main verb>",
+    "proposition": "<predicate logic form, e.g., increase(entropy, system)>",
+    "keywords": [
+      { "word": "<keyword>", "type": "<concept|event|entity|goal>" }
+    ],
+    "semantic_roles": {
+      "agent": "<who performs the action>",
+      "patient": "<who/what is affected>"
+    }
+  },
+  "discourse": {
+    "sentence_function": "<Statement|Question|Explanation|Contrast|Support|Example|Summary>",
+    "discourse_role": "<Main idea|Support|Example|Background|Conclusion>",
+    "connective": "<explicit connective if any, e.g. 'instead'>",
+    "relation_to_previous": "<null or string describing relationship to previous sentence>"
+  },
+  "pragmatics": {
+    "modality": "<factual|hypothetical|evaluative|general truth>",
+    "tone": "<neutral|analytical|emotional|assertive|doubtful>",
+    "emphasis": true,
+    "focus": ["<words that are emphasized or thematically central>"]
+  },
+  "meta": {
+    "is_topic_sentence": true,
+    "is_complete_sentence": true,
+    "position_in_paragraph": 0
+  }
+}
