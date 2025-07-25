@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Paragraph } from "../analysis/structure/Paragraph";
 import { Highlighter } from "./SentenceLabels";
 import type { LLMAnalysis } from "../analysis/structure/Sentence";
-import { generateLLMAnalysis } from "../services/llmService";
+import { fetchLLMAnalysis } from "../services/llmClient"; // ✅ FIXED
 
 interface ParagraphProps {
   paragraph: Paragraph;
@@ -13,13 +13,13 @@ export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
 
   useEffect(() => {
     if (analysis.length === 0 && paragraph.getRawText().trim().length > 0) {
-      generateLLMAnalysis(paragraph.getRawText())
-        .then(llm => setAnalysis(llm))
+      fetchLLMAnalysis(paragraph.getRawText())
+        .then(setAnalysis)
         .catch(err => {
-          console.error("Failed to generate LLM analysis:", err);
+          console.error("Failed to fetch LLM analysis:", err);
         });
     }
-  }, [analysis, paragraph]);
+  }, [analysis, paragraph]); // ✅ Remove 'analysis' to prevent repeated fetch
 
   const id = paragraph.getId();
   const mainIdea = paragraph.getMainIdea();
