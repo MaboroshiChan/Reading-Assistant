@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Paragraph } from "../analysis/structure/Paragraph";
 import { Highlighter } from "./SentenceLabels";
 import type { LLMAnalysis } from "../analysis/structure/Sentence";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { fetchLLMAnalysis } from "../services/llmClient"; // ✅ FIXED
+import test from "../../examples/test.json";
 
 interface ParagraphProps {
   paragraph: Paragraph;
@@ -13,11 +15,12 @@ export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
 
   useEffect(() => {
     if (analysis.length === 0 && paragraph.getRawText().trim().length > 0) {
-      fetchLLMAnalysis(paragraph.getRawText())
-        .then(setAnalysis)
-        .catch(err => {
-          console.error("Failed to fetch LLM analysis:", err);
-        });
+      Promise.resolve()
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .then(_ => {
+        setAnalysis(test.sentences as LLMAnalysis[])
+      })
+      .catch(e => console.warn(e))
     }
   }, [analysis, paragraph]); // ✅ Remove 'analysis' to prevent repeated fetch
 
