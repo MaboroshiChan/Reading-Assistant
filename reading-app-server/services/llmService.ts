@@ -13,7 +13,7 @@ export async function generateText(prompt: string): Promise<string | null> {
     try {
         console.log("Now connecting to OpenAI API with prompt:", prompt);
         const response = await openai.chat.completions.create({
-            model: "gpt-4o",
+            model: "gpt-4o-mini",
             messages: [{ role: "user", content: prompt }],
         });
 
@@ -33,7 +33,6 @@ async function readPromptFile(): Promise<string> {
     try {
         const filePath = path.join(__dirname, "../prompts/system-prompt.txt");
         const data = await fs.readFile(filePath, "utf-8");
-        console.log("Prompt file read successfully:", filePath);
         return data;
     } catch (error) {
         console.error("Error reading prompt file:", error);
@@ -41,16 +40,29 @@ async function readPromptFile(): Promise<string> {
     }
 }
 
+function extractJSONFromCodeBlock(raw: string): any {
+  // Remove ```json or ``` at the beginning, and ending ```
+  const cleaned = raw
+    .replace(/^```json\s*/i, "") // remove ```json
+    .replace(/^```\s*/i, "")     // or plain ```
+    .replace(/```$/, "")         // remove ending ```
+    .trim();
+
+  return JSON.parse(cleaned);
+}
+
 // 生成 LLM 分析结果
 export function generateLLMAnalysis(text: string): Promise<LLMAnalysis[]> {
     return readPromptFile()
         .then(prompt => {
             const fullPrompt = `${prompt}\n\nParagraph:\n${text}`;
+            console.log(`full prompt ready to send ${fullPrompt}`);
             return generateText(fullPrompt);
         })
         .then(response => {
             if (response) {
-                const parsed = JSON.parse(response);
+                const parsed = extractJSONFromCodeBlock(response);
+                console.log(`parsed ${parsed}`);
                 if (Array.isArray(parsed.sentences)) {
                     return parsed.sentences as LLMAnalysis[];
                 } else {

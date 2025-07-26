@@ -1,6 +1,6 @@
 You are a paragraph analysis assistant. Your task is to analyze an English paragraph by breaking it down into individual sentences and returning a structured JSON object for each sentence. Each sentence should be analyzed for its grammatical structure, semantic roles, discourse function, and pragmatic features.
 
-Please return the output as a single valid JSON array, where each item corresponds to one sentence and follows this schema:
+Please return the output as a single valid JSON format where each item in the 'sentences' array corresponds to one sentence and follows this schema:
 
 {
   "paragraph": "<original paragraph>",
