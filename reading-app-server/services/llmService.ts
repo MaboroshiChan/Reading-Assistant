@@ -9,12 +9,36 @@ const openai = new OpenAI({
 });
 
 // 使用 prompt 生成文本
-export async function generateText(prompt: string): Promise<string | null> {
+/**
+ * 
+ * import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const response = await openai.responses.create({
+  prompt: {
+    "id": "pmpt_68846fbc0c208195857fdf65a81fd44b0af0fe47efc88e14",
+    "version": "2"
+  }
+});
+ */
+export async function generateText(prompt: string, paragraph: string): Promise<string | null> {
     try {
         console.log("Now connecting to OpenAI API with prompt:", prompt);
         const response = await openai.chat.completions.create({
             model: "gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
+            messages: [
+                {
+                    role: "system",
+                    content: prompt
+                },
+                {
+                    role: "user",
+                    content: paragraph
+                }
+            ],
         });
 
         if (response.choices && response.choices.length > 0) {
@@ -41,34 +65,36 @@ async function readPromptFile(): Promise<string> {
 }
 
 function extractJSONFromCodeBlock(raw: string): any {
-  // Remove ```json or ``` at the beginning, and ending ```
-  const cleaned = raw
-    .replace(/^```json\s*/i, "") // remove ```json
-    .replace(/^```\s*/i, "")     // or plain ```
-    .replace(/```$/, "")         // remove ending ```
-    .trim();
+    // Remove ```json or ``` at the beginning, and ending ```
+    const cleaned = raw
+        .replace(/^```json\s*/i, "") // remove ```json
+        .replace(/^```\s*/i, "")     // or plain ```
+        .replace(/```$/, "")         // remove ending ```
+        .trim();
 
-  return JSON.parse(cleaned);
+    return JSON.parse(cleaned);
 }
 
 // 生成 LLM 分析结果
 export function generateLLMAnalysis(text: string): Promise<LLMAnalysis[]> {
     return readPromptFile()
         .then(prompt => {
-            const fullPrompt = `${prompt}\n\nParagraph:\n${text}`;
-            console.log(`full prompt ready to send ${fullPrompt}`);
-            return generateText(fullPrompt);
+            return generateText(prompt, text);
         })
         .then(response => {
-            if (response) {
+            if (!response) return [];
+
+            try {
                 const parsed = extractJSONFromCodeBlock(response);
-                console.log(`parsed ${parsed}`);
+                console.log("Parsed JSON:", parsed);
+
                 if (Array.isArray(parsed.sentences)) {
                     return parsed.sentences as LLMAnalysis[];
                 } else {
-                    throw new Error("Parsed response does not contain a 'sentences' array");
+                    throw new Error("Parsed response does not contain 'sentences' array");
                 }
-            } else {
+            } catch (e) {
+                console.error("Failed to parse JSON:", e);
                 return [];
             }
         })
