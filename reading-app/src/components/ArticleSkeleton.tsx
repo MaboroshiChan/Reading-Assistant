@@ -360,14 +360,6 @@ const ExampleArticle: React.FC = () => {
     console.log('Like:', liked);
   };
 
-  /** 
-  const [article, setArticle] = React.useState<string>('');
-
-  React.useEffect(() => {
-    loadArticleFromFile('examples/TestArticles/notes-on-flirt.md').then(setArticle);
-  }, []);
-  */
-
   return (
     <ArticleFramework
       title="Your Article Title Here"

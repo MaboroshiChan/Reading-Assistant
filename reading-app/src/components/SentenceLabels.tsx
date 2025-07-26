@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { type SentenceLabels } from "../analysis/structure/Sentence";
-import React, { useEffect } from "react";
+import React, { useLayoutEffect } from "react";
 import type { LLMAnalysis } from "../analysis/structure/Sentence";
 
 interface SentenceLabelsProps {
@@ -182,25 +182,29 @@ export const extractUnifiedSpans = (
   let idCounter = 1;
 
   // Helper to add or merge spans
-  const addOrMergeSpan = (start: number, end: number, label: string, isStructural = false): string | undefined => {
+  const addOrMergeSpan = (start: number, end: number, label: string): string | undefined => {
     const existing = spans.find(s => s.start === start && s.end === end);
+
     if (existing) {
-      if (!existing.label.includes(label)) existing.label.push(label);
-      return existing.id;
-    } else {
-      const newSpan: UnifiedSpan = {
-        start,
-        end,
-        label: [label],
-      };
-      if (isStructural || label.startsWith("structure-")) {
-        const newId = `span-${idCounter++}`;
-        newSpan.id = newId;
-        idMap[label] = newId;
+      if (!existing.label.includes(label)) {
+        existing.label.push(label);
       }
-      spans.push(newSpan);
-      return newSpan.id;
+      return existing.id;
     }
+
+    const newId = `span-${idCounter++}`;
+    const newSpan: UnifiedSpan = {
+      start,
+      end,
+      label: [label],
+      id: newId
+    };
+
+    //if (isStructural || label.startsWith("structure-")) {
+    idMap[label] = newId;
+
+    spans.push(newSpan);
+    return newSpan.id;
   };
 
   // --- 1. Structure: subject / predicate / object
@@ -214,7 +218,7 @@ export const extractUnifiedSpans = (
     if (!value) return;
     const idx = lower.indexOf(value.toLowerCase());
     if (idx !== -1) {
-      addOrMergeSpan(idx, idx + value.length, label, true);
+      addOrMergeSpan(idx, idx + value.length, label);
     }
   });
 
@@ -238,6 +242,24 @@ export const extractUnifiedSpans = (
 
   // --- 3. Add linkedBy to predicate spans
   spans.forEach(span => {
+    if (typeof span.id !== "string") {
+      console.warn("❌ span.id is not string:", span);
+    }
+    if (span.linkedBy && typeof span.linkedBy !== "string") {
+      console.warn("❌ linkedBy is not string:", span);
+    }
+    if (span.start >= span.end || span.start < 0 || span.end > sentence.length) {
+      console.warn("⚠️ Invalid span range:", span);
+    }
+    if (span.label.some(l => typeof l !== "string")) {
+      console.warn("⚠️ Non-string label detected:", span.label);
+    }
+    if (span.id && typeof span.id !== "string") {
+      console.warn("⚠️ Non-string ID:", span.id);
+    }
+    if (span.id && typeof span.id !== "string") {
+      console.warn("Non-string ID detected in span:", span);
+    }
     if (span.label.includes("structure-predicate")) {
       const linkedIds = spans
         .filter(s =>
@@ -245,7 +267,7 @@ export const extractUnifiedSpans = (
           s.label.includes("structure-object")
         )
         .map(s => s.id)
-        .filter(Boolean);
+        .filter((id): id is string => typeof id === "string");
       if (linkedIds.length) {
         span.linkedBy = linkedIds.join(",");
       }
@@ -301,7 +323,7 @@ export const Highlighter: React.FC<{ data: LLMAnalysis }> = ({ data }) => {
 
   const spans: UnifiedSpan[] = extractUnifiedSpans(sentence, structure, semantics);
   spans.sort((a, b) => a.start - b.start);
-  console.log("Extracted spans:", spans);
+  //console.log("Extracted spans:", spans);
 
   const highlightedNodes: React.ReactNode[] = [];
   let cursor = 0;
@@ -330,22 +352,30 @@ export const Highlighter: React.FC<{ data: LLMAnalysis }> = ({ data }) => {
     highlightedNodes.push(<span key={cursor}>{sentence.slice(cursor)}</span>);
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = document.querySelector(".highlighted-sentence");
     if (!container) return;
     const all = container.querySelectorAll(".highlight");
+
+    console.log('operating on highlighted nodes:');
 
     all.forEach(el => {
       el.addEventListener("mouseenter", () => {
         el.classList.add("hovered");
         const links = el.getAttribute("data-links")?.split(",") ?? [];
         links.forEach(id => {
+          console.log(`Hovering over ${el.className}, linking to ${id}`);
           const target = document.getElementById(id);
-          if (target) target.classList.add("hovered");
+          if (target && target.isConnected) {
+            target.classList.add("hovered");
+          }
         });
       });
 
       el.addEventListener("mouseleave", () => {
+
+        console.log(`Mouse left ${el.className}`);
+
         all.forEach(e => e.classList.remove("hovered"));
       });
     });
