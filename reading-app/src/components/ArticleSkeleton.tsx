@@ -1,68 +1,28 @@
 import React, { useState, type ReactNode, type CSSProperties } from 'react';
 import './css/ArticleSkeleton.css';
 import './css/Highlighted.css';
-import { Paragraph } from '../analysis/structure/Paragraph';
-import type { LLMAnalysis } from '../analysis/structure/Sentence';
-import { SemanticParagraph } from './SermanticParagraph';
+import type { Paragraph } from '../analysis/structure/Paragraph';
+import type { Sentence } from '../analysis/structure/Sentence';
+import { ParagraphComponent } from './SermanticParagraph';
+import paragraph_data from '../../examples/test-node.json';
 
+const ExampleParagraph: React.FC = () => {
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const exampleAnalysis: LLMAnalysis = {
-  id: 1,
-  sentence: "Natural language processing significantly improves human-computer interaction.",
-  structure: {
-    subject: "Natural language processing",
-    predicate: "improves",
-    object: "human-computer interaction"
-  },
-  semantics: {
-    semantic_roles: [
-      { text_piece: "Natural language processing", type: "entity" },
-      { text_piece: "improves", type: "event" },
-      { text_piece: "human-computer interaction", type: "concept" },
-      { text_piece: "significantly", type: "modifier" }
-    ]
-  },
-  pragmatics: {
-    modality: "factual",
-    tone: "analytical",
-    emphasis: true,
-    focus: ["improves", "human-computer interaction"]
-  }
+  const paragraph: Paragraph = {
+    id: '1',
+    sentences: paragraph_data.sentences as Sentence[],
+    centralIdea: "Conversation structure and function"
+  };
+
+  return (
+    <div>
+      <ParagraphComponent
+        paragraph={paragraph}
+      />
+    </div>
+  );
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const exampleAnalysis2: LLMAnalysis = {
-  id: 2,
-  sentence: "The properties of the category would depend on many factors: the role of that node in the given schema, its relationship to other nodes in the schema, the relationship of that schema to other schemas, and the overall interaction of that schema with other aspects of the conceptual system.",
-  structure: {
-    subject: "The properties of the category",
-    predicate: "would depend",
-    object: "many factors"
-  },
-  semantics: {
-    semantic_roles: [
-      { text_piece: "The properties of the category", type: "entity" },
-      { text_piece: "would depend", type: "event" },
-      { text_piece: "many factors", type: "concept" },
-      { text_piece: "the role of that node in the given schema", type: "concept" },
-      { text_piece: "its relationship to other nodes in the schema", type: "concept" },
-      { text_piece: "the relationship of that schema to other schemas", type: "concept" },
-      { text_piece: "the overall interaction of that schema with other aspects of the conceptual system", type: "concept" }
-    ]
-  },
-  pragmatics: {
-    modality: "hypothetical",
-    tone: "analytical",
-    emphasis: false,
-    focus: [
-      "would depend",
-      "many factors",
-      "the role of that node in the given schema",
-      "its relationship to other nodes in the schema"
-    ]
-  }
-};
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -320,31 +280,6 @@ export type LayoutType = 'default' | 'wide' | 'minimal';
 export type ThemeType = 'light' | 'dark';
 export type FontFamilyType = 'serif' | 'sans-serif';
 
-const ExampleParagraph: React.FC = () => {
-  const [paragraph, setParagraph] = useState<Paragraph | null>(null);
-
-  console.log("testing ")
-
-  React.useEffect(() => {
-    const loadParagraph = async () => {
-      try {
-        const response = await fetch('/prompts/test_paragraph1.txt');
-        const text = await response.text();
-        setParagraph(new Paragraph(1,text));
-      } catch (error) {
-        console.error('Failed to load paragraph:', error);
-      }
-    };
-
-    loadParagraph();
-  }, []);
-
-  return (
-    <div>
-      {paragraph ? <SemanticParagraph paragraph={paragraph} /> : <p>Loading...</p>}
-    </div>
-  );
-}
 
 // Example usage component
 const ExampleArticle: React.FC = () => {

@@ -1,6 +1,4 @@
-import type { LLMAnalysis } from "../analysis/structure/Sentence";
-
-export async function fetchLLMAnalysis(paragraph: string): Promise<LLMAnalysis[]> {
+export async function fetchLLMAnalysis(paragraph: string) {
     try {
         const res = await fetch("http://localhost:3001/generate-llm-analysis", {
             method: "POST",

@@ -1,40 +1,29 @@
-import React, { useEffect, useState } from "react";
-import { Paragraph } from "../analysis/structure/Paragraph";
-import { Highlighter } from "./SentenceLabels";
-import type { LLMAnalysis } from "../analysis/structure/Sentence";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { fetchLLMAnalysis } from "../services/llmClient"; // ✅ FIXED
-import test from "../../examples/test.json";
+import React, { useState } from "react";
+import type { Paragraph } from "../analysis/structure/Paragraph";
+import { SentenceComponent } from "./SentenceComponent";
 
-interface ParagraphProps {
+interface ParagraphComponentProps {
   paragraph: Paragraph;
 }
 
-export const SemanticParagraph: React.FC<ParagraphProps> = ({ paragraph }) => {
-  const [analysis, setAnalysis] = useState<LLMAnalysis[]>(paragraph.getLLMAnalysis());
-
-  useEffect(() => {
-    if (analysis.length === 0 && paragraph.getRawText().trim().length > 0) {
-      Promise.resolve()
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      .then(_ => {
-        setAnalysis(test.sentences as LLMAnalysis[])
-      })
-      .catch(e => console.warn(e))
-    }
-  }, [analysis, paragraph]); // ✅ Remove 'analysis' to prevent repeated fetch
-
-  const id = paragraph.getId();
-  const mainIdea = paragraph.getMainIdea();
+export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   return (
-    <div
-      className="semantic-paragraph"
-      id={id !== undefined ? `paragraph-${id}` : undefined}
-      data-main-idea={mainIdea || undefined}
-    >
-      {analysis.map((a, idx) => (
-        <Highlighter key={a.id || idx} data={a} />
+    <div className="paragraph" data-paragraph-id={paragraph.id}>
+      {paragraph.centralIdea && (
+        <div className="central-idea">
+          <strong>Central Idea:</strong> {paragraph.centralIdea}
+        </div>
+      )}
+      {paragraph.sentences.map((sentence) => (
+        <SentenceComponent
+          key={sentence.id}
+          node={sentence.semanticTree}
+          onHoverNode={(id) => setHoveredId(id)}
+          onLeaveNode={() => setHoveredId(null)}
+          hoveredId={hoveredId}
+        />
       ))}
     </div>
   );
