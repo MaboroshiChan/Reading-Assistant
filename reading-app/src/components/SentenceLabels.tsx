@@ -182,7 +182,7 @@ export const extractUnifiedSpans = (
   let idCounter = 1;
 
   // Helper to add or merge spans
-  const addOrMergeSpan = (start: number, end: number, label: string): string | undefined => {
+  const addOrMergeSpan = (start: number, end: number, label: string, isStructural=false): string | undefined => {
     const existing = spans.find(s => s.start === start && s.end === end);
 
     if (existing) {
@@ -190,18 +190,18 @@ export const extractUnifiedSpans = (
         existing.label.push(label);
       }
       return existing.id;
-    }
+    } 
 
-    const newId = `span-${idCounter++}`;
     const newSpan: UnifiedSpan = {
-      start,
-      end,
-      label: [label],
-      id: newId
-    };
-
-    //if (isStructural || label.startsWith("structure-")) {
-    idMap[label] = newId;
+        start,
+        end,
+        label: [label],
+      };
+      if (isStructural || label.startsWith("structure-")) {
+        const newId = `span-${idCounter++}`;
+        newSpan.id = newId;
+        idMap[label] = newId;
+      }
 
     spans.push(newSpan);
     return newSpan.id;
@@ -218,7 +218,7 @@ export const extractUnifiedSpans = (
     if (!value) return;
     const idx = lower.indexOf(value.toLowerCase());
     if (idx !== -1) {
-      addOrMergeSpan(idx, idx + value.length, label);
+      addOrMergeSpan(idx, idx + value.length, label, true);
     }
   });
 
@@ -242,6 +242,7 @@ export const extractUnifiedSpans = (
 
   // --- 3. Add linkedBy to predicate spans
   spans.forEach(span => {
+    /** 
     if (typeof span.id !== "string") {
       console.warn("❌ span.id is not string:", span);
     }
@@ -260,6 +261,7 @@ export const extractUnifiedSpans = (
     if (span.id && typeof span.id !== "string") {
       console.warn("Non-string ID detected in span:", span);
     }
+      */
     if (span.label.includes("structure-predicate")) {
       const linkedIds = spans
         .filter(s =>
@@ -323,33 +325,66 @@ export const Highlighter: React.FC<{ data: LLMAnalysis }> = ({ data }) => {
 
   const spans: UnifiedSpan[] = extractUnifiedSpans(sentence, structure, semantics);
   spans.sort((a, b) => a.start - b.start);
-  //console.log("Extracted spans:", spans);
 
+  // 1. 构造字符级映射
+  const layers: string[][] = Array.from({ length: sentence.length }, () => []);
+  const idMap: Record<number, string | undefined> = {};
+  const linkMap: Record<number, string | undefined> = {};
+
+  spans.forEach(span => {
+    for (let i = span.start; i < span.end; i++) {
+      for (const label of span.label) {
+        if (!layers[i].includes(label)) {
+          layers[i].push(label);
+        }
+      }
+      if (span.id) idMap[i] = span.id;
+      if (span.linkedBy) linkMap[i] = span.linkedBy;
+    }
+  });
+
+  console.log(`layers ${layers}`)
+
+  // 2. 构建分块输出
   const highlightedNodes: React.ReactNode[] = [];
-  let cursor = 0;
+  let i = 0;
 
-  for (const span of spans) {
-    if (cursor < span.start) {
-      highlightedNodes.push(<span key={cursor}>{sentence.slice(cursor, span.start)}</span>);
+  while (i < sentence.length) {
+    const labels = layers[i];
+    let j = i + 1;
+
+    while (
+      j < sentence.length &&
+      JSON.stringify(layers[j]) === JSON.stringify(labels) &&
+      idMap[j] === idMap[i] &&
+      linkMap[j] === linkMap[i]
+    ) {
+      j++;
     }
 
-    const spanText = sentence.slice(span.start, span.end);
-    const classNames = span.label.map(l => `highlight ${l}`).join(" ");
-    highlightedNodes.push(
-      <span
-        key={`${span.start}-${span.end}`}
-        className={classNames}
-        id={span.id}
-        data-links={span.linkedBy}
-      >
-        {spanText}
-      </span>
-    );
-    cursor = span.end;
-  }
+    const text = sentence.slice(i, j);
+    const key = `${i}-${j}`;
+    console.log(`key = ${key}`)
 
-  if (cursor < sentence.length) {
-    highlightedNodes.push(<span key={cursor}>{sentence.slice(cursor)}</span>);
+    let node: React.ReactNode = text;
+    if (labels.length) {
+      const classNames = labels.map(l => `highlight ${l}`).join(" ");
+      node = (
+        <span
+          className={classNames}
+          key={key}
+          id={idMap[i]}
+          data-links={linkMap[i]}
+        >
+          {text}
+        </span>
+      );
+    } else {
+      node = <span key={key}>{text}</span>;
+    }
+
+    highlightedNodes.push(node);
+    i = j;
   }
 
   useLayoutEffect(() => {
@@ -357,14 +392,11 @@ export const Highlighter: React.FC<{ data: LLMAnalysis }> = ({ data }) => {
     if (!container) return;
     const all = container.querySelectorAll(".highlight");
 
-    console.log('operating on highlighted nodes:');
-
     all.forEach(el => {
       el.addEventListener("mouseenter", () => {
         el.classList.add("hovered");
         const links = el.getAttribute("data-links")?.split(",") ?? [];
         links.forEach(id => {
-          console.log(`Hovering over ${el.className}, linking to ${id}`);
           const target = document.getElementById(id);
           if (target && target.isConnected) {
             target.classList.add("hovered");
@@ -373,9 +405,6 @@ export const Highlighter: React.FC<{ data: LLMAnalysis }> = ({ data }) => {
       });
 
       el.addEventListener("mouseleave", () => {
-
-        console.log(`Mouse left ${el.className}`);
-
         all.forEach(e => e.classList.remove("hovered"));
       });
     });
