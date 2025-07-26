@@ -29,6 +29,12 @@
                 "id": "n5",
                 "label": ["structure-object"],
                 "text": "two people who are talking to each other"
+              },
+              {
+                "id": "p1",
+                "label": ["punctuation"],
+                "text": ".",
+                "noSpaceBefore": true
               }
             ]
           }
@@ -44,7 +50,19 @@
       "semanticTree": {
         "id": "n6",
         "label": ["semantic-event"],
-        "text": "Typically, one of them initiates it and they take turns talking about some common topic or set of topics"
+        "children": [
+          {
+            "id": "n6-text",
+            "label": ["semantic-event"],
+            "text": "Typically, one of them initiates it and they take turns talking about some common topic or set of topics"
+          },
+          {
+            "id": "p2",
+            "label": ["punctuation"],
+            "text": ".",
+            "noSpaceBefore": true
+          }
+        ]
       }
     },
     {
@@ -56,7 +74,20 @@
       "semanticTree": {
         "id": "n7",
         "label": ["semantic-goal"],
-        "text": "Maintaining the turn-taking and keeping to the topic at hand (or shifting topics in a permissible fashion) takes a certain amount of cooperation"
+        "children": [
+          {
+            "id": "n7-text",
+            "label": ["semantic-goal"],
+            "text": "Maintaining the turn-taking and keeping to the topic at hand (or shifting topics in a permissible fashion) takes a certain amount of cooperation"
+          },
+          {
+            "id": "p3",
+            "label": ["punctuation"],
+            "text": ".",
+            "noSpaceBefore": true,
+            "noSpaceAfter": false
+          }
+        ]
       }
     },
     {
@@ -68,7 +99,19 @@
       "semanticTree": {
         "id": "n8",
         "label": ["semantic-purpose"],
-        "text": "Conversations generally serve the purpose of polite social interaction"
+        "children": [
+          {
+            "id": "n8-text",
+            "label": ["semantic-purpose"],
+            "text": "Conversations generally serve the purpose of polite social interaction"
+          },
+          {
+            "id": "p4",
+            "label": ["punctuation"],
+            "text": ".",
+            "noSpaceBefore": true
+          }
+        ]
       },
       "relation": {
         "type": "Conclusion",

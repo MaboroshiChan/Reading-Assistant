@@ -1,5 +1,6 @@
 import React from "react";
 import type { SemanticNode } from "../analysis/structure/Sentence";
+import './css/SemanticSentence.css'
 
 interface SentenceComponentProps {
   node: SemanticNode;
@@ -25,7 +26,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     onLeaveNode?.();
   };
 
-  const className = node.label.join(" ") + (isHovered ? " hovered" : "");
+  const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : "");
 
   const renderChildren = (): React.ReactNode => {
     // 如果是文本节点，直接输出文本
@@ -35,10 +36,16 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     return node.children.map((child, index) => {
       const prev = node.children[index - 1];
+      const next = node.children[index + 1];
       const spaceBefore =
         index > 0 &&
         !child.noSpaceBefore &&
         !prev?.noSpaceAfter;
+
+      const spaceAfter = 
+        index < node.children.length &&
+        !child.noSpaceAfter && 
+        !next?.noSpaceBefore;
 
       return (
         <React.Fragment key={child.id}>
@@ -49,6 +56,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             onHoverNode={onHoverNode}
             onLeaveNode={onLeaveNode}
           />
+          {spaceAfter && " "}
         </React.Fragment>
       );
     });

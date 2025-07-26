@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { Paragraph } from "../analysis/structure/Paragraph";
 import { SentenceComponent } from "./SentenceComponent";
+import './css/SemanticParagraph.css'
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
