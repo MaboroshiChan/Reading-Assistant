@@ -1,0 +1,114 @@
+{
+  "id": 1,
+  "function": "Definition",
+  "type": "Declarative",
+  "purpose": "Describe the overall structure and function of basic conversational sentences",
+  "mood": "Indicative",
+  "theme": "Conversation Dynamics",
+  "sentences": [
+    {
+      "id": 1,
+      "semanticTree": {
+        "id": "n-1",
+        "label": ["structure-subject"],
+        "children": [
+          { "id": "n-1-1", "label": ["semantic-concept"], "text": "The" },
+          {
+            "id": "n-1-2",
+            "label": ["structure-modifier"],
+            "children": [
+              { "id": "n-1-2-1", "label": ["semantic-concept"], "text": "most" },
+              { "id": "n-1-2-2", "label": ["semantic-concept"], "text": "basic" }
+            ]
+          },
+          { "id": "n-1-3", "label": ["semantic-concept"], "text": "kind" },
+          {
+            "id": "n-1-4",
+            "label": ["structure-preposition"],
+            "children": [
+              { "id": "n-1-4-1", "label": ["semantic-concept"], "text": "of" },
+              { "id": "n-1-4-2", "label": ["semantic-concept"], "text": "conversation", "noSpaceBefore": true }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "semanticTree": {
+        "id": "n-2",
+        "label": ["structure-predicate"],
+        "children": [
+          { "id": "n-2-1", "label": ["semantic-predicate"], "text": "involves", "linkedBy": ["n-1-3"], "noSpaceBefore": true },
+          {
+            "id": "n-2-2",
+            "label": ["structure-object"],
+            "children": [
+              { "id": "n-2-2-1", "label": ["semantic-concept"], "text": "two" },
+              { "id": "n-2-2-2", "label": ["semantic-concept"], "text": "people" }
+            ]
+          },
+          {
+            "id": "n-2-3",
+            "label": ["structure-relative-clause"],
+            "children": [
+              { "id": "n-2-3-1", "label": ["semantic-concept"], "text": "who" },
+              { "id": "n-2-3-2", "label": ["semantic-predicate"], "text": "are talking" },
+              {
+                "id": "n-2-3-3",
+                "label": ["structure-preposition"],
+                "children": [
+                  { "id": "n-2-3-3-1", "label": ["semantic-concept"], "text": "to" },
+                  { "id": "n-2-3-3-2", "label": ["semantic-concept"], "text": "each other", "noSpaceBefore": true }
+                ]
+              }
+            ]
+          },
+          { "id": "p-2-1", "label": ["punctuation"], "text": ".", "noSpaceBefore": true }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "semanticTree": {
+        "id": "n-3",
+        "label": ["semantic-event"],
+        "children": [
+          { "id": "n-3-1", "label": ["semantic-concept"], "text": "Typically" },
+          { "id": "n-3-2", "label": ["semantic-concept"], "text": "one" },
+          {
+            "id": "n-3-3",
+            "label": ["structure-preposition"],
+            "children": [
+              { "id": "n-3-3-1", "label": ["semantic-concept"], "text": "of" },
+              { "id": "n-3-3-2", "label": ["semantic-concept"], "text": "them", "noSpaceBefore": true }
+            ]
+          },
+          { "id": "n-3-4", "label": ["semantic-predicate"], "text": "initiates", "linkedBy": ["n-3-2","n-3-3"] },
+          { "id": "n-3-5", "label": ["semantic-concept"], "text": "it" },
+          { "id": "n-3-6", "label": ["semantic-concept"], "text": "and" },
+          { "id": "n-3-7", "label": ["semantic-concept"], "text": "they" },
+          { "id": "n-3-8", "label": ["semantic-predicate"], "text": "take turns" },
+          { "id": "n-3-9", "label": ["semantic-predicate"], "text": "talking" },
+          {
+            "id": "n-3-10",
+            "label": ["structure-preposition"],
+            "children": [
+              { "id": "n-3-10-1", "label": ["semantic-concept"], "text": "about" },
+              {
+                "id": "n-3-10-2",
+                "label": ["semantic-concept"],
+                "children": [
+                  { "id": "n-3-10-2-1", "label": ["semantic-concept"], "text": "some common topic" },
+                  { "id": "n-3-10-2-2", "label": ["semantic-concept"], "text": "or" },
+                  { "id": "n-3-10-2-3", "label": ["semantic-concept"], "text": "set of topics" }
+                ]
+              }
+            ]
+          },
+          { "id": "p-3-1", "label": ["punctuation"], "text": ".", "noSpaceBefore": true }
+        ]
+      }
+    }
+  ]
+}

@@ -19,7 +19,6 @@ export interface SemanticNode {
 
 export interface Sentence {
   id: number;
-
   function: string;         // e.g., Premise, Conclusion
   type: string;             // e.g., Declarative, Interrogative
   purpose: string;          // Short natural language explanation
