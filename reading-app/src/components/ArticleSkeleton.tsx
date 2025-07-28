@@ -3,7 +3,7 @@ import './css/ArticleSkeleton.css';
 import './css/Highlighted.css';
 import type { Paragraph } from '../analysis/structure/Paragraph';
 import type { Sentence } from '../analysis/structure/Sentence';
-import { ParagraphComponent } from './SermanticParagraph';
+import { ParagraphComponent } from './ParagraphComponent';
 import paragraph_data from '../../examples/test-node.json';
 
 const ExampleParagraph: React.FC = () => {
