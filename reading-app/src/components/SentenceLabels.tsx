@@ -158,78 +158,6 @@ export const extractStructureSpans = (
   return result;
 };
 
-export const extractSemanticSpans = (
-  sentence: string,
-  semantics: {
-    semantic_roles: {
-      text_piece: string;
-      type: "concept" | "event" | "entity" | "goal" | "modifier" | "location" | "agent" | "receiver" | "predicate";
-    }[];
-  }
-): {
-  start: number;
-  end: number;
-  label: string;
-  id: string;
-  linkedBy?: string;
-}[] => {
-  const spans: {
-    start: number;
-    end: number;
-    label: string;
-    id: string;
-    linkedBy?: string;
-  }[] = [];
-
-  const lower = sentence.toLowerCase();
-
-  // 记录 id 分配
-  const roleCount: Record<string, number> = {};
-  const predicateIndices: number[] = [];
-
-  semantics.semantic_roles.forEach(({ text_piece, type }) => {
-    const phrase = text_piece.toLowerCase();
-    let pos = 0;
-
-    while (true) {
-      const found = lower.indexOf(phrase, pos);
-      if (found === -1) break;
-
-      const count = (roleCount[type] = (roleCount[type] || 0) + 1);
-      const id = `semantic-${type}-${count}`;
-      const label = `semantic-${type}`;
-
-      const span = {
-        start: found,
-        end: found + phrase.length,
-        label,
-        id,
-      };
-
-      spans.push(span);
-
-      // 如果是谓词，记录下标
-      if (type === "predicate") {
-        predicateIndices.push(spans.length - 1);
-      }
-
-      pos = found + phrase.length;
-    }
-  });
-
-  // 给每个 predicate 填上 linkedBy → 指向 subject/object id
-  predicateIndices.forEach(predIdx => {
-    const predicateSpan = spans[predIdx];
-    const linkedIds = spans
-      .filter(s => s.label === "semantic-subject" || s.label === "semantic-object")
-      .map(s => s.id);
-    predicateSpan.linkedBy = linkedIds.join(",");
-  });
-
-  return spans;
-};
-
-
 interface UnifiedSpan {
   start: number;
   end: number;
@@ -291,17 +219,22 @@ export const extractUnifiedSpans = (
   });
 
   // --- 2. Semantics
-  semantics.semantic_roles.forEach(({ text_piece, type }) => {
-    const label = `semantic-${type}`;
-    const phrase = text_piece.toLowerCase();
-    let pos = 0;
-    while (pos < lower.length) {
-      const idx = lower.indexOf(phrase, pos);
-      if (idx === -1) break;
-      addOrMergeSpan(idx, idx + phrase.length, label);
-      pos = idx + phrase.length;
-    }
-  });
+  if (Array.isArray(semantics.semantic_roles)) {
+    semantics.semantic_roles.forEach(({ text_piece, type }) => {
+      const label = `semantic-${type}`;
+      const phrase = text_piece.toLowerCase();
+      let pos = 0;
+      while (pos < lower.length) {
+        const idx = lower.indexOf(phrase, pos);
+        if (idx === -1) break;
+        addOrMergeSpan(idx, idx + phrase.length, label);
+        pos = idx + phrase.length;
+      }
+    });
+  }
+  else {
+    console.warn("semantic_roles was not an array", semantics.semantic_roles);
+  }
 
   // --- 3. Add linkedBy to predicate spans
   spans.forEach(span => {
