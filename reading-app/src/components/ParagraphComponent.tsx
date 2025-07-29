@@ -2,13 +2,15 @@ import React, { useState } from "react";
 import type { Paragraph } from "../analysis/structure/Paragraph";
 import { SentenceComponent } from "./SentenceComponent";
 import './css/SemanticParagraph.css'
+import { List } from "immutable";
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
 }
 
 export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  const [hoveredPath, setHoveredPath] = useState<List<string>>(List([]));
 
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
@@ -18,9 +20,9 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
           node={sentence.semanticTree}
           onHoverNode={(id) => {
             console.log(`id = ${id}`)
-            setHoveredId(id)}}
-          onLeaveNode={() => setHoveredId(null)}
-          hoveredId={hoveredId}
+            setHoveredPath(hoveredPath.push(id))}}
+          onLeaveNode={(id) => setHoveredPath(hoveredPath.filter(x=>x != id))}
+          hoveredPath={hoveredPath}
         />
       ))}
     </div>

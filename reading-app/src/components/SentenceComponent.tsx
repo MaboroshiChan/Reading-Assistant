@@ -1,29 +1,36 @@
 import React from "react";
 import type { SemanticNode } from "../analysis/structure/Sentence";
 import './css/SemanticSentence.css'
+import { List } from 'immutable';
 
 interface SentenceComponentProps {
   node: SemanticNode;
-  hoveredId: string | null;
+  hoveredPath: List<string>;
   onHoverNode?: (id: string) => void;
-  onLeaveNode?: () => void;
+  onLeaveNode?: (id: string) => void;
 }
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   node,
-  hoveredId,
+  hoveredPath,
   onHoverNode,
   onLeaveNode,
 }) => {
-  const isHovered =
-    node.id === hoveredId || node.linkedBy?.includes(hoveredId ?? ""); // How to switch to another method to determine isHovered.
+  let isHovered =
+    hoveredPath.contains(node.id); // How to switch to another method to determine isHovered.
+
+  for (const each in node.linkedBy) {
+    if (hoveredPath.contains(each)) {
+        isHovered = true;
+    }
+  }
 
   const handleMouseEnter = () => {
     onHoverNode?.(node.id);
   };
 
   const handleMouseLeave = () => {
-    onLeaveNode?.();
+    onLeaveNode?.(node.id);
   };
 
   const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : ` ${node.id}`);
@@ -44,7 +51,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
           {spaceBefore && " "}
           <SentenceComponent
             node={child}
-            hoveredId={hoveredId}
+            hoveredPath={hoveredPath}
             onHoverNode={onHoverNode}
             onLeaveNode={onLeaveNode}
           />
