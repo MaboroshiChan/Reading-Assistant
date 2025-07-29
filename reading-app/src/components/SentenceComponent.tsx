@@ -26,7 +26,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     onLeaveNode?.();
   };
 
-  const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : "");
+  const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : " ");
 
   const renderChildren = (): React.ReactNode => {
     // 如果是文本节点，直接输出文本

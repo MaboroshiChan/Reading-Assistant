@@ -12,11 +12,6 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
 
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
-      {paragraph.centralIdea && (
-        <div className="central-idea">
-          <strong>Central Idea:</strong> {paragraph.centralIdea}
-        </div>
-      )}
       {paragraph.sentences.map((sentence) => (
         <SentenceComponent
           key={sentence.id}
