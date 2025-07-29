@@ -2,6 +2,8 @@
   display: inline;        /* Flow naturally like text */
   margin: 0;            /* Remove default margin */
   padding: 0;           /* Remove default padding */
+  padding-right: 0;
+  margin-right:0;
   border-radius: 6px;
   transition: background-color 0.2s ease;
 }

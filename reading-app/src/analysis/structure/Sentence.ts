@@ -14,7 +14,6 @@ export interface SemanticNode {
   linkedBy?: string[];              // 被哪些 id 联动
 
   noSpaceBefore?: boolean;
-  noSpaceAfter?: boolean;
 }
 
 export interface Sentence {

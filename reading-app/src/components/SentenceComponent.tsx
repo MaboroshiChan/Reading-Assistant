@@ -35,17 +35,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     if (!node.children || node.children.length === 0) return null;
 
     return node.children.map((child, index) => {
-      const prev = node.children[index - 1];
-      const next = node.children[index + 1];
       const spaceBefore =
         index > 0 &&
-        !child.noSpaceBefore &&
-        !prev?.noSpaceAfter;
-
-      const spaceAfter = 
-        index < node.children.length &&
-        !child.noSpaceAfter && 
-        !next?.noSpaceBefore;
+        !child.noSpaceBefore;
 
       return (
         <React.Fragment key={child.id}>
@@ -56,7 +48,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             onHoverNode={onHoverNode}
             onLeaveNode={onLeaveNode}
           />
-          {spaceAfter && " "}
+          {child.text && child.text === '.' && " "}
         </React.Fragment>
       );
     });
