@@ -41,11 +41,13 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     if (!node.children || node.children.length === 0) return null;
 
+    console.log(`path = ${hoveredPath}`)
+
     return node.children.map((child, index) => {
       const spaceBefore =
         index > 0 &&
         !child.noSpaceBefore;
-
+    
       return (
         <React.Fragment key={child.id}>
           {spaceBefore && " "}
@@ -64,8 +66,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   return (
     <span
       className={className}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseOver={handleMouseEnter}
+      onMouseOut={handleMouseLeave}
     >
       {renderChildren()}
     </span>
