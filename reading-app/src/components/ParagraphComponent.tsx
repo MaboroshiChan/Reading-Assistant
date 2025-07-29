@@ -16,7 +16,9 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
         <SentenceComponent
           key={sentence.id}
           node={sentence.semanticTree}
-          onHoverNode={(id) => setHoveredId(id)}
+          onHoverNode={(id) => {
+            console.log(`id = ${id}`)
+            setHoveredId(id)}}
           onLeaveNode={() => setHoveredId(null)}
           hoveredId={hoveredId}
         />

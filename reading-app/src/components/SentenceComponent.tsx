@@ -16,7 +16,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   onLeaveNode,
 }) => {
   const isHovered =
-    node.id === hoveredId || node.linkedBy?.includes(hoveredId ?? "");
+    node.id === hoveredId || node.linkedBy?.includes(hoveredId ?? ""); // How to switch to another method to determine isHovered.
 
   const handleMouseEnter = () => {
     onHoverNode?.(node.id);
@@ -26,7 +26,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     onLeaveNode?.();
   };
 
-  const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : " ");
+  const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : ` ${node.id}`);
 
   const renderChildren = (): React.ReactNode => {
     // 如果是文本节点，直接输出文本
