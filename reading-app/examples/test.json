@@ -1,0 +1,93 @@
+{
+  "sentences": [
+    {
+      "id": 1,
+      "sentence": "The most basic kind of conversation involves two people who are talking to each other.",
+      "structure": {
+        "subject": "The most basic kind of conversation",
+        "predicate": "involves",
+        "object": "two people who are talking to each other"
+      },
+      "semantics": {
+        "semantic_roles": [
+          { "text_piece": "conversation", "type": "concept" },
+          { "text_piece": "two people", "type": "entity" },
+          { "text_piece": "talking", "type": "event" }
+        ]
+      },
+      "pragmatics": {
+        "modality": "factual",
+        "tone": "neutral",
+        "emphasis": false,
+        "focus": ["conversation", "two people"]
+      }
+    },
+    {
+      "id": 2,
+      "sentence": "Typically, one of them initiates it and they take turns talking about some common topic or set of topics.",
+      "structure": {
+        "subject": "one of them",
+        "predicate": "initiates",
+        "object": "it"
+      },
+      "semantics": {
+        "semantic_roles": [
+          { "text_piece": "one of them", "type": "entity" },
+          { "text_piece": "initiates", "type": "event" },
+          { "text_piece": "common topic or set of topics", "type": "goal" }
+        ]
+      },
+      "pragmatics": {
+        "modality": "factual",
+        "tone": "neutral",
+        "emphasis": false,
+        "focus": ["initiate", "talking"]
+      }
+    },
+    {
+      "id": 3,
+      "sentence": "Maintaining the turn-taking and keeping to the topic at hand (or shifting topics in a permissible fashion) takes a certain amount of cooperation.",
+      "structure": {
+        "subject": "Maintaining the turn-taking and keeping to the topic at hand (or shifting topics in a permissible fashion)",
+        "predicate": "takes",
+        "object": "a certain amount of cooperation"
+      },
+      "semantics": {
+        "semantic_roles": [
+          { "text_piece": "turn-taking", "type": "event" },
+          { "text_piece": "topic at hand", "type": "modifier" },
+          { "text_piece": "shifting topics", "type": "event" },
+          { "text_piece": "cooperation", "type": "concept" }
+        ]
+      },
+      "pragmatics": {
+        "modality": "factual",
+        "tone": "neutral",
+        "emphasis": false,
+        "focus": ["cooperation"]
+      }
+    },
+    {
+      "id": 4,
+      "sentence": "And whatever other purposes a conversation may have for the participants, conversations generally serve the purpose of polite social interaction.",
+      "structure": {
+        "subject": "conversations",
+        "predicate": "serve",
+        "object": "the purpose of polite social interaction"
+      },
+      "semantics": {
+        "semantic_roles": [
+          { "text_piece": "purposes", "type": "goal" },
+          { "text_piece": "conversation", "type": "concept" },
+          { "text_piece": "polite social interaction", "type": "goal" }
+        ]
+      },
+      "pragmatics": {
+        "modality": "factual",
+        "tone": "analytical",
+        "emphasis": true,
+        "focus": ["purposes", "polite social interaction"]
+      }
+    }
+  ]
+}

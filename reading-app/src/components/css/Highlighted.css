@@ -4,7 +4,8 @@
   border-radius: 4px;
   padding-top: 1px; /* 提前就设好 */
   padding-bottom: 2px;
-  display: inline;
+  display: inline-block;
+  text-align: left;
 }
 
 /* 关键词高亮样式，仅在 hover 时显示 */

@@ -1,10 +1,11 @@
-.sentence-frame {
+.sentence {
   display: inline;        /* Flow naturally like text */
-  padding: 0 1px;         /* Minimal padding to allow hover */
+  margin: 0;            /* Remove default margin */
+  padding: 0;           /* Remove default padding */
   border-radius: 6px;
   transition: background-color 0.2s ease;
 }
 
-.sentence-frame.hovered {
+.sentence.hovered {
   background-color: rgba(69, 132, 241, 0.231);
 }

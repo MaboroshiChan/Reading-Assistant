@@ -1,6 +1,6 @@
-import type { LLMAnalysis } from "../analysis/structure/Sentence";
+import type { Paragraph } from "../analysis/structure/Paragraph";
 
-export async function fetchLLMAnalysis(paragraph: string): Promise<LLMAnalysis[]> {
+export async function fetchLLMAnalysis(paragraph: string): Promise<Paragraph> {
     try {
         const res = await fetch("http://localhost:3001/generate-llm-analysis", {
             method: "POST",
@@ -8,10 +8,10 @@ export async function fetchLLMAnalysis(paragraph: string): Promise<LLMAnalysis[]
             body: JSON.stringify({ paragraph })
         });
 
-        const json = await res.json();
-        return json.analysis ?? [];
+        const json: Paragraph = await res.json();
+        return json;
     } catch (err) {
         console.error("Frontend fetchLLMAnalysis error:", err);
-        return [];
+        throw err;
     }
 }

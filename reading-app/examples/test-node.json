@@ -1,0 +1,133 @@
+{
+  "sentences": [
+    {
+      "id": 1,
+      "function": "Definition",
+      "type": "Declarative",
+      "purpose": "Describe the nature of basic conversation",
+      "mood": "Indicative",
+      "semanticTree": {
+        "id": "n1",
+        "label": ["structure-subject"],
+        "children": [
+          {
+            "id": "n2",
+            "label": ["semantic-concept"],
+            "text": "The most basic kind of conversation",
+            "linkedBy": ["n1"]
+          },
+          {
+            "id": "n3",
+            "label": ["structure-predicate"],
+            "children": [
+              {
+                "id": "n4",
+                "label": ["semantic-predicate"],
+                "text": "involves",
+                "noSpaceBefore": true,
+                "linkedBy": ["n3"]
+              },
+              {
+                "id": "n5",
+                "label": ["structure-object"],
+                "text": "two people who are talking to each other",
+                "linkedBy": ["n3"]
+              },
+              {
+                "id": "p1",
+                "label": ["punctuation"],
+                "text": ".",
+                "noSpaceBefore": true,
+                "linkedBy": ["n3"]
+              }
+            ],
+            "linkedBy": ["n1"]
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "function": "Observation",
+      "type": "Declarative",
+      "purpose": "Describe typical conversational behavior",
+      "mood": "Indicative",
+      "semanticTree": {
+        "id": "n6",
+        "label": ["semantic-event"],
+        "children": [
+          {
+            "id": "n6-text",
+            "label": ["semantic-event"],
+            "text": "Typically, one of them initiates it and they take turns talking about some common topic or set of topics",
+            "linkedBy": ["n6"]
+          },
+          {
+            "id": "p2",
+            "label": ["punctuation"],
+            "text": ".",
+            "noSpaceBefore": true,
+            "linkedBy": ["n6"]
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "function": "Explanation",
+      "type": "Declarative",
+      "purpose": "Explain the cooperative nature of conversation",
+      "mood": "Indicative",
+      "semanticTree": {
+        "id": "n7",
+        "label": ["semantic-goal"],
+        "children": [
+          {
+            "id": "n7-text",
+            "label": ["semantic-goal"],
+            "text": "Maintaining the turn-taking and keeping to the topic at hand (or shifting topics in a permissible fashion) takes a certain amount of cooperation",
+            "linkedBy": ["n7"]
+          },
+          {
+            "id": "p3",
+            "label": ["punctuation"],
+            "text": ".",
+            "noSpaceBefore": true,
+            "noSpaceAfter": false,
+            "linkedBy": ["n7"]
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "function": "Generalization",
+      "type": "Declarative",
+      "purpose": "State general purpose of conversation",
+      "mood": "Indicative",
+      "semanticTree": {
+        "id": "n8",
+        "label": ["semantic-purpose"],
+        "children": [
+          {
+            "id": "n8-text",
+            "label": ["semantic-purpose"],
+            "text": "Conversations generally serve the purpose of polite social interaction",
+            "linkedBy": ["n8"]
+          },
+          {
+            "id": "p4",
+            "label": ["punctuation"],
+            "text": ".",
+            "noSpaceBefore": true,
+            "linkedBy": ["n8"]
+          }
+        ]
+      },
+      "relation": {
+        "type": "Conclusion",
+        "targetSentenceId": 3
+      }
+    }
+  ]
+}

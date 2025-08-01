@@ -1,4 +1,4 @@
-import { Paragraph } from "./Paragraph";
+import type { Paragraph } from "./Paragraph";
 
 export class Document {
   private paragraphs: Paragraph[];

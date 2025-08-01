@@ -1,7 +1,7 @@
 import { OpenAI } from "openai/client.js";
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { LLMAnalysis } from "../../reading-app/src/analysis/structure/Sentence"; // Adjust the import path as needed
+import type { Paragraph } from "../../reading-app/src/analysis/structure/Paragraph";
 
 // 初始化 OpenAI 客户端
 const openai = new OpenAI({
@@ -76,30 +76,21 @@ function extractJSONFromCodeBlock(raw: string): any {
 }
 
 // 生成 LLM 分析结果
-export function generateLLMAnalysis(text: string): Promise<LLMAnalysis[]> {
-    return readPromptFile()
-        .then(prompt => {
-            return generateText(prompt, text);
-        })
-        .then(response => {
-            if (!response) return [];
+export async function generateLLMAnalysis(text: string): Promise<Paragraph> {
+    try {
+        const prompt = await readPromptFile();
+        const response = await generateText(prompt, text);
 
-            try {
-                const parsed = extractJSONFromCodeBlock(response);
-                console.log("Parsed JSON:", parsed);
+        if (!response) {
+            throw new Error("No response from LLM");
+        }
 
-                if (Array.isArray(parsed.sentences)) {
-                    return parsed.sentences as LLMAnalysis[];
-                } else {
-                    throw new Error("Parsed response does not contain 'sentences' array");
-                }
-            } catch (e) {
-                console.error("Failed to parse JSON:", e);
-                return [];
-            }
-        })
-        .catch(error => {
-            console.error("Error generating LLM analysis:", error);
-            return [];
-        });
+        const parsed: Paragraph = extractJSONFromCodeBlock(response);
+        console.log("Parsed JSON:", parsed);
+
+        return parsed;
+    } catch (error) {
+        console.error("Error generating LLM analysis:", error);
+        throw error;
+    }
 }
