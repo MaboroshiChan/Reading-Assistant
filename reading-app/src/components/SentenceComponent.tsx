@@ -1,11 +1,11 @@
 import React from "react";
 import type { SemanticNode } from "../analysis/structure/Sentence";
 import './css/SemanticSentence.css'
-import { List } from 'immutable';
+import { OrderedSet } from 'immutable';
 
 interface SentenceComponentProps {
   node: SemanticNode;
-  hoveredPath: List<string>;
+  hoveredPath: OrderedSet<string>;
   onHoverNode?: (id: string) => void;
   onLeaveNode?: (id: string) => void;
 }
@@ -41,7 +41,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     if (!node.children || node.children.length === 0) return null;
 
-    console.log(`path = ${hoveredPath}`)
+    //console.log(`path = ${hoveredPath}`)
 
     return node.children.map((child, index) => {
       const spaceBefore =

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import type { Paragraph } from "../analysis/structure/Paragraph";
 import { SentenceComponent } from "./SentenceComponent";
 import './css/SemanticParagraph.css'
-import { List } from "immutable";
+import { OrderedSet } from "immutable";
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
@@ -10,7 +10,7 @@ interface ParagraphComponentProps {
 
 export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
 
-  const [hoveredPath, setHoveredPath] = useState<List<string>>(List([]));
+  const [hoveredPath, setHoveredPath] = useState<OrderedSet<string>>(OrderedSet([]));
 
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
@@ -19,8 +19,10 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
           key={sentence.id}
           node={sentence.semanticTree}
           onHoverNode={(id) => {
-            console.log(`id = ${id}`)
-            setHoveredPath(hoveredPath.push(id))
+            console.log(`pushed id = ${id}`)
+            const next = hoveredPath.add(id)
+            setHoveredPath(next)
+            console.log(`pushed path = ${next}`);
           }}
           onLeaveNode={(id) => {
             /** 
@@ -29,7 +31,10 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
               setHoveredPath(hoveredPath.slice(0, index));
             }
             */
-            setHoveredPath(hoveredPath.pop())
+            const next = hoveredPath.delete(hoveredPath.last() as string);
+            console.log(`popped id = ${id}`)
+            setHoveredPath(next)
+            console.log(`popped path = ${next}`);
           }}
           hoveredPath={hoveredPath}
         />
