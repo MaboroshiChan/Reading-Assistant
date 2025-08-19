@@ -14,7 +14,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   onLeaveNode,
 }) => {
 
-  const [isHovered, setIshovered] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : ` ${node.id}`);
 
@@ -48,8 +48,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   return (
     <span
       className={className}
-      onMouseOver={()=>setIshovered(true)}
-      onMouseOut={()=>setIshovered(false)}
+      onMouseOver={()=>setIsHovered(true)}
+      onMouseOut={()=>setIsHovered(false)}
     >
       {renderChildren()}
     </span>
