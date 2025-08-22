@@ -1,37 +1,20 @@
-import React from "react";
+import React, { useState } from "react";
 import type { SemanticNode } from "../analysis/structure/Sentence";
 import './css/SemanticSentence.css'
-import { List } from 'immutable';
 
 interface SentenceComponentProps {
   node: SemanticNode;
-  hoveredPath: List<string>;
   onHoverNode?: (id: string) => void;
   onLeaveNode?: (id: string) => void;
 }
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   node,
-  hoveredPath,
   onHoverNode,
   onLeaveNode,
 }) => {
-  let isHovered =
-    hoveredPath.contains(node.id); // How to switch to another method to determine isHovered.
 
-  for (const each in node.linkedBy) {
-    if (hoveredPath.contains(each)) {
-        isHovered = true;
-    }
-  }
-
-  const handleMouseEnter = () => {
-    onHoverNode?.(node.id);
-  };
-
-  const handleMouseLeave = () => {
-    onLeaveNode?.(node.id);
-  };
+  const [isHovered, setIsHovered] = useState(false);
 
   const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : ` ${node.id}`);
 
@@ -41,7 +24,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     if (!node.children || node.children.length === 0) return null;
 
-    console.log(`path = ${hoveredPath}`)
+    //console.log(`path = ${hoveredPath}`)
 
     return node.children.map((child, index) => {
       const spaceBefore =
@@ -53,7 +36,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
           {spaceBefore && " "}
           <SentenceComponent
             node={child}
-            hoveredPath={hoveredPath}
             onHoverNode={onHoverNode}
             onLeaveNode={onLeaveNode}
           />
@@ -66,8 +48,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   return (
     <span
       className={className}
-      onMouseOver={handleMouseEnter}
-      onMouseOut={handleMouseLeave}
+      onMouseOver={()=>setIsHovered(true)}
+      onMouseOut={()=>setIsHovered(false)}
     >
       {renderChildren()}
     </span>
