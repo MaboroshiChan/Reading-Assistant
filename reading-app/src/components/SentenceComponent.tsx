@@ -16,7 +16,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
   const [isHovered, setIsHovered] = useState(false);
 
-  const className = "sentence " +  node.label.join(" ") + (isHovered ? " hovered" : ` ${node.id}`);
+  const label_type = node.id.split('-').length > 1 ? 'sentence component ' : 'sentence ';
+  // we should change the class name here in accordance to component's type
+  const className = label_type +  node.label.join(" ") + (isHovered ? " hovered" : ` ${node.id}`);
 
   const renderChildren = (): React.ReactNode => {
     // 如果是文本节点，直接输出文本
