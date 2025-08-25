@@ -5,17 +5,15 @@ import './css/SemanticSentence.css'
 interface SentenceComponentProps {
   node: SemanticNode;
   highlight: string[];
-  onHoverNode?: (id: string) => void;
-  onLeaveNode?: (id: string) => void;
   getGroup: (group: string[]) => void;
+  remove: (group: string[]) => void;
 }
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   node,
   highlight,
-  onHoverNode,
-  onLeaveNode,
-  getGroup
+  getGroup,
+  remove
 }) => {
 
   const [isHovered, setIsHovered] = useState(false); // error
@@ -40,11 +38,10 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         <React.Fragment key={child.id}>
           {spaceBefore && " "}
           <SentenceComponent
+            remove={remove}
             getGroup={getGroup} // need to change
             highlight={highlight}
             node={child}
-            onHoverNode={onHoverNode} // here something need to change
-            onLeaveNode={onLeaveNode}
           />
           {child.text && child.text === '.' && " "}
         </React.Fragment>
@@ -62,7 +59,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         setIsHovered(true)
       }}
       onMouseOut={()=>{
-        getGroup([]);
+        if(node.linkedBy) {
+          remove(node.linkedBy)
+        }
         setIsHovered(false)
       }}
     >
