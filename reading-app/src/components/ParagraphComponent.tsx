@@ -14,6 +14,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     <div className="paragraph" data-paragraph-id={paragraph.id}>
       {paragraph.sentences.map((sentence) => (
         <SentenceComponent
+          highlight={false}
           key={sentence.id}
           node={sentence.semanticTree}
           onHoverNode={() => {}}
