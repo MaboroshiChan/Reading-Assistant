@@ -4,49 +4,44 @@ import './css/SemanticSentence.css'
 
 interface SentenceComponentProps {
   node: SemanticNode;
-  highlight: boolean;
+  highlight: string[];
   onHoverNode?: (id: string) => void;
   onLeaveNode?: (id: string) => void;
+  getGroup: (group: string[]) => void;
 }
-
-
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   node,
   highlight,
   onHoverNode,
   onLeaveNode,
+  getGroup
 }) => {
 
-  const [isHovered, setIsHovered] = useState(highlight);
+  const [isHovered, setIsHovered] = useState(false); // error
 
   const label_type = node.id.split('-').length > 1 ? 'sentence component ' : 'sentence ';
   // we should change the class name here in accordance to component's type
-  const className = label_type +  node.label.join(" ") + (isHovered ? " hovered" : ` ${node.id}`);
-
-  const [group, setGroup] = useState<string[]>([]);
-
-  console.log(`id=${node.id} && group=${group}`)
+  const className = label_type +  node.label.join(" ") + (highlight.includes(node.id) || isHovered ? " hovered" : ` ${node.id}`);
 
   const renderChildren = (): React.ReactNode => {
+    // 问题：这里似乎不受mouseOver的代码
     // 如果是文本节点，直接输出文本
     if (node.text) return node.text;
 
     if (!node.children || node.children.length === 0) return null;
 
-    //console.log(`path = ${hoveredPath}`)
-
     return node.children.map((child, index) => {
-      console.log(`id=${child.id} children in group: ${group}`)
       const spaceBefore =
         index > 0 &&
         !child.noSpaceBefore;
-    
+      
       return (
         <React.Fragment key={child.id}>
           {spaceBefore && " "}
           <SentenceComponent
-            highlight={group.includes(child.id)}
+            getGroup={getGroup} // need to change
+            highlight={highlight}
             node={child}
             onHoverNode={onHoverNode} // here something need to change
             onLeaveNode={onLeaveNode}
@@ -61,10 +56,15 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     <span
       className={className}
       onMouseOver={()=>{
-        setGroup(node.linkedBy ? node.linkedBy: [])
+        if(node.linkedBy){
+            getGroup(node.linkedBy);
+        }
         setIsHovered(true)
       }}
-      onMouseOut={()=>setIsHovered(false)}
+      onMouseOut={()=>{
+        getGroup([]);
+        setIsHovered(false)
+      }}
     >
       {renderChildren()}
     </span>

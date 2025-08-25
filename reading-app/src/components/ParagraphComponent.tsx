@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import type { Paragraph } from "../analysis/structure/Paragraph";
 import { SentenceComponent } from "./SentenceComponent";
 import './css/SemanticParagraph.css'
@@ -9,12 +9,20 @@ interface ParagraphComponentProps {
 
 export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
 
+  const [group, setGroup] = useState<string[]>([]);
+
+  const getGroup = (grp: string[]) => { // need to improve 
+      setGroup(grp);
+  }
+
+  console.log(`group = ${group}`)
 
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
       {paragraph.sentences.map((sentence) => (
         <SentenceComponent
-          highlight={false}
+          getGroup={getGroup}
+          highlight={group}
           key={sentence.id}
           node={sentence.semanticTree}
           onHoverNode={() => {}}
