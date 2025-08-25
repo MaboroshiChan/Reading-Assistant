@@ -15,8 +15,6 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
       setGroup(grp);
   }
 
-  console.log(`group = ${group}`)
-
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
       {paragraph.sentences.map((sentence) => (
