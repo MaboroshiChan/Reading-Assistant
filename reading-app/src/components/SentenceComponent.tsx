@@ -5,6 +5,7 @@ import './css/SemanticSentence.css'
 interface SentenceComponentProps {
   node: SemanticNode;
   highlight: string[];
+  highlightable: boolean; // highlightable sub-component
   getGroup: (group: string[]) => void;
   remove: (group: string[]) => void;
 }
@@ -61,6 +62,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             remove={remove}
             getGroup={getGroup} // need to change
             highlight={highlight}
+            highlightable={false}
             node={child}
           />
           {child.text && child.text === '.' && " "}
@@ -76,6 +78,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
       onMouseOut={mouseOut}
       onClick={()=>{
         setIsClicked(c=>!c);
+        setIsHovered(true);
       }}
     >
       {renderChildren()}

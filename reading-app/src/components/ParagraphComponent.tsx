@@ -13,16 +13,14 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   const [group, setGroup] = useState<Set<string>>(Set());
 
   const getGroup = (grp: string[]) => { 
-      console.log(`grp = ${grp}`)
       setGroup(group => group.concat(grp))
   }
 
   const remove = (grp: string[]) => {
-    console.log(grp);
     setGroup(group => group.filter(x=>!grp.includes(x)))
   }
 
-  console.log(`${group}`)
+  
 
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
@@ -31,6 +29,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
           getGroup={getGroup}
           remove={remove}
           highlight={group.toArray()}
+          highlightable={true} 
           key={sentence.id}
           node={sentence.semanticTree}
         />
