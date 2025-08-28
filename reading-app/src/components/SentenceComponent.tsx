@@ -28,28 +28,27 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
   // make use of highlightable
   // 
-  const className = label_type +  node.label.join(" ") + (highlight.includes(node.id) || isHovered ? " hovered" : ` ${node.id}`);
+  const className = label_type + node.label.join(" ") + (highlight.includes(node.id) || isHovered ? " hovered" : ` ${node.id}`);
 
-  const mouseOver = ()=>{
-        if(node.linkedBy){
-            getGroup(node.linkedBy);
-        }
-        if(highlightable) {
-            setIsHovered(true)
-        }
+  const mouseOver = () => {
+    if (highlightable) {
+      if (node.linkedBy) {
+        getGroup(node.linkedBy);
       }
-  
-  const mouseOut = ()=>{
-        if(node.linkedBy) {
-          remove(node.linkedBy)
-        }
+      setIsHovered(true)
+    }
+  }
 
-        if(highlightable) {
-          setIsHovered(false)
-        }
+  const mouseOut = () => {
+    if (highlightable)
+      if (node.linkedBy) {
+        remove(node.linkedBy)
       }
+    setIsHovered(false)
+  }
 
-  if(isClicked) {
+
+  if (isClicked) {
     console.log("clicked");
   }
 
@@ -64,7 +63,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
       const spaceBefore =
         index > 0 &&
         !child.noSpaceBefore;
-      
+
       return (
         <React.Fragment key={child.id}>
           {spaceBefore && " "}
@@ -73,7 +72,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             getGroup={getGroup} // need to change
             highlight={highlight}
             highlightable={isClicked} // if one-layer below subnodes are highlightable
-            sendClicked={()=>{}} // 
+            sendClicked={() => { }} // 
             node={child}
           />
           {child.text && child.text === '.' && " "}
@@ -87,8 +86,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
       className={className}
       onMouseOver={mouseOver}
       onMouseOut={mouseOut}
-      onClick={()=>{
-        setIsClicked(c=>!c);
+      onClick={() => {
+        setIsClicked(c => !c);
         sendClicked(node.id);
         setIsHovered(true);
       }}
