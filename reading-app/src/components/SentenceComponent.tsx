@@ -8,7 +8,7 @@ interface SentenceComponentProps {
   highlightable: boolean; // highlightable sub-component
   getGroup: (group: string[]) => void;
   remove: (group: string[]) => void;
-  sendClicked: (id: string) => void;
+  sendClicked: (id: string | null) => void;
 }
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
@@ -26,8 +26,16 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
   // make use of highlightable
   // 
-  const className = label_type + node.label.join(" ") + (highlight.includes(node.id) || isHovered ? " hovered" : ` ${node.id}`);
+  const className = label_type + node.label.join(" ") + 
+  //(highlight.includes(node.id) || 
+  (isHovered ? " hovered" : ` ${node.id}`);
 
+  /**
+   * 如果mouse out了是否需要取消？
+   * 如果mouse click了其他component，要怎么办？
+   * click兄弟节点怎么办? potential response: 其他节点unhover
+   * 
+   */
   const mouseOver = () => {
     if (highlightable) {
       if (node.linkedBy) {
@@ -38,13 +46,15 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   }
 
   const mouseOut = () => {
-    if (highlightable)
       if (node.linkedBy) {
-        remove(node.linkedBy)
+          remove(node.linkedBy)
       }
-    setIsHovered(false)
+      if(!isClicked){
+        setIsHovered(false);
+      }
   }
 
+  
   const renderChildren = (): React.ReactNode => {
     // 问题：这里似乎不受mouseOver的代码
     // 如果是文本节点，直接输出文本
@@ -64,8 +74,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             remove={remove}
             getGroup={getGroup} // need to change
             highlight={highlight}
-            highlightable={isClicked} // if one-layer below subnodes are highlightable
-            sendClicked={() => { }} // 
+            highlightable={isClicked} // if one-layer below subnodes are highlightable, BUG detected.
+            sendClicked={()=>{}} // 
             node={child}
           />
           {child.text && child.text === '.' && " "}
@@ -81,8 +91,16 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
       onMouseOut={mouseOut}
       onClick={() => {
         setIsClicked(c => !c);
-        sendClicked(node.id);
-        setIsHovered(true);
+        if(isClicked){ // && have subnodes display
+          setIsHovered(false)
+          sendClicked(null);
+        }
+        else{
+          if(highlightable){
+            sendClicked(node.id);
+            setIsHovered(true);
+          }
+        }
       }}
     >
       {renderChildren()}

@@ -13,7 +13,6 @@
       "semanticTree": {
         "id": "n1",
         "label": ["structure-sentence"],
-        "linkedBy": ["n2"],
         "children": [
           {
             "id": "n1-1",

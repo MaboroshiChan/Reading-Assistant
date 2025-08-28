@@ -29,9 +29,9 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     return highLightId === id;
   }
 
-  const sendClickedSentence = (id: string) => [
-    setHighlightId(id)
-  ]
+  const sendClickedSentence = (id: string | null) => {
+    setHighlightId(id);
+  }
   
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
