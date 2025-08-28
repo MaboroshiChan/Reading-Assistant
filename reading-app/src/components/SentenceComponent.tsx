@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { SemanticNode } from "../analysis/structure/Sentence";
 import './css/SemanticSentence.css'
+import { LongClickSpan } from "./LongClick";
 
 interface SentenceComponentProps {
   node: SemanticNode;
@@ -25,13 +26,13 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 }) => {
 
   const [isClicked, setIsClicked] = useState(false);
-  const [isHovered, setIsHovered] = useState(false); 
+  const [isHovered, setIsHovered] = useState(false);
   const [subNodeCount, setSubNodeCount] = useState(0); //层层上报
   const label_type = node.id.split('-').length > 1 ? 'sentence component ' : 'sentence ';
 
-  const className = label_type + node.label.join(" ") + 
-  //(highlight.includes(node.id) || 
-  (isHovered ? " hovered" : ` ${node.id}`);
+  const className = label_type + node.label.join(" ") +
+    //(highlight.includes(node.id) || 
+    (isHovered ? " hovered" : ` ${node.id}`);
 
 
   const increaseCount = () => {
@@ -58,15 +59,14 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   }
 
   const mouseOut = () => {
-      if (node.linkedBy) {
-          remove(node.linkedBy)
-      }
-      if(!isClicked){
-        setIsHovered(false);
-      }
+    if (node.linkedBy) {
+      remove(node.linkedBy)
+    }
+    if (!isClicked) {
+      setIsHovered(false);
+    }
   }
 
-  
   const renderChildren = (): React.ReactNode => {
     // 问题：这里似乎不受mouseOver的代码
     // 如果是文本节点，直接输出文本
@@ -87,7 +87,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             getGroup={getGroup} // need to change
             highlight={highlight}
             highlightable={isClicked} // if one-layer below subnodes are highlightable, BUG detected.
-            sendClicked={()=>{}} 
+            sendClicked={() => { }}
             node={child}
             increase={increaseCount}
             decrease={decreaseCount}
@@ -101,33 +101,31 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   console.log(`id = ${node.id}, sub nodes number = ${subNodeCount}, isClicked = ${isClicked}`)
 
   return (
-    <span
+    <LongClickSpan
       className={className}
       onMouseOver={mouseOver}
       onMouseOut={mouseOut}
-      onDoubleClick={() => { // TODO：这个函数需要分情况讨论
-        if(isClicked && subNodeCount === 0){ // conflicting logic 
-          setIsClicked(()=>false); // 不一定执行
-          setIsHovered(false)
+      onClick={() => {
+        console.warn("click")
+        if (isClicked && subNodeCount === 0) { // conflicting logic 
+          setIsClicked(() => false); // 不一定执行
+          setIsHovered(false);
           sendClicked(null);
           console.warn("here we go");
-
           decrease();
 
         }
-        else{
-          if(highlightable){ 
-            setIsClicked(() => true); // 不一定执行
+      }} onLongClick={() => {
+        if (highlightable) {
+          setIsClicked(() => true); // 不一定执行
 
-            increase();
+          increase();
 
-            sendClicked(node.id);
-            setIsHovered(true);
-          }
+          sendClicked(node.id);
+          setIsHovered(true);
         }
-      }}
-    >
+      }} >
       {renderChildren()}
-    </span>
+    </LongClickSpan>
   );
 };
