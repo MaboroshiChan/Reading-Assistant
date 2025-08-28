@@ -9,6 +9,8 @@ interface SentenceComponentProps {
   getGroup: (group: string[]) => void;
   remove: (group: string[]) => void;
   sendClicked: (id: string | null) => void;
+  increase: () => void;
+  decrease: () => void;
 }
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
@@ -17,18 +19,28 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   getGroup,
   remove,
   sendClicked,
-  highlightable
+  highlightable,
+  increase,
+  decrease
 }) => {
 
   const [isClicked, setIsClicked] = useState(false);
-  const [isHovered, setIsHovered] = useState(false); // error
+  const [isHovered, setIsHovered] = useState(false); 
+  const [subNodeCount, setSubNodeCount] = useState(0); //层层上报
   const label_type = node.id.split('-').length > 1 ? 'sentence component ' : 'sentence ';
 
-  // make use of highlightable
-  // 
   const className = label_type + node.label.join(" ") + 
   //(highlight.includes(node.id) || 
   (isHovered ? " hovered" : ` ${node.id}`);
+
+
+  const increaseCount = () => {
+    setSubNodeCount(n => n + 1);
+  }
+
+  const decreaseCount = () => {
+    setSubNodeCount(n => n - 1)
+  }
 
   /**
    * 如果mouse out了是否需要取消？
@@ -75,8 +87,10 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             getGroup={getGroup} // need to change
             highlight={highlight}
             highlightable={isClicked} // if one-layer below subnodes are highlightable, BUG detected.
-            sendClicked={()=>{}} // 
+            sendClicked={()=>{}} 
             node={child}
+            increase={increaseCount}
+            decrease={decreaseCount}
           />
           {child.text && child.text === '.' && " "}
         </React.Fragment>
@@ -84,19 +98,29 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     });
   };
 
+  console.log(`id = ${node.id}, sub nodes number = ${subNodeCount}, isClicked = ${isClicked}`)
+
   return (
     <span
       className={className}
       onMouseOver={mouseOver}
       onMouseOut={mouseOut}
-      onClick={() => {
-        setIsClicked(c => !c);
-        if(isClicked){ // && have subnodes display
+      onDoubleClick={() => { // TODO：这个函数需要分情况讨论
+        if(isClicked && subNodeCount === 0){ // conflicting logic 
+          setIsClicked(()=>false); // 不一定执行
           setIsHovered(false)
           sendClicked(null);
+          console.warn("here we go");
+
+          decrease();
+
         }
         else{
-          if(highlightable){
+          if(highlightable){ 
+            setIsClicked(() => true); // 不一定执行
+
+            increase();
+
             sendClicked(node.id);
             setIsHovered(true);
           }

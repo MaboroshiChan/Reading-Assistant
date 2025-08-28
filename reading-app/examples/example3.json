@@ -39,17 +39,16 @@
             ]
           },
           {
-            "id": "n1-2",
-            "label": ["structure-predicate"],
-            "children": [
-              {
-                "id": "n1-2-1",
-                "label": ["semantic-predicate"],
-                "text": "involves",
-                "children": [],
-                "noSpaceBefore": true,
-                "linkedBy": ["n1-1","n1-3"]
-              }
+             "id": "n1-2",
+            "label": [
+              "semantic-predicate",
+              "structure-verb"
+            ],
+            "text": "involves",
+            "children": [],
+            "linkedBy": [
+              "n1-1",
+              "n1-3"
             ]
           },
           {

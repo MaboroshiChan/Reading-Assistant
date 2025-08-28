@@ -32,6 +32,8 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   const sendClickedSentence = (id: string | null) => {
     setHighlightId(id);
   }
+
+  console.log(`highlighted id = ${highLightId}`)
   
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
@@ -44,6 +46,8 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
           sendClicked={sendClickedSentence}
           key={sentence.id}
           node={sentence.semanticTree}
+          increase={()=>{}}
+          decrease={()=>{}}
         />
       ))}
     </div>
