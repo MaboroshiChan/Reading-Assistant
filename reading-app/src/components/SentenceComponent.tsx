@@ -8,13 +8,16 @@ interface SentenceComponentProps {
   highlightable: boolean; // highlightable sub-component
   getGroup: (group: string[]) => void;
   remove: (group: string[]) => void;
+  sendClicked: (id: string) => void;
 }
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   node,
   highlight,
   getGroup,
-  remove
+  remove,
+  sendClicked,
+  highlightable
 }) => {
 
   const [isClicked, setIsClicked] = useState(false);
@@ -22,21 +25,28 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   const [isHovered, setIsHovered] = useState(false); // error
 
   const label_type = node.id.split('-').length > 1 ? 'sentence component ' : 'sentence ';
-  // we should change the class name here in accordance to component's type
+
+  // make use of highlightable
+  // 
   const className = label_type +  node.label.join(" ") + (highlight.includes(node.id) || isHovered ? " hovered" : ` ${node.id}`);
 
   const mouseOver = ()=>{
         if(node.linkedBy){
             getGroup(node.linkedBy);
         }
-        setIsHovered(true)
+        if(highlightable) {
+            setIsHovered(true)
+        }
       }
   
   const mouseOut = ()=>{
         if(node.linkedBy) {
           remove(node.linkedBy)
         }
-        setIsHovered(false)
+
+        if(highlightable) {
+          setIsHovered(false)
+        }
       }
 
   if(isClicked) {
@@ -62,7 +72,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             remove={remove}
             getGroup={getGroup} // need to change
             highlight={highlight}
-            highlightable={false}
+            highlightable={isClicked} // if one-layer below subnodes are highlightable
+            sendClicked={()=>{}} // 
             node={child}
           />
           {child.text && child.text === '.' && " "}
@@ -78,6 +89,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
       onMouseOut={mouseOut}
       onClick={()=>{
         setIsClicked(c=>!c);
+        sendClicked(node.id);
         setIsHovered(true);
       }}
     >
