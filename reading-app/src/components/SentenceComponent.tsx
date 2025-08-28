@@ -16,11 +16,31 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   remove
 }) => {
 
+  const [isClicked, setIsClicked] = useState(false);
+
   const [isHovered, setIsHovered] = useState(false); // error
 
   const label_type = node.id.split('-').length > 1 ? 'sentence component ' : 'sentence ';
   // we should change the class name here in accordance to component's type
   const className = label_type +  node.label.join(" ") + (highlight.includes(node.id) || isHovered ? " hovered" : ` ${node.id}`);
+
+  const mouseOver = ()=>{
+        if(node.linkedBy){
+            getGroup(node.linkedBy);
+        }
+        setIsHovered(true)
+      }
+  
+  const mouseOut = ()=>{
+        if(node.linkedBy) {
+          remove(node.linkedBy)
+        }
+        setIsHovered(false)
+      }
+
+  if(isClicked) {
+    console.log("clicked");
+  }
 
   const renderChildren = (): React.ReactNode => {
     // 问题：这里似乎不受mouseOver的代码
@@ -52,17 +72,10 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   return (
     <span
       className={className}
-      onMouseOver={()=>{
-        if(node.linkedBy){
-            getGroup(node.linkedBy);
-        }
-        setIsHovered(true)
-      }}
-      onMouseOut={()=>{
-        if(node.linkedBy) {
-          remove(node.linkedBy)
-        }
-        setIsHovered(false)
+      onMouseOver={mouseOver}
+      onMouseOut={mouseOut}
+      onClick={()=>{
+        setIsClicked(c=>!c);
       }}
     >
       {renderChildren()}
