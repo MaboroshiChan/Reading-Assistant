@@ -21,9 +21,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 }) => {
 
   const [isClicked, setIsClicked] = useState(false);
-
   const [isHovered, setIsHovered] = useState(false); // error
-
   const label_type = node.id.split('-').length > 1 ? 'sentence component ' : 'sentence ';
 
   // make use of highlightable
@@ -45,11 +43,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         remove(node.linkedBy)
       }
     setIsHovered(false)
-  }
-
-
-  if (isClicked) {
-    console.log("clicked");
   }
 
   const renderChildren = (): React.ReactNode => {
