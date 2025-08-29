@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import type { SemanticNode } from "../analysis/structure/Sentence";
-import './css/SemanticSentence.css'
-import { LongClickSpan } from "./LongClick";
+import './css/SemanticSentence.css';
+import { useSingleOrDoubleClick } from "./LongClick";
 
 interface SentenceComponentProps {
   node: SemanticNode;
@@ -67,6 +67,26 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     }
   }
 
+  const handleClick = useSingleOrDoubleClick({
+    onClick: () => {
+        console.warn(`id = ${node.id}, isClick=${isClicked}, subNode=${subNodeCount}`)
+        if (isClicked && subNodeCount === 0) { 
+          setIsClicked(() => false); 
+          setIsHovered(false);
+          sendClicked(null);
+          decrease();
+        }
+      },
+    onDoubleClick: () => {
+        if (highlightable && !isClicked) {
+          setIsClicked(() => true); 
+          increase();
+          sendClicked(node.id);
+          setIsHovered(true);
+        }
+      }
+  });
+
   const renderChildren = (): React.ReactNode => {
     // 问题：这里似乎不受mouseOver的代码
     // 如果是文本节点，直接输出文本
@@ -87,7 +107,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             getGroup={getGroup} // need to change
             highlight={highlight}
             highlightable={isClicked} // if one-layer below subnodes are highlightable, BUG detected.
-            sendClicked={() => { }}
+            sendClicked={() => {}}
             node={child}
             increase={increaseCount}
             decrease={decreaseCount}
@@ -101,31 +121,13 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   console.log(`id = ${node.id}, sub nodes number = ${subNodeCount}, isClicked = ${isClicked}`)
 
   return (
-    <LongClickSpan
+    <span
       className={className}
       onMouseOver={mouseOver}
       onMouseOut={mouseOut}
-      onClick={() => {
-        console.warn("click")
-        if (isClicked && subNodeCount === 0) { // conflicting logic 
-          setIsClicked(() => false); // 不一定执行
-          setIsHovered(false);
-          sendClicked(null);
-          console.warn("here we go");
-          decrease();
-
-        }
-      }} onLongClick={() => {
-        if (highlightable) {
-          setIsClicked(() => true); // 不一定执行
-
-          increase();
-
-          sendClicked(node.id);
-          setIsHovered(true);
-        }
-      }} >
+      onClick={handleClick} 
+    >
       {renderChildren()}
-    </LongClickSpan>
+    </span>
   );
 };
