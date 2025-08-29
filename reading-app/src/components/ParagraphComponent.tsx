@@ -13,17 +13,28 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   const [group, setGroup] = useState<Set<string>>(Set());
 
   const getGroup = (grp: string[]) => { 
-      console.log(`grp = ${grp}`)
       setGroup(group => group.concat(grp))
   }
 
   const remove = (grp: string[]) => {
-    console.log(grp);
     setGroup(group => group.filter(x=>!grp.includes(x)))
   }
 
-  console.log(`${group}`)
+  const [highLightId, setHighlightId] = useState<string | null>(null);
 
+  const select = (id: string) => {
+    if(!highLightId) {
+      return true;
+    }
+    return highLightId === id;
+  }
+
+  const sendClickedSentence = (id: string | null) => {
+    setHighlightId(id);
+  }
+
+  console.log(`group = ${group}`);
+  
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
       {paragraph.sentences.map((sentence) => (
@@ -31,8 +42,12 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
           getGroup={getGroup}
           remove={remove}
           highlight={group.toArray()}
+          highlightable={select(sentence.semanticTree.id)} // select the clicked sentence
+          sendClicked={sendClickedSentence}
           key={sentence.id}
           node={sentence.semanticTree}
+          increase={()=>{}}
+          decrease={()=>{}}
         />
       ))}
     </div>
