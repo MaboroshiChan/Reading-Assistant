@@ -33,7 +33,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     setHighlightId(id);
   }
 
-  console.log(`highlighted id = ${highLightId}`)
+  console.log(`group = ${group}`);
   
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>

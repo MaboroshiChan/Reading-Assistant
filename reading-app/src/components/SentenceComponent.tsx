@@ -31,8 +31,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   const label_type = node.id.split('-').length > 1 ? 'sentence component ' : 'sentence ';
 
   const className = label_type + node.label.join(" ") +
-    //(highlight.includes(node.id) || 
-    (isHovered ? " hovered" : ` ${node.id}`);
+    (highlight.includes(node.id) || isHovered ? " hovered" : ` ${node.id}`);
 
 
   const increaseCount = () => {
@@ -69,7 +68,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
   const handleClick = useSingleOrDoubleClick({
     onClick: () => {
-        console.warn(`id = ${node.id}, isClick=${isClicked}, subNode=${subNodeCount}`)
         if (isClicked && subNodeCount === 0) { 
           setIsClicked(() => false); 
           setIsHovered(false);
@@ -117,8 +115,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
       );
     });
   };
-
-  console.log(`id = ${node.id}, sub nodes number = ${subNodeCount}, isClicked = ${isClicked}`)
 
   return (
     <span
