@@ -1,0 +1,570 @@
+{
+    "id": "paragraph-1",
+    "centralIdea": "The paragraph discusses the evolution, impact, and ethical considerations of Artificial Intelligence in society.",
+    "structureType": "Progression",
+    "function": "Overview",
+    "sentences":[
+  {
+    "id": 1,
+    "function": "Observation",
+    "type": "Declarative",
+    "mood": "Indicative",
+    "purpose": "Explain how quantum theory changed our understanding of reality",
+    "semanticTree": {
+      "id": "s1",
+      "label": ["structure-sentence"],
+      "children": [
+        {
+          "id": "s1-subj",
+          "label": ["structure-subject"],
+          "children": [
+            { "id": "s1-subj-1", "label": ["semantic-concept"], "text": "Quantum", "children": [], "linkedBy": ["s1-subj"] },
+            { "id": "s1-subj-2", "label": ["semantic-concept"], "text": "theory", "children": [], "linkedBy": ["s1-subj"] }
+          ],
+          "linkedBy": ["s1"]
+        },
+        {
+          "id": "s1-core",
+          "label": ["structure-predication"],
+          "children": [
+            {
+              "id": "s1-pred",
+              "label": ["structure-predicate","semantic-predicate"],
+              "children": [
+                { "id": "s1-pred-1", "label": ["semantic-predicate"], "text": "reshaped", "children": [], "linkedBy": ["s1-pred"] }
+              ],
+              "linkedBy": ["s1-core"]
+            },
+            {
+              "id": "s1-obj",
+              "label": ["structure-object"],
+              "children": [
+                { "id": "s1-obj-1", "label": ["semantic-concept"], "text": "our", "children": [], "linkedBy": ["s1-obj"] },
+                { "id": "s1-obj-2", "label": ["semantic-concept"], "text": "understanding", "children": [], "linkedBy": ["s1-obj"] },
+                {
+                  "id": "s1-obj-3",
+                  "label": ["structure-preposition"],
+                  "children": [
+                    { "id": "s1-obj-3-1", "label": ["structure-preposition"], "text": "of", "children": [], "linkedBy": ["s1-obj-3"] },
+                    { "id": "s1-obj-3-2", "label": ["semantic-concept"], "text": "reality", "children": [], "linkedBy": ["s1-obj-3"] }
+                  ],
+                  "linkedBy": ["s1-obj"]
+                }
+              ],
+              "linkedBy": ["s1-core"]
+            }
+          ],
+          "linkedBy": ["s1"]
+        },
+        {
+          "id": "s1-clause",
+          "label": ["structure-clause"],
+          "children": [
+            { "id": "s1-clause-1", "label": ["structure-preposition"], "text": "by", "children": [], "linkedBy": ["s1-clause"] },
+            {
+              "id": "s1-clause-2",
+              "label": ["structure-predication"],
+              "children": [
+                {
+                  "id": "s1-clause-2-pred",
+                  "label": ["structure-predicate","semantic-predicate"],
+                  "children": [
+                    { "id": "s1-clause-2-pred-1", "label": ["semantic-predicate"], "text": "showing", "children": [], "linkedBy": ["s1-clause-2-pred"] }
+                  ],
+                  "linkedBy": ["s1-clause-2"]
+                },
+                {
+                  "id": "s1-clause-2-obj",
+                  "label": ["structure-object"],
+                  "children": [
+                    {
+                      "id": "s1-clause-2-obj-1",
+                      "label": ["structure-clause"],
+                      "children": [
+                        {
+                          "id": "s1-clause-2-obj-1-subj",
+                          "label": ["structure-subject"],
+                          "children": [
+                            { "id": "s1-clause-2-obj-1-subj-1", "label": ["semantic-concept"], "text": "particles", "children": [], "linkedBy": ["s1-clause-2-obj-1-subj"] }
+                          ],
+                          "linkedBy": ["s1-clause-2-obj-1"]
+                        },
+                        {
+                          "id": "s1-clause-2-obj-1-core",
+                          "label": ["structure-predication"],
+                          "children": [
+                            {
+                              "id": "s1-clause-2-obj-1-pred",
+                              "label": ["structure-predicate","semantic-predicate"],
+                              "children": [
+                                { "id": "s1-clause-2-obj-1-pred-1", "label": ["semantic-predicate"], "text": "can", "children": [], "linkedBy": ["s1-clause-2-obj-1-pred"] },
+                                { "id": "s1-clause-2-obj-1-pred-2", "label": ["semantic-predicate"], "text": "exist", "children": [], "linkedBy": ["s1-clause-2-obj-1-pred"] }
+                              ],
+                              "linkedBy": ["s1-clause-2-obj-1-core"]
+                            },
+                            {
+                              "id": "s1-clause-2-obj-1-obj",
+                              "label": ["structure-object"],
+                              "children": [
+                                { "id": "s1-clause-2-obj-1-obj-1", "label": ["semantic-concept"], "text": "in", "children": [], "linkedBy": ["s1-clause-2-obj-1-obj"] },
+                                { "id": "s1-clause-2-obj-1-obj-2", "label": ["semantic-concept"], "text": "superposition", "children": [], "linkedBy": ["s1-clause-2-obj-1-obj"] }
+                              ],
+                              "linkedBy": ["s1-clause-2-obj-1-core"]
+                            }
+                          ],
+                          "linkedBy": ["s1-clause-2-obj-1"]
+                        }
+                      ],
+                      "linkedBy": ["s1-clause-2-obj"]
+                    }
+                  ],
+                  "linkedBy": ["s1-clause-2"]
+                }
+              ],
+              "linkedBy": ["s1-clause"]
+            }
+          ],
+          "linkedBy": ["s1"]
+        },
+        { "id": "p1-1", "label": ["punctuation"], "text": ",", "children": [], "noSpaceBefore": true, "linkedBy": ["s1"] },
+        {
+          "id": "s1-participial",
+          "label": ["structure-clause"],
+          "children": [
+            { "id": "s1-participial-1", "label": ["semantic-predicate"], "text": "occupying", "children": [], "linkedBy": ["s1-participial"] },
+            { "id": "s1-participial-2", "label": ["semantic-concept"], "text": "multiple", "children": [], "linkedBy": ["s1-participial"] },
+            { "id": "s1-participial-3", "label": ["semantic-concept"], "text": "states", "children": [], "linkedBy": ["s1-participial"] },
+            { "id": "s1-participial-4", "label": ["semantic-concept"], "text": "until", "children": [], "linkedBy": ["s1-participial"] },
+            { "id": "s1-participial-5", "label": ["semantic-predicate"], "text": "observed", "children": [], "linkedBy": ["s1-participial"] }
+          ],
+          "linkedBy": ["s1"]
+        },
+        { "id": "p1-2", "label": ["punctuation"], "text": ",", "children": [], "noSpaceBefore": true, "linkedBy": ["s1"] },
+        {
+          "id": "s1-coord",
+          "label": ["structure-coordination"],
+          "children": [
+            { "id": "s1-coord-1", "label": ["structure-conjunction"], "text": "and", "children": [], "linkedBy": ["s1-coord"] },
+            {
+              "id": "s1-coord-2",
+              "label": ["structure-clause"],
+              "children": [
+                {
+                  "id": "s1-coord-2-subj",
+                  "label": ["structure-subject"],
+                  "children": [
+                    { "id": "s1-coord-2-subj-1", "label": ["semantic-concept"], "text": "entangled", "children": [], "linkedBy": ["s1-coord-2-subj"] },
+                    { "id": "s1-coord-2-subj-2", "label": ["semantic-concept"], "text": "particles", "children": [], "linkedBy": ["s1-coord-2-subj"] }
+                  ],
+                  "linkedBy": ["s1-coord-2"]
+                },
+                {
+                  "id": "s1-coord-2-core",
+                  "label": ["structure-predication"],
+                  "children": [
+                    {
+                      "id": "s1-coord-2-pred",
+                      "label": ["structure-predicate","semantic-predicate"],
+                      "children": [
+                        { "id": "s1-coord-2-pred-1", "label": ["semantic-predicate"], "text": "can", "children": [], "linkedBy": ["s1-coord-2-pred"] },
+                        { "id": "s1-coord-2-pred-2", "label": ["semantic-predicate"], "text": "instantaneously", "children": [], "linkedBy": ["s1-coord-2-pred"] },
+                        { "id": "s1-coord-2-pred-3", "label": ["semantic-predicate"], "text": "share", "children": [], "linkedBy": ["s1-coord-2-pred"] }
+                      ],
+                      "linkedBy": ["s1-coord-2-core"]
+                    },
+                    {
+                      "id": "s1-coord-2-obj",
+                      "label": ["structure-object"],
+                      "children": [
+                        { "id": "s1-coord-2-obj-1", "label": ["semantic-concept"], "text": "information", "children": [], "linkedBy": ["s1-coord-2-obj"] },
+                        {
+                          "id": "s1-coord-2-obj-2",
+                          "label": ["structure-preposition"],
+                          "children": [
+                            { "id": "s1-coord-2-obj-2-1", "label": ["structure-preposition"], "text": "across", "children": [], "linkedBy": ["s1-coord-2-obj-2"] },
+                            { "id": "s1-coord-2-obj-2-2", "label": ["semantic-concept"], "text": "vast", "children": [], "linkedBy": ["s1-coord-2-obj-2"] },
+                            { "id": "s1-coord-2-obj-2-3", "label": ["semantic-concept"], "text": "distances", "children": [], "linkedBy": ["s1-coord-2-obj-2"] }
+                          ],
+                          "linkedBy": ["s1-coord-2-obj"]
+                        }
+                      ],
+                      "linkedBy": ["s1-coord-2-core"]
+                    }
+                  ],
+                  "linkedBy": ["s1-coord-2"]
+                },
+                {
+                  "id": "s1-coord-2-part",
+                  "label": ["structure-clause"],
+                  "children": [
+                    { "id": "s1-coord-2-part-1", "label": ["semantic-predicate"], "text": "defying", "children": [], "linkedBy": ["s1-coord-2-part"] },
+                    { "id": "s1-coord-2-part-2", "label": ["semantic-concept"], "text": "classical", "children": [], "linkedBy": ["s1-coord-2-part"] },
+                    { "id": "s1-coord-2-part-3", "label": ["semantic-concept"], "text": "intuitions", "children": [], "linkedBy": ["s1-coord-2-part"] },
+                    {
+                      "id": "s1-coord-2-part-4",
+                      "label": ["structure-preposition"],
+                      "children": [
+                        { "id": "s1-coord-2-part-4-1", "label": ["structure-preposition"], "text": "about", "children": [], "linkedBy": ["s1-coord-2-part-4"] },
+                        { "id": "s1-coord-2-part-4-2", "label": ["semantic-concept"], "text": "locality", "children": [], "linkedBy": ["s1-coord-2-part-4"] }
+                      ],
+                      "linkedBy": ["s1-coord-2-part"]
+                    }
+                  ],
+                  "linkedBy": ["s1-coord-2"]
+                }
+              ],
+              "linkedBy": ["s1-coord"]
+            }
+          ],
+          "linkedBy": ["s1"]
+        },
+        { "id": "p1-3", "label": ["punctuation"], "text": ".", "children": [], "noSpaceBefore": true, "linkedBy": ["s1"] }
+      ]
+    }
+  },
+  {
+    "id": 2,
+    "function": "Explanation",
+    "type": "Declarative",
+    "mood": "Indicative",
+    "purpose": "Contrast probabilistic quantum mechanics with classical determinism and highlight phenomena",
+    "semanticTree": {
+      "id": "s2",
+      "label": ["structure-sentence"],
+      "children": [
+        {
+          "id": "s2-subj",
+          "label": ["structure-subject"],
+          "children": [
+            { "id": "s2-subj-1", "label": ["semantic-concept"], "text": "The", "children": [], "linkedBy": ["s2-subj"] },
+            { "id": "s2-subj-2", "label": ["semantic-concept"], "text": "probabilistic", "children": [], "linkedBy": ["s2-subj"] },
+            { "id": "s2-subj-3", "label": ["semantic-concept"], "text": "nature", "children": [], "linkedBy": ["s2-subj"] },
+            {
+              "id": "s2-subj-4",
+              "label": ["structure-preposition"],
+              "children": [
+                { "id": "s2-subj-4-1", "label": ["structure-preposition"], "text": "of", "children": [], "linkedBy": ["s2-subj-4"] },
+                { "id": "s2-subj-4-2", "label": ["semantic-concept"], "text": "wavefunctions", "children": [], "linkedBy": ["s2-subj-4"] }
+              ],
+              "linkedBy": ["s2-subj"]
+            }
+          ],
+          "linkedBy": ["s2"]
+        },
+        { "id": "p2-0", "label": ["punctuation"], "text": ",", "children": [], "noSpaceBefore": true, "linkedBy": ["s2"] },
+        {
+          "id": "s2-nonfinite",
+          "label": ["structure-clause"],
+          "children": [
+            { "id": "s2-nonfinite-1", "label": ["semantic-predicate"], "text": "described", "children": [], "linkedBy": ["s2-nonfinite"] },
+            {
+              "id": "s2-nonfinite-2",
+              "label": ["structure-preposition"],
+              "children": [
+                { "id": "s2-nonfinite-2-1", "label": ["structure-preposition"], "text": "by", "children": [], "linkedBy": ["s2-nonfinite-2"] },
+                { "id": "s2-nonfinite-2-2", "label": ["semantic-concept"], "text": "the", "children": [], "linkedBy": ["s2-nonfinite-2"] },
+                { "id": "s2-nonfinite-2-3", "label": ["semantic-concept"], "text": "Schrödinger", "children": [], "linkedBy": ["s2-nonfinite-2"] },
+                { "id": "s2-nonfinite-2-4", "label": ["semantic-concept"], "text": "equation", "children": [], "linkedBy": ["s2-nonfinite-2"] }
+              ],
+              "linkedBy": ["s2-nonfinite"]
+            }
+          ],
+          "linkedBy": ["s2"]
+        },
+        { "id": "p2-1", "label": ["punctuation"], "text": ",", "children": [], "noSpaceBefore": true, "linkedBy": ["s2"] },
+        {
+          "id": "s2-core",
+          "label": ["structure-predication"],
+          "children": [
+            {
+              "id": "s2-pred",
+              "label": ["structure-predicate","semantic-predicate"],
+              "children": [
+                { "id": "s2-pred-1", "label": ["semantic-predicate"], "text": "contrasts", "children": [], "linkedBy": ["s2-pred"] },
+                { "id": "s2-pred-2", "label": ["semantic-predicate"], "text": "sharply", "children": [], "linkedBy": ["s2-pred"] }
+              ],
+              "linkedBy": ["s2-core"]
+            },
+            {
+              "id": "s2-obj",
+              "label": ["structure-object"],
+              "children": [
+                { "id": "s2-obj-1", "label": ["semantic-concept"], "text": "with", "children": [], "linkedBy": ["s2-obj"] },
+                { "id": "s2-obj-2", "label": ["semantic-concept"], "text": "deterministic", "children": [], "linkedBy": ["s2-obj"] },
+                { "id": "s2-obj-3", "label": ["semantic-concept"], "text": "classical", "children": [], "linkedBy": ["s2-obj"] },
+                { "id": "s2-obj-4", "label": ["semantic-concept"], "text": "mechanics", "children": [], "linkedBy": ["s2-obj"] }
+              ],
+              "linkedBy": ["s2-core"]
+            }
+          ],
+          "linkedBy": ["s2"]
+        },
+        { "id": "p2-2", "label": ["punctuation"], "text": ",", "children": [], "noSpaceBefore": true, "linkedBy": ["s2"] },
+        {
+          "id": "s2-subord",
+          "label": ["structure-coordination"],
+          "children": [
+            { "id": "s2-subord-1", "label": ["structure-conjunction"], "text": "while", "children": [], "linkedBy": ["s2-subord"] },
+            {
+              "id": "s2-subord-2",
+              "label": ["structure-clause"],
+              "children": [
+                {
+                  "id": "s2-subord-2-subj",
+                  "label": ["structure-subject"],
+                  "children": [
+                    { "id": "s2-subord-2-subj-1", "label": ["semantic-concept"], "text": "phenomena", "children": [], "linkedBy": ["s2-subord-2-subj"] },
+                    {
+                      "id": "s2-subord-2-subj-2",
+                      "label": ["structure-preposition"],
+                      "children": [
+                        { "id": "s2-subord-2-subj-2-1", "label": ["structure-preposition"], "text": "like", "children": [], "linkedBy": ["s2-subord-2-subj-2"] },
+                        { "id": "s2-subord-2-subj-2-2", "label": ["semantic-concept"], "text": "quantum", "children": [], "linkedBy": ["s2-subord-2-subj-2"] },
+                        { "id": "s2-subord-2-subj-2-3", "label": ["semantic-concept"], "text": "tunneling", "children": [], "linkedBy": ["s2-subord-2-subj-2"] },
+                        { "id": "p2-like-1", "label": ["punctuation"], "text": "and", "children": [], "noSpaceBefore": false, "linkedBy": ["s2-subord-2-subj-2"] }
+                      ],
+                      "linkedBy": ["s2-subord-2-subj"]
+                    },
+                    {
+                      "id": "s2-subord-2-subj-3",
+                      "label": ["structure-np"],
+                      "children": [
+                        { "id": "s2-subord-2-subj-3-1", "label": ["semantic-concept"], "text": "zero-point", "children": [], "linkedBy": ["s2-subord-2-subj-3"] },
+                        { "id": "s2-subord-2-subj-3-2", "label": ["semantic-concept"], "text": "energy", "children": [], "linkedBy": ["s2-subord-2-subj-3"] }
+                      ],
+                      "linkedBy": ["s2-subord-2-subj"]
+                    }
+                  ],
+                  "linkedBy": ["s2-subord-2"]
+                },
+                {
+                  "id": "s2-subord-2-core",
+                  "label": ["structure-predication"],
+                  "children": [
+                    {
+                      "id": "s2-subord-2-pred",
+                      "label": ["structure-predicate","semantic-predicate"],
+                      "children": [
+                        { "id": "s2-subord-2-pred-1", "label": ["semantic-predicate"], "text": "reveal", "children": [], "linkedBy": ["s2-subord-2-pred"] }
+                      ],
+                      "linkedBy": ["s2-subord-2-core"]
+                    },
+                    {
+                      "id": "s2-subord-2-obj",
+                      "label": ["structure-object"],
+                      "children": [
+                        {
+                          "id": "s2-that",
+                          "label": ["structure-clause"],
+                          "children": [
+                            { "id": "s2-that-1", "label": ["structure-complementizer"], "text": "that", "children": [], "linkedBy": ["s2-that"] },
+                            {
+                              "id": "s2-that-subj",
+                              "label": ["structure-subject"],
+                              "children": [
+                                { "id": "s2-that-subj-1", "label": ["semantic-concept"], "text": "even", "children": [], "linkedBy": ["s2-that-subj"] },
+                                { "id": "s2-that-subj-2", "label": ["punctuation"], "text": "“", "children": [], "noSpaceBefore": false, "linkedBy": ["s2-that-subj"] },
+                                { "id": "s2-that-subj-3", "label": ["semantic-concept"], "text": "empty", "children": [], "linkedBy": ["s2-that-subj"] },
+                                { "id": "s2-that-subj-4", "label": ["punctuation"], "text": "”", "children": [], "noSpaceBefore": true, "linkedBy": ["s2-that-subj"] },
+                                { "id": "s2-that-subj-5", "label": ["semantic-concept"], "text": "space", "children": [], "linkedBy": ["s2-that-subj"] }
+                              ],
+                              "linkedBy": ["s2-that"]
+                            },
+                            {
+                              "id": "s2-that-core",
+                              "label": ["structure-predication"],
+                              "children": [
+                                {
+                                  "id": "s2-that-pred",
+                                  "label": ["structure-predicate","semantic-predicate"],
+                                  "children": [
+                                    { "id": "s2-that-pred-1", "label": ["semantic-predicate"], "text": "is", "children": [], "linkedBy": ["s2-that-pred"] }
+                                  ],
+                                  "linkedBy": ["s2-that-core"]
+                                },
+                                {
+                                  "id": "s2-that-obj",
+                                  "label": ["structure-object"],
+                                  "children": [
+                                    { "id": "s2-that-obj-1", "label": ["semantic-concept"], "text": "alive", "children": [], "linkedBy": ["s2-that-obj"] },
+                                    {
+                                      "id": "s2-that-obj-2",
+                                      "label": ["structure-preposition"],
+                                      "children": [
+                                        { "id": "s2-that-obj-2-1", "label": ["structure-preposition"], "text": "with", "children": [], "linkedBy": ["s2-that-obj-2"] },
+                                        { "id": "s2-that-obj-2-2", "label": ["semantic-concept"], "text": "fluctuations", "children": [], "linkedBy": ["s2-that-obj-2"] }
+                                      ],
+                                      "linkedBy": ["s2-that-obj"]
+                                    }
+                                  ],
+                                  "linkedBy": ["s2-that-core"]
+                                }
+                              ],
+                              "linkedBy": ["s2-that"]
+                            }
+                          ],
+                          "linkedBy": ["s2-subord-2-obj"]
+                        }
+                      ],
+                      "linkedBy": ["s2-subord-2-core"]
+                    }
+                  ],
+                  "linkedBy": ["s2-subord-2"]
+                }
+              ],
+              "linkedBy": ["s2-subord"]
+            }
+          ],
+          "linkedBy": ["s2"]
+        },
+        { "id": "p2-3", "label": ["punctuation"], "text": ".", "children": [], "noSpaceBefore": true, "linkedBy": ["s2"] }
+      ]
+    }
+  },
+  {
+    "id": 3,
+    "function": "Observation",
+    "type": "Declarative",
+    "mood": "Indicative",
+    "purpose": "State that advanced frameworks extend physics and pursue unification",
+    "semanticTree": {
+      "id": "s3",
+      "label": ["structure-sentence"],
+      "children": [
+        {
+          "id": "s3-adjunct",
+          "label": ["structure-preposition"],
+          "children": [
+            { "id": "s3-adjunct-1", "label": ["structure-preposition"], "text": "At", "children": [], "linkedBy": ["s3-adjunct"] },
+            { "id": "s3-adjunct-2", "label": ["semantic-concept"], "text": "deeper", "children": [], "linkedBy": ["s3-adjunct"] },
+            { "id": "s3-adjunct-3", "label": ["semantic-concept"], "text": "levels", "children": [], "linkedBy": ["s3-adjunct"] }
+          ],
+          "linkedBy": ["s3"]
+        },
+        { "id": "p3-0", "label": ["punctuation"], "text": ",", "children": [], "noSpaceBefore": true, "linkedBy": ["s3"] },
+        {
+          "id": "s3-subj",
+          "label": ["structure-subject"],
+          "children": [
+            { "id": "s3-subj-1", "label": ["semantic-concept"], "text": "frameworks", "children": [], "linkedBy": ["s3-subj"] },
+            {
+              "id": "s3-subj-2",
+              "label": ["structure-preposition"],
+              "children": [
+                { "id": "s3-subj-2-1", "label": ["structure-preposition"], "text": "like", "children": [], "linkedBy": ["s3-subj-2"] },
+                { "id": "s3-subj-2-2", "label": ["semantic-concept"], "text": "quantum", "children": [], "linkedBy": ["s3-subj-2"] },
+                { "id": "s3-subj-2-3", "label": ["semantic-concept"], "text": "field", "children": [], "linkedBy": ["s3-subj-2"] },
+                { "id": "s3-subj-2-4", "label": ["semantic-concept"], "text": "theory", "children": [], "linkedBy": ["s3-subj-2"] }
+              ],
+              "linkedBy": ["s3-subj"]
+            },
+            { "id": "s3-subj-sep", "label": ["punctuation"], "text": "and", "children": [], "noSpaceBefore": false, "linkedBy": ["s3-subj"] },
+            {
+              "id": "s3-subj-3",
+              "label": ["structure-np"],
+              "children": [
+                { "id": "s3-subj-3-1", "label": ["semantic-concept"], "text": "attempts", "children": [], "linkedBy": ["s3-subj-3"] },
+                {
+                  "id": "s3-subj-3-2",
+                  "label": ["structure-preposition"],
+                  "children": [
+                    { "id": "s3-subj-3-2-1", "label": ["structure-preposition"], "text": "at", "children": [], "linkedBy": ["s3-subj-3-2"] },
+                    { "id": "s3-subj-3-2-2", "label": ["semantic-concept"], "text": "quantum", "children": [], "linkedBy": ["s3-subj-3-2"] },
+                    { "id": "s3-subj-3-2-3", "label": ["semantic-concept"], "text": "gravity", "children": [], "linkedBy": ["s3-subj-3-2"] }
+                  ],
+                  "linkedBy": ["s3-subj-3"]
+                }
+              ],
+              "linkedBy": ["s3-subj"]
+            }
+          ],
+          "linkedBy": ["s3"]
+        },
+        {
+          "id": "s3-core",
+          "label": ["structure-predication"],
+          "children": [
+            {
+              "id": "s3-pred",
+              "label": ["structure-predicate","semantic-predicate"],
+              "children": [
+                { "id": "s3-pred-1", "label": ["semantic-predicate"], "text": "push", "children": [], "linkedBy": ["s3-pred"] }
+              ],
+              "linkedBy": ["s3-core"]
+            },
+            {
+              "id": "s3-obj",
+              "label": ["structure-object"],
+              "children": [
+                { "id": "s3-obj-1", "label": ["semantic-concept"], "text": "the", "children": [], "linkedBy": ["s3-obj"] },
+                { "id": "s3-obj-2", "label": ["semantic-concept"], "text": "boundaries", "children": [], "linkedBy": ["s3-obj"] },
+                {
+                  "id": "s3-obj-3",
+                  "label": ["structure-preposition"],
+                  "children": [
+                    { "id": "s3-obj-3-1", "label": ["structure-preposition"], "text": "of", "children": [], "linkedBy": ["s3-obj-3"] },
+                    { "id": "s3-obj-3-2", "label": ["semantic-concept"], "text": "physics", "children": [], "linkedBy": ["s3-obj-3"] }
+                  ],
+                  "linkedBy": ["s3-obj"]
+                }
+              ],
+              "linkedBy": ["s3-core"]
+            }
+          ],
+          "linkedBy": ["s3"]
+        },
+        { "id": "p3-1", "label": ["punctuation"], "text": ",", "children": [], "noSpaceBefore": true, "linkedBy": ["s3"] },
+        {
+          "id": "s3-participial",
+          "label": ["structure-clause"],
+          "children": [
+            { "id": "s3-participial-1", "label": ["semantic-predicate"], "text": "seeking", "children": [], "linkedBy": ["s3-participial"] },
+            {
+              "id": "s3-participial-2",
+              "label": ["structure-predication"],
+              "children": [
+                {
+                  "id": "s3-participial-2-pred",
+                  "label": ["structure-predicate","semantic-predicate"],
+                  "children": [
+                    { "id": "s3-participial-2-pred-1", "label": ["semantic-predicate"], "text": "to", "children": [], "linkedBy": ["s3-participial-2-pred"] },
+                    { "id": "s3-participial-2-pred-2", "label": ["semantic-predicate"], "text": "unify", "children": [], "linkedBy": ["s3-participial-2-pred"] }
+                  ],
+                  "linkedBy": ["s3-participial-2"]
+                },
+                {
+                  "id": "s3-participial-2-obj",
+                  "label": ["structure-object"],
+                  "children": [
+                    { "id": "s3-participial-2-obj-1", "label": ["semantic-concept"], "text": "the", "children": [], "linkedBy": ["s3-participial-2-obj"] },
+                    { "id": "s3-participial-2-obj-2", "label": ["semantic-concept"], "text": "subatomic", "children": [], "linkedBy": ["s3-participial-2-obj"] },
+                    { "id": "s3-participial-2-obj-3", "label": ["semantic-concept"], "text": "world", "children": [], "linkedBy": ["s3-participial-2-obj"] }
+                  ],
+                  "linkedBy": ["s3-participial-2"]
+                },
+                {
+                  "id": "s3-participial-2-pp",
+                  "label": ["structure-preposition"],
+                  "children": [
+                    { "id": "s3-participial-2-pp-1", "label": ["structure-preposition"], "text": "with", "children": [], "linkedBy": ["s3-participial-2-pp"] },
+                    { "id": "s3-participial-2-pp-2", "label": ["semantic-concept"], "text": "the", "children": [], "linkedBy": ["s3-participial-2-pp"] },
+                    { "id": "s3-participial-2-pp-3", "label": ["semantic-concept"], "text": "fabric", "children": [], "linkedBy": ["s3-participial-2-pp"] },
+                    { "id": "s3-participial-2-pp-4", "label": ["structure-preposition"], "children": [
+                      { "id": "s3-participial-2-pp-4-1", "label": ["structure-preposition"], "text": "of", "children": [], "linkedBy": ["s3-participial-2-pp-4"] },
+                      { "id": "s3-participial-2-pp-4-2", "label": ["semantic-concept"], "text": "spacetime", "children": [], "linkedBy": ["s3-participial-2-pp-4"] }
+                    ], "linkedBy": ["s3-participial-2-pp"] },
+                    { "id": "s3-participial-2-pp-5", "label": ["semantic-concept"], "text": "itself", "children": [], "linkedBy": ["s3-participial-2-pp"] }
+                  ],
+                  "linkedBy": ["s3-participial-2"]
+                }
+              ],
+              "linkedBy": ["s3-participial"]
+            }
+          ],
+          "linkedBy": ["s3"]
+        },
+        { "id": "p3-2", "label": ["punctuation"], "text": ".", "children": [], "noSpaceBefore": true, "linkedBy": ["s3"] }
+      ]
+    }
+  }
+]}
