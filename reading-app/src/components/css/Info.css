@@ -1,0 +1,361 @@
+/* InfoComponent.css */
+
+.sentence-info-card {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* 卡片容器 */
+.sentence-info-card .card-container {
+  width: 20rem; /* w-80 */
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid #d1d5db;
+}
+
+/* 顶部建议栏 */
+.sentence-info-card .suggestion-bar {
+  background-color: #f3f4f6;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.sentence-info-card .suggestion-bar strong {
+  font-weight: 700;
+}
+
+/* 主要内容区 */
+.sentence-info-card .main-content {
+  padding: 0.75rem;
+}
+
+/* 模块基础样式 */
+.sentence-info-card .info-section {
+  margin-bottom: 1.25rem;
+}
+
+.sentence-info-card .section-header {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid #d1d5db;
+  padding-bottom: 0.25rem;
+}
+
+/* 可折叠按钮样式 */
+.sentence-info-card .collapsible-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid #d1d5db;
+  padding-bottom: 0.25rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.sentence-info-card .collapsible-button:hover {
+  color: #374151;
+}
+
+/* 箭头旋转动画 */
+.sentence-info-card .chevron-icon {
+  transition: transform 0.2s ease;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.sentence-info-card .chevron-icon.expanded {
+  transform: rotate(90deg);
+}
+
+/* 可折叠内容动画 */
+.sentence-info-card .collapsible-content {
+  transition: all 0.3s ease-in-out;
+  overflow: hidden;
+}
+
+.sentence-info-card .collapsible-content.expanded {
+  max-height: 20rem;
+  opacity: 1;
+}
+
+.sentence-info-card .collapsible-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+}
+
+.sentence-info-card .collapsible-inner {
+  transform: translateY(-1rem);
+  transition: transform 0.3s ease;
+}
+
+.sentence-info-card .collapsible-inner.expanded {
+  transform: translateY(0);
+}
+
+/* 文本样式 */
+.sentence-info-card .main-text {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: black;
+  flex: 1;
+}
+
+.sentence-info-card .meta-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.sentence-info-card .meta-info .divider {
+  color: #6b7280;
+}
+
+.sentence-info-card .id-text {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+.sentence-info-card .description-text {
+  color: black;
+  line-height: 1.625;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* 标签样式 */
+.sentence-info-card .tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.sentence-info-card .tag {
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid;
+}
+
+.sentence-info-card .tag-role {
+  background-color: #f3e8ff;
+  color: #7c3aed;
+  border-color: #c4b5fd;
+}
+
+.sentence-info-card .tag-structure-verb {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.sentence-info-card .tag-structure-noun {
+  background-color: #eff6ff;
+  color: #2563eb;
+}
+
+.sentence-info-card .tag-structure-adjective {
+  background-color: #f0fdf4;
+  color: #16a34a;
+}
+
+.sentence-info-card .tag-structure-adverb {
+  background-color: #faf5ff;
+  color: #9333ea;
+}
+
+.sentence-info-card .tag-structure-default {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+.sentence-info-card .tag-mood {
+  background-color: #fff7ed;
+  color: #ea580c;
+  border-color: #fed7aa;
+}
+
+/* 语义角色颜色 */
+.sentence-info-card .role-predicate { color: #dc2626; }
+.sentence-info-card .role-agent { color: #2563eb; }
+.sentence-info-card .role-theme { color: #16a34a; }
+.sentence-info-card .role-recipient { color: #9333ea; }
+.sentence-info-card .role-default { color: #4b5563; }
+
+/* 情感颜色 */
+.sentence-info-card .mood-positive { color: #16a34a; }
+.sentence-info-card .mood-negative { color: #dc2626; }
+.sentence-info-card .mood-neutral { color: #4b5563; }
+.sentence-info-card .mood-default { color: #ea580c; }
+
+/* 按钮样式 */
+.sentence-info-card .icon-button {
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: background-color 0.2s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.sentence-info-card .icon-button:hover {
+  background-color: #f3f4f6;
+}
+
+.sentence-info-card .icon-button svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  color: #4b5563;
+}
+
+/* 分析详情框 */
+.sentence-info-card .analysis-box {
+  background-color: #f9fafb;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.sentence-info-card .analysis-header {
+  font-weight: 500;
+  color: #1f2937;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.sentence-info-card .analysis-header svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.sentence-info-card .analysis-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sentence-info-card .analysis-item {
+  display: flex;
+  justify-content: space-between;
+}
+
+.sentence-info-card .analysis-label {
+  font-weight: 500;
+  color: #374151;
+}
+
+/* 结构分析特殊样式 */
+.sentence-info-card .structure-box {
+  background-color: #eff6ff;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.sentence-info-card .structure-header {
+  font-weight: 500;
+  color: #1e3a8a;
+  margin-bottom: 0.25rem;
+}
+
+.sentence-info-card .structure-content {
+  color: #1e40af;
+}
+
+.sentence-info-card .structure-description {
+  margin-top: 0.25rem;
+  color: #1d4ed8;
+}
+
+/* 底部操作栏 */
+.sentence-info-card .action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.sentence-info-card .action-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.sentence-info-card .action-item:hover {
+  background-color: #f9fafb;
+}
+
+.sentence-info-card .action-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sentence-info-card .action-left svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  color: #4b5563;
+}
+
+.sentence-info-card .action-text {
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.sentence-info-card .action-shortcut {
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
+/* 底部标签栏 */
+.sentence-info-card .tab-bar {
+  background-color: #e5e7eb;
+  display: flex;
+  border-radius: 0 0 0.5rem 0.5rem;
+  overflow: hidden;
+}
+
+.sentence-info-card .tab-item {
+  flex: 1;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  background: none;
+  border: none;
+}
+
+.sentence-info-card .tab-item:hover {
+  background-color: #d1d5db;
+}
+
+.sentence-info-card .tab-item.active {
+  background-color: white;
+  color: black;
+  font-weight: 500;
+}
+
+.sentence-info-card .tab-item.inactive {
+  color: #4b5563;
+}

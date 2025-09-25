@@ -3,4 +3,6 @@ export interface SentenceViewModel {
   text: string;
   paraphrase?: string;
   roleLabel?: string;
+  structureLabel?: string
+  mood?: string
 }
