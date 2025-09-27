@@ -33,7 +33,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
   const className = label_type + node.label.join(" ") +
     (highlight.includes(node.id) || isHovered ? " hovered" : ` ${node.id}`);
 
-
   const increaseCount = () => {
     setSubNodeCount(n => n + 1);
   }

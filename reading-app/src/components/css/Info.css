@@ -1,361 +1,202 @@
-/* InfoComponent.css */
-
-.sentence-info-card {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+/* =========================
+   Variables
+========================= */
+:root {
+  --border-light: rgba(0,0,0,0.12);
+  --muted: #6b7280;
 }
 
-/* 卡片容器 */
-.sentence-info-card .card-container {
-  width: 20rem; /* w-80 */
-  background-color: white;
-  border-radius: 0.5rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  border: 1px solid #d1d5db;
+/* =========================
+   Card shell (opaque)
+========================= */
+.card {
+  position: relative;
+  background: #2b2b2b;                    /* dark base */
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+  -webkit-backdrop-filter: none;          /* avoid translucency */
+  backdrop-filter: none;
+}
+@media (prefers-color-scheme: light) {
+  .card {
+    background: #ffffff;                  /* light base */
+    border: 1px solid rgba(0,0,0,0.12);
+  }
 }
 
-/* 顶部建议栏 */
-.sentence-info-card .suggestion-bar {
-  background-color: #f3f4f6;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  color: #4b5563;
-  border-bottom: 1px solid #e5e7eb;
+/* caret */
+.caret {
+  position: absolute;
+  top: -8px; left: 24px;
+  width: 16px; height: 16px;
+  background: #2b2b2b;
+  border-left: 1px solid rgba(255,255,255,0.12);
+  border-top: 1px solid rgba(255,255,255,0.12);
+  transform: rotate(45deg);
+  border-top-left-radius: 2px;
+}
+@media (prefers-color-scheme: light) {
+  .caret {
+    background: #ffffff;
+    border-left-color: rgba(0,0,0,0.12);
+    border-top-color: rgba(0,0,0,0.12);
+  }
 }
 
-.sentence-info-card .suggestion-bar strong {
-  font-weight: 700;
-}
-
-/* 主要内容区 */
-.sentence-info-card .main-content {
-  padding: 0.75rem;
-}
-
-/* 模块基础样式 */
-.sentence-info-card .info-section {
-  margin-bottom: 1.25rem;
-}
-
-.sentence-info-card .section-header {
-  font-size: 1rem;
-  font-weight: 500;
-  color: #111827;
-  margin-bottom: 0.5rem;
-  border-bottom: 1px solid #d1d5db;
-  padding-bottom: 0.25rem;
-}
-
-/* 可折叠按钮样式 */
-.sentence-info-card .collapsible-button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1rem;
-  font-weight: 500;
-  color: #111827;
-  margin-bottom: 0.5rem;
-  border-bottom: 1px solid #d1d5db;
-  padding-bottom: 0.25rem;
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.sentence-info-card .collapsible-button:hover {
-  color: #374151;
-}
-
-/* 箭头旋转动画 */
-.sentence-info-card .chevron-icon {
-  transition: transform 0.2s ease;
-  width: 0.75rem;
-  height: 0.75rem;
-}
-
-.sentence-info-card .chevron-icon.expanded {
-  transform: rotate(90deg);
-}
-
-/* 可折叠内容动画 */
-.sentence-info-card .collapsible-content {
-  transition: all 0.3s ease-in-out;
-  overflow: hidden;
-}
-
-.sentence-info-card .collapsible-content.expanded {
-  max-height: 20rem;
-  opacity: 1;
-}
-
-.sentence-info-card .collapsible-content.collapsed {
-  max-height: 0;
-  opacity: 0;
-}
-
-.sentence-info-card .collapsible-inner {
-  transform: translateY(-1rem);
-  transition: transform 0.3s ease;
-}
-
-.sentence-info-card .collapsible-inner.expanded {
-  transform: translateY(0);
-}
-
-/* 文本样式 */
-.sentence-info-card .main-text {
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: black;
-  flex: 1;
-}
-
-.sentence-info-card .meta-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-  color: #4b5563;
-}
-
-.sentence-info-card .meta-info .divider {
-  color: #6b7280;
-}
-
-.sentence-info-card .id-text {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
-}
-
-.sentence-info-card .description-text {
-  color: black;
-  line-height: 1.625;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-}
-
-/* 标签样式 */
-.sentence-info-card .tags-container {
+/* =========================
+   Header row & badges
+========================= */
+.headerRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-bottom: 0.5rem;
-}
-
-.sentence-info-card .tag {
-  padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border: 1px solid;
-}
-
-.sentence-info-card .tag-role {
-  background-color: #f3e8ff;
-  color: #7c3aed;
-  border-color: #c4b5fd;
-}
-
-.sentence-info-card .tag-structure-verb {
-  background-color: #fef2f2;
-  color: #dc2626;
-}
-
-.sentence-info-card .tag-structure-noun {
-  background-color: #eff6ff;
-  color: #2563eb;
-}
-
-.sentence-info-card .tag-structure-adjective {
-  background-color: #f0fdf4;
-  color: #16a34a;
-}
-
-.sentence-info-card .tag-structure-adverb {
-  background-color: #faf5ff;
-  color: #9333ea;
-}
-
-.sentence-info-card .tag-structure-default {
-  background-color: #f3f4f6;
-  color: #1f2937;
-}
-
-.sentence-info-card .tag-mood {
-  background-color: #fff7ed;
-  color: #ea580c;
-  border-color: #fed7aa;
-}
-
-/* 语义角色颜色 */
-.sentence-info-card .role-predicate { color: #dc2626; }
-.sentence-info-card .role-agent { color: #2563eb; }
-.sentence-info-card .role-theme { color: #16a34a; }
-.sentence-info-card .role-recipient { color: #9333ea; }
-.sentence-info-card .role-default { color: #4b5563; }
-
-/* 情感颜色 */
-.sentence-info-card .mood-positive { color: #16a34a; }
-.sentence-info-card .mood-negative { color: #dc2626; }
-.sentence-info-card .mood-neutral { color: #4b5563; }
-.sentence-info-card .mood-default { color: #ea580c; }
-
-/* 按钮样式 */
-.sentence-info-card .icon-button {
-  padding: 0.25rem;
-  border-radius: 0.25rem;
-  transition: background-color 0.2s ease;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.sentence-info-card .icon-button:hover {
-  background-color: #f3f4f6;
-}
-
-.sentence-info-card .icon-button svg {
-  width: 0.75rem;
-  height: 0.75rem;
-  color: #4b5563;
-}
-
-/* 分析详情框 */
-.sentence-info-card .analysis-box {
-  background-color: #f9fafb;
-  padding: 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-}
-
-.sentence-info-card .analysis-header {
-  font-weight: 500;
-  color: #1f2937;
-  margin-bottom: 0.25rem;
-  display: flex;
+  gap: 6px;
   align-items: center;
-  gap: 0.25rem;
+  margin-bottom: 8px;
 }
 
-.sentence-info-card .analysis-header svg {
-  width: 0.75rem;
-  height: 0.75rem;
-}
-
-.sentence-info-card .analysis-items {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.sentence-info-card .analysis-item {
-  display: flex;
-  justify-content: space-between;
-}
-
-.sentence-info-card .analysis-label {
-  font-weight: 500;
-  color: #374151;
-}
-
-/* 结构分析特殊样式 */
-.sentence-info-card .structure-box {
-  background-color: #eff6ff;
-  padding: 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-}
-
-.sentence-info-card .structure-header {
-  font-weight: 500;
-  color: #1e3a8a;
-  margin-bottom: 0.25rem;
-}
-
-.sentence-info-card .structure-content {
-  color: #1e40af;
-}
-
-.sentence-info-card .structure-description {
-  margin-top: 0.25rem;
-  color: #1d4ed8;
-}
-
-/* 底部操作栏 */
-.sentence-info-card .action-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #e5e7eb;
-}
-
-.sentence-info-card .action-item {
-  display: flex;
+.badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
 }
 
-.sentence-info-card .action-item:hover {
-  background-color: #f9fafb;
+.role      { background: rgba(99,102,241,0.18);  color: #c7d2fe; }
+.structure { background: rgba(16,185,129,0.18);  color: #bbf7d0; }
+.mood      { background: rgba(245,158,11,0.18);  color: #fde68a; }
+
+.dot {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
 }
 
-.sentence-info-card .action-left {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.sentence-info-card .action-left svg {
-  width: 0.75rem;
-  height: 0.75rem;
-  color: #4b5563;
-}
-
-.sentence-info-card .action-text {
-  color: #374151;
-  font-size: 0.875rem;
-}
-
-.sentence-info-card .action-shortcut {
+.idMono {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
   color: #9ca3af;
-  font-size: 0.75rem;
 }
 
-/* 底部标签栏 */
-.sentence-info-card .tab-bar {
-  background-color: #e5e7eb;
+/* =========================
+   Content blocks
+========================= */
+.content { display: grid; gap: 8px; }
+
+.textBlock {
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #111827;                 /* light default */
+  background: #f8f9fb;
+}
+@media (prefers-color-scheme: dark) {
+  .textBlock {
+    color: #e5e7eb;               /* dark */
+    background: #3a3a3a;
+  }
+}
+
+/* Paraphrase block (opaque, non-translucent) */
+.paraphraseBlock {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #333;
+  color: #e5e7eb;
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+@media (prefers-color-scheme: light) {
+  .paraphraseBlock {
+    background: #f7f7f8;
+    border: 1px solid var(--border-light);
+    color: #1f2937;
+  }
+}
+
+.sectionLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+  color: #a5b4fc;                 /* readable on dark */
+}
+@media (prefers-color-scheme: light) {
+  .sectionLabel { color: var(--muted); }
+}
+
+/* =========================
+   Footer actions
+========================= */
+.footerRow {
+  margin-top: 8px;
   display: flex;
-  border-radius: 0 0 0.5rem 0.5rem;
-  overflow: hidden;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
-.sentence-info-card .tab-item {
-  flex: 1;
-  padding: 0.5rem;
-  font-size: 0.875rem;
-  text-align: center;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  background: none;
-  border: none;
+/* when buttons are inside paraphrase block, add a subtle top divider */
+.footerRow--inBlock {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+@media (prefers-color-scheme: dark) {
+  .footerRow--inBlock { border-top-color: rgba(255,255,255,0.12); }
 }
 
-.sentence-info-card .tab-item:hover {
-  background-color: #d1d5db;
-}
-
-.sentence-info-card .tab-item.active {
-  background-color: white;
-  color: black;
+/* buttons */
+.ghostBtn {
+  appearance: none;
+  border: 1px solid var(--border-light);
+  background: #1f1f1f;
+  color: #e5e7eb;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
   font-weight: 500;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.2);
+  transition: transform 120ms ease, filter 120ms ease;
+}
+.ghostBtn:hover { filter: brightness(1.05); }
+.ghostBtn:active { transform: translateY(1px); }
+
+@media (prefers-color-scheme: light) {
+  .ghostBtn {
+    background: #ffffff;
+    color: #1f2937;
+    border: 1px solid var(--border-light);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.05);
+  }
 }
 
-.sentence-info-card .tab-item.inactive {
-  color: #4b5563;
+/* hint */
+.hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.hint kbd {
+  border: 1px solid var(--border-light);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 10px;
+  background: #1f1f1f;
+  color: #e5e7eb;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+@media (prefers-color-scheme: light) {
+  .hint kbd {
+    background: #ffffff;
+    color: #1f2937;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  }
 }

@@ -32,9 +32,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   const sendClickedSentence = (id: string | null) => {
     setHighlightId(id);
   }
-
-  console.log(`group = ${group}`);
-  
+  //
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
       {paragraph.sentences.map((sentence) => (
