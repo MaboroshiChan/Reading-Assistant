@@ -15,7 +15,7 @@ interface SubSentenceComponentProps {
   decrease: () => void;
 }
 
-export const SentenceComponent: React.FC<SubSentenceComponentProps> = ({
+export const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
   node,
   highlight,
   getGroup,
@@ -100,7 +100,7 @@ export const SentenceComponent: React.FC<SubSentenceComponentProps> = ({
       return (
         <React.Fragment key={child.id}>
           {spaceBefore && " "}
-          <SentenceComponent
+          <SubSentenceComponent
             remove={remove}
             getGroup={getGroup} // need to change
             highlight={highlight}

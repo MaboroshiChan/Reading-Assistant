@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import type { Paragraph } from "../analysis/structure/Paragraph";
-import { SentenceComponent } from "./SentenceComponent";
+import { SubSentenceComponent } from "./SubSentenceComponent";
 import './css/SemanticParagraph.css'
 import { Set } from "immutable";
 
@@ -36,7 +36,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   return (
     <div className="paragraph" data-paragraph-id={paragraph.id}>
       {paragraph.sentences.map((sentence) => (
-        <SentenceComponent
+        <SubSentenceComponent
           getGroup={getGroup}
           remove={remove}
           highlight={group.toArray()}
