@@ -4,7 +4,7 @@ import './css/SemanticSentence.css';
 import { useSingleOrDoubleClick } from "./LongClick";
 // import { SentenceCardComponent } from "./InfoComponent";
 
-interface SentenceComponentProps {
+interface SubSentenceComponentProps {
   node: SemanticNode;
   highlight: string[];
   highlightable: boolean; // highlightable sub-component
@@ -15,7 +15,7 @@ interface SentenceComponentProps {
   decrease: () => void;
 }
 
-export const SentenceComponent: React.FC<SentenceComponentProps> = ({
+export const SentenceComponent: React.FC<SubSentenceComponentProps> = ({
   node,
   highlight,
   getGroup,
