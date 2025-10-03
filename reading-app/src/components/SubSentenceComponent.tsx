@@ -13,6 +13,7 @@ interface SubSentenceComponentProps {
   sendClicked: (id: string | null) => void;
   increase: () => void;
   decrease: () => void;
+  isFullSentence: boolean; // is the root node of a sentence
 }
 
 export const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
@@ -23,7 +24,8 @@ export const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
   sendClicked,
   highlightable,
   increase,
-  decrease
+  decrease,
+  isFullSentence
 }) => {
 
   const [isClicked, setIsClicked] = useState(false);
@@ -109,6 +111,7 @@ export const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
             node={child}
             increase={increaseCount}
             decrease={decreaseCount}
+            isFullSentence={false}
           />
           {child.text && child.text === '.' && " "}
         </React.Fragment>

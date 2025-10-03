@@ -46,6 +46,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
           node={sentence.semanticTree}
           increase={()=>{}}
           decrease={()=>{}}
+          isFullSentence={true}
         />
       ))}
     </div>
