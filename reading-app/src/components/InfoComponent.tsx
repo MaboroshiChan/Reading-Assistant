@@ -62,5 +62,6 @@ export const SentenceCardComponent = ({ info }: InfoProps<SentenceViewModel>) =>
 };
 
 export const ParagraphCardComponent = (props: InfoProps<ParagraphViewModel>) => {
-    
+
+  console.log('ParagraphCardComponent props:', props);  
 }

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import type { SemanticNode } from "../analysis/structure/Sentence";
 import './css/SemanticSentence.css';
 import { useSingleOrDoubleClick } from "./LongClick";
+// import { SentenceCardComponent } from "./InfoComponent";
 
 interface SentenceComponentProps {
   node: SemanticNode;
