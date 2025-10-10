@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "text": "It is easy to imagine that the apparent chaos of casual conversation is a degenerate form of elegantly formulated prose—yet the natural state of language is interactive conversation, not monologue.",
+    "function": "Premise",
+    "type": "Declarative",
+    "purpose": "Introduces the contrast between spoken and written language.",
+    "mood": "Indicative"
+  },
+  {
+    "id": 2,
+    "text": "But how can such chaotic interactions ever be meaningful?",
+    "function": "Question",
+    "type": "Interrogative",
+    "purpose": "Raises a central problem or paradox following the premise.",
+    "mood": "Interrogative",
+    "relation": {
+      "type": "Contrast",
+      "targetSentenceId": 1
+    }
+  },
+  {
+    "id": 3,
+    "text": "Mere complex interaction surely can’t be enough in itself.",
+    "function": "Assertion",
+    "type": "Declarative",
+    "purpose": "Proposes a skeptical stance toward the sufficiency of complexity for meaning.",
+    "mood": "Indicative",
+    "relation": {
+      "type": "Justification",
+      "targetSentenceId": 2
+    }
+  },
+  {
+    "id": 4,
+    "text": "Otherwise, we would have to attribute meaning to the planets in our solar system, carrying out their intricately coordinated dance in elliptical circles around the sun.",
+    "function": "Example",
+    "type": "Declarative",
+    "purpose": "Uses an analogy to illustrate the absurdity of the previous claim.",
+    "mood": "Indicative",
+    "relation": {
+      "type": "Elaboration",
+      "targetSentenceId": 3
+    }
+  },
+  {
+    "id": 5,
+    "text": "Again, we shall seek the answer in the game of charades.",
+    "function": "Transition",
+    "type": "Declarative",
+    "purpose": "Signals a shift toward the forthcoming explanation or framework for meaning.",
+    "mood": "Indicative",
+    "relation": {
+      "type": "Conclusion",
+      "targetSentenceId": 2
+    }
+  }
+]

@@ -4,13 +4,13 @@ import './css/Highlighted.css';
 import type { Paragraph } from '../analysis/structure/Paragraph';
 import type { Sentence } from '../analysis/structure/Sentence';
 import { ParagraphComponent } from './ParagraphComponent';
-import paragraph_data from '../../examples/example5.json';
+import exampleSentences from '../../examples/example6.json'
 
 const ExampleParagraph: React.FC = () => {
 
   const paragraph: Paragraph = {
     id: '1',
-    sentences: paragraph_data.sentences as Sentence[],
+    sentences: exampleSentences as Sentence[],
     centralIdea: "Conversation structure and function"
   };
 
