@@ -15,3 +15,4 @@ export interface Sentence {
   relation?: SentenceRelation;
   text: string
 }
+

@@ -10,7 +10,10 @@ interface SentenceHoverCardProps {
   offset?: number;     // 鼠标到卡片的垂直间距，默认 12px
   maxWidth?: number;   // 可选最大宽度，默认 420
   children: React.ReactNode;
+  onStartSubsentence?: () => void; // 点击按钮时触发，交给外层处理
+  showSubsentenceButton?: boolean; // 是否显示按钮，默认 true
 }
+
 
 export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
   open,
@@ -18,6 +21,8 @@ export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
   offset = 12,
   maxWidth = 420,
   children,
+  onStartSubsentence,
+  showSubsentenceButton = true,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
@@ -80,6 +85,13 @@ export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
         {/* 顶部小三角：稍后在 Info.css 里让它 left:50% + translateX(-50%) 水平居中 */}
         <div className="hovercard-caret" aria-hidden />
         {children}
+        {showSubsentenceButton && ( /* ← 新增开始 */
+          <div className="hovercard-footer">
+            <button type="button" onClick={(e)=>{ e.stopPropagation(); onStartSubsentence?.(); }} >
+              启动子结构分析
+            </button>
+          </div>
+        )}  
       </div>
     </div>
   );
