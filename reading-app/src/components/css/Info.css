@@ -1,202 +1,124 @@
-/* =========================
-   Variables
-========================= */
-:root {
-  --border-light: rgba(0,0,0,0.12);
-  --muted: #6b7280;
-}
+/* ==== Hover Card: original dark style ==== */
+.hovercard { pointer-events: none; }
 
-/* =========================
-   Card shell (opaque)
-========================= */
-.card {
+.hovercard-inner {
   position: relative;
-  background: #2b2b2b;                    /* dark base */
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 16px;
-  padding: 8px;
-  box-shadow: 0 10px 24px rgba(0,0,0,0.25);
-  -webkit-backdrop-filter: none;          /* avoid translucency */
-  backdrop-filter: none;
-}
-@media (prefers-color-scheme: light) {
-  .card {
-    background: #ffffff;                  /* light base */
-    border: 1px solid rgba(0,0,0,0.12);
-  }
+  max-width: 520px;
+  background: #1f1f24;                 /* 深灰底 */
+  color: #f2f2f3;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+  padding: 12px 14px;
+  line-height: 1.6;
+  animation: fadeIn 120ms ease-out;
 }
 
-/* caret */
-.caret {
+.hovercard-caret {
   position: absolute;
-  top: -8px; left: 24px;
-  width: 16px; height: 16px;
-  background: #2b2b2b;
-  border-left: 1px solid rgba(255,255,255,0.12);
-  border-top: 1px solid rgba(255,255,255,0.12);
-  transform: rotate(45deg);
-  border-top-left-radius: 2px;
-}
-@media (prefers-color-scheme: light) {
-  .caret {
-    background: #ffffff;
-    border-left-color: rgba(0,0,0,0.12);
-    border-top-color: rgba(0,0,0,0.12);
-  }
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid #1f1f24;    /* 与卡片底色一致 */
+  filter: drop-shadow(0 -1px 1px rgba(0,0,0,0.28));
 }
 
-/* =========================
-   Header row & badges
-========================= */
-.headerRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.badge {
+/* 胶囊标签（灰底、圆角） */
+.hovercard-inner .tag {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-right: 8px;
+  margin-bottom: 8px;
   border-radius: 999px;
-  padding: 2px 8px;
   font-size: 12px;
   font-weight: 600;
-  line-height: 1;
+  color: #e5e5e7;
+  background: rgba(255,255,255,0.12);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset;
 }
 
-.role      { background: rgba(99,102,241,0.18);  color: #c7d2fe; }
-.structure { background: rgba(16,185,129,0.18);  color: #bbf7d0; }
-.mood      { background: rgba(245,158,11,0.18);  color: #fde68a; }
-
-.dot {
-  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+/* 小圆点（统一灰白；如果你以后想要彩色点，可给 .tag 增加 data-variant 再做差异化） */
+.hovercard-inner .tag::before {
+  content: "";
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.7);
 }
 
-.idMono {
-  margin-left: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
-  color: #9ca3af;
-}
-
-/* =========================
-   Content blocks
-========================= */
-.content { display: grid; gap: 8px; }
-
-.textBlock {
-  border-radius: 10px;
-  padding: 8px;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #111827;                 /* light default */
-  background: #f8f9fb;
-}
-@media (prefers-color-scheme: dark) {
-  .textBlock {
-    color: #e5e7eb;               /* dark */
-    background: #3a3a3a;
-  }
-}
-
-/* Paraphrase block (opaque, non-translucent) */
-.paraphraseBlock {
-  border: 1px solid rgba(255,255,255,0.12);
-  background: #333;
-  color: #e5e7eb;
-  border-radius: 10px;
-  padding: 8px;
-  font-size: 12.5px;
-  line-height: 1.6;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-}
-@media (prefers-color-scheme: light) {
-  .paraphraseBlock {
-    background: #f7f7f8;
-    border: 1px solid var(--border-light);
-    color: #1f2937;
-  }
-}
-
-.sectionLabel {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 4px;
-  color: #a5b4fc;                 /* readable on dark */
-}
-@media (prefers-color-scheme: light) {
-  .sectionLabel { color: var(--muted); }
-}
-
-/* =========================
-   Footer actions
-========================= */
-.footerRow {
+/* 说明文字块 */
+.hovercard-inner .purpose {
   margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  color: #eaeaec;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+/* 可选：按钮（如 Copy text / Copy id） */
+.hovercard-inner .btn {
+  display: inline-flex;
   align-items: center;
-}
-
-/* when buttons are inside paraphrase block, add a subtle top divider */
-.footerRow--inBlock {
+  padding: 6px 10px;
+  margin-right: 8px;
   margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-light);
-}
-@media (prefers-color-scheme: dark) {
-  .footerRow--inBlock { border-top-color: rgba(255,255,255,0.12); }
-}
-
-/* buttons */
-.ghostBtn {
-  appearance: none;
-  border: 1px solid var(--border-light);
-  background: #1f1f1f;
-  color: #e5e7eb;
-  border-radius: 8px;
-  padding: 4px 10px;
+  border-radius: 10px;
   font-size: 12px;
-  font-weight: 500;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.2);
-  transition: transform 120ms ease, filter 120ms ease;
-}
-.ghostBtn:hover { filter: brightness(1.05); }
-.ghostBtn:active { transform: translateY(1px); }
-
-@media (prefers-color-scheme: light) {
-  .ghostBtn {
-    background: #ffffff;
-    color: #1f2937;
-    border: 1px solid var(--border-light);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.05);
-  }
+  font-weight: 600;
+  color: #f0f0f2;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
 }
 
-/* hint */
-.hint {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--muted);
+/* 入场动画 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.hint kbd {
-  border: 1px solid var(--border-light);
-  border-radius: 5px;
-  padding: 1px 6px;
-  font-size: 10px;
-  background: #1f1f1f;
-  color: #e5e7eb;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+
+/* === Tag 颜色系统 === */
+
+/* 蓝色：Transition / Contrast / Example 等 */
+.hovercard-inner .tag[data-variant="blue"] {
+  background: rgba(64, 128, 255, 0.18);
+  color: #a8c8ff;
 }
-@media (prefers-color-scheme: light) {
-  .hint kbd {
-    background: #ffffff;
-    color: #1f2937;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
-  }
+.hovercard-inner .tag[data-variant="blue"]::before {
+  background: #527fff;
+}
+
+/* 绿色：Declarative / Conclusion 等 */
+.hovercard-inner .tag[data-variant="green"] {
+  background: rgba(64, 192, 128, 0.18);
+  color: #b2f2bb;
+}
+.hovercard-inner .tag[data-variant="green"]::before {
+  background: #4ade80;
+}
+
+/* 黄色：Indicative / Hypothesis 等 */
+.hovercard-inner .tag[data-variant="yellow"] {
+  background: rgba(255, 220, 80, 0.18);
+  color: #fde68a;
+}
+.hovercard-inner .tag[data-variant="yellow"]::before {
+  background: #facc15;
+}
+
+/* 灰色默认（Premise 等） */
+.hovercard-inner .tag[data-variant="gray"] {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e5e5e7;
+}
+.hovercard-inner .tag[data-variant="gray"]::before {
+  background: rgba(255,255,255,0.7);
+}
+
+/* === remove the leading dot on tags === */
+.hovercard-inner .tag::before {
+  content: none !important;
+  display: none !important;
 }

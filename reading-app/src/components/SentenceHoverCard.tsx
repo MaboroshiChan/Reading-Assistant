@@ -1,100 +1,88 @@
 // SentenceHoverCard.tsx
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { SentenceCardComponent } from './InfoComponent';
-import type { SentenceViewModel } from "../analysis/viewModels/mapSentenceToVM";
-import './css/Info.css';
+import "./css/Info.css";
 
-type Props = {
-  targetRef: React.RefObject<HTMLElement | null>;   // 被高亮的词/句
-  info: SentenceViewModel;                   // 要展示的语义信息
-  open?: boolean;                            // 也可受控
-  offset?: number;                           // 与目标的间距
-  enterDelayMs?: number;
-  leaveDelayMs?: number;
-};
+type Point = { x: number; y: number };
 
-export const SentenceHoverCard: React.FC<Props> = ({
-  targetRef,
-  info,
+interface SentenceHoverCardProps {
+  open: boolean;
+  anchor?: Point;      // 鼠标坐标（来自 SentenceComponent 的 onMouseMove）
+  offset?: number;     // 鼠标到卡片的垂直间距，默认 12px
+  maxWidth?: number;   // 可选最大宽度，默认 420
+  children: React.ReactNode;
+}
+
+export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
   open,
-  offset = 8,
-  enterDelayMs = 60,
-  leaveDelayMs = 120
+  anchor,
+  offset = 12,
+  maxWidth = 420,
+  children,
 }) => {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const enterTimer = useRef<number | null>(null);
-  const leaveTimer = useRef<number | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
 
-  const isOpen = open ?? internalOpen;
+  // 根据实际尺寸把卡片放到鼠标正下方，并防止越界
+  useLayoutEffect(() => {
+    if (!open || !anchor) return;
 
-  // 计算并更新位置
-  const updatePosition = () => {
-    const el = targetRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const margin = 8;
 
-    const cardWidth = 448; // 28rem ≈ 448px（与 .card 宽度保持一致）
-    const desiredLeft = Math.max(12, Math.min(rect.left + rect.width / 2 - cardWidth / 2, vw - cardWidth - 12));
+    // 先给一个兜底尺寸，随后用真实尺寸再校正
+    let width = Math.min(maxWidth, 420);
+    let height = 160;
 
-    // 尝试显示在目标上方，不够空间就放下面
-    const spaceTop = rect.top;
-    const spaceBottom = vh - rect.bottom;
-    const preferTop = spaceTop > spaceBottom;
+    const el = cardRef.current;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width) width = Math.min(maxWidth, rect.width);
+      if (rect.height) height = rect.height;
+    }
 
-    const top = preferTop ? rect.top - offset : rect.bottom + offset;
+    let left = anchor.x - width / 2; // 水平以鼠标为中心
+    let top = anchor.y + offset;     // 垂直放到鼠标正下方
 
-    setPos({
-      top: Math.max(12, Math.min(top, vh - 12)),
-      left: desiredLeft
-    });
-  };
+    // 夹紧，避免出屏
+    left = Math.max(margin, Math.min(left, vw - width - margin));
+    top = Math.max(margin, Math.min(top, vh - height - margin));
 
-  useLayoutEffect(() => {
-    if (isOpen) updatePosition();
-    // 监听窗口变化，保持跟随
-    const onScrollOrResize = () => isOpen && updatePosition();
-    window.addEventListener("scroll", onScrollOrResize, true);
-    window.addEventListener("resize", onScrollOrResize, true);
-    return () => {
-      window.removeEventListener("scroll", onScrollOrResize, true);
-      window.removeEventListener("resize", onScrollOrResize, true);
-    };
-  }, [isOpen]);
+    setPos({ left, top });
+  }, [open, anchor, offset, maxWidth]);
 
-  // 目标元素 hover 事件
+  // 当窗口尺寸变化时，重新计算一次（避免缩放错位）
   useEffect(() => {
-    const el = targetRef.current;
-    if (!el || open !== undefined) return; // 受控时不绑定
-    const onEnter = () => {
-      if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
-      enterTimer.current = window.setTimeout(() => {
-        setInternalOpen(true);
-        updatePosition();
-      }, enterDelayMs);
+    const onResize = () => {
+      if (!open || !anchor) return;
+      // 触发上面的 useLayoutEffect
+      setPos((p) => ({ ...p }));
     };
-    const onLeave = () => {
-      if (enterTimer.current) window.clearTimeout(enterTimer.current);
-      leaveTimer.current = window.setTimeout(() => setInternalOpen(false), leaveDelayMs);
-    };
-    el.addEventListener("mouseenter", onEnter);
-    el.addEventListener("mouseleave", onLeave);
-    return () => {
-      el.removeEventListener("mouseenter", onEnter);
-      el.removeEventListener("mouseleave", onLeave);
-    };
-  }, [targetRef, open, enterDelayMs, leaveDelayMs]);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [open, anchor]);
 
-  if (!isOpen || !pos) return null;
+  if (!open || !anchor) return null;
 
-  // 通过 inline style 控制定位；样式外观仍由 .card 等类负责
-  return createPortal(
-    <div style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 1000 }}>
-      <SentenceCardComponent info={info} />
-    </div>,
-    document.body
+  return (
+    <div
+      className="hovercard"              // 外层容器：负责 fixed 定位与层级
+      style={{
+        position: "fixed",
+        left: pos.left,
+        top: pos.top,
+        zIndex: 9999,
+        maxWidth,
+      }}
+      aria-hidden={false}
+    >
+      <div ref={cardRef} className="hovercard-inner">
+        {/* 顶部小三角：稍后在 Info.css 里让它 left:50% + translateX(-50%) 水平居中 */}
+        <div className="hovercard-caret" aria-hidden />
+        {children}
+      </div>
+    </div>
   );
 };
+
+export default SentenceHoverCard;
