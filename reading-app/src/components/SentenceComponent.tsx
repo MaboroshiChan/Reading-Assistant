@@ -1,8 +1,10 @@
 // SentenceComponent.tsx
-import React, { useState, type KeyboardEvent, type MouseEvent } from "react";
+import React, { useState, useCallback, type KeyboardEvent, type MouseEvent } from "react";
 import type { Sentence } from "../analysis/structure/Sentence";
 import "./css/SentenceComponent.css";
 import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬浮卡片
+import type { SubSentenceAnalysis, SubUnit } from "../analysis/structure/SubSentence";
+import SubSentenceComponent from "./SubSentenceComponent";
 
 const FREEZE_EVENT = "hovercard:freeze";
 
@@ -30,6 +32,10 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [isHovered, setIsHovered] = useState(false);
     const [isFrozen, setIsFrozen] = useState(false);
     const [globalFrozenId, setGlobalFrozenId] = useState<number | null>(null);
+    const [subSentenceAnalysis, setSubSentenceAnalysis] = useState<SubSentenceAnalysis | null>(null);
+    const [isLoadingSubsentence, setIsLoadingSubsentence] = useState(false);
+    const [subsentenceError, setSubsentenceError] = useState<string | null>(null);
+    const [hoveredSubUnitId, setHoveredSubUnitId] = useState<string | null>(null);
 
     // 新增：记录鼠标坐标（供 HoverCard 使用）
     const [anchor, setAnchor] = useState<Point | null>(null);
@@ -90,6 +96,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (globalFrozenId !== null && globalFrozenId !== sentence.id) return;
         setIsHovered(false);
         onHoverChange?.(sentence.id, false);
+        setHoveredSubUnitId(null);
         if (!isFrozen) setAnchor(null);
     };
 
@@ -102,6 +109,30 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     };
 
     const blocked = globalFrozenId !== null && globalFrozenId !== sentence.id;
+
+    // use for test
+    const handleStartSubsentence = useCallback(async () => {
+        if (subSentenceAnalysis) {
+            setSubSentenceAnalysis(null);
+            setSubsentenceError(null);
+            setHoveredSubUnitId(null);
+            return;
+        }
+        if (isLoadingSubsentence) return;
+        setIsLoadingSubsentence(true);
+        setSubsentenceError(null);
+        setHoveredSubUnitId(null);
+        try {
+            const module = await import("../../examples/subsentence-example.json");
+            const analysis = (module.default ?? module) as SubSentenceAnalysis;
+            setSubSentenceAnalysis(analysis);
+        } catch (error) {
+            setSubsentenceError("Failed to load subsentence example.");
+            console.error(error);
+        } finally {
+            setIsLoadingSubsentence(false);
+        }
+    }, [isLoadingSubsentence, subSentenceAnalysis]);
 
     // ---- [A] Tag 颜色与映射（内联样式，免改 CSS） ----
     type Variant = "blue" | "green" | "yellow" | "gray";
@@ -157,6 +188,27 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const typeVariant = (t: string): Variant => (t.toLowerCase().includes("declarative") ? "green" : "gray");
     const moodVariant = (m: string): Variant => (m.toLowerCase().includes("indicative") ? "yellow" : "gray");
 
+    const hoveredSubUnit = React.useMemo<SubUnit | null>(() => {
+        if (!subSentenceAnalysis || !hoveredSubUnitId) return null;
+
+        const walk = (units: SubUnit[]): SubUnit | null => {
+            for (const unit of units) {
+                if (unit.id === hoveredSubUnitId) return unit;
+                if (unit.children) {
+                    const childHit = walk(unit.children);
+                    if (childHit) return childHit;
+                }
+                if (unit.clause?.units) {
+                    const clauseHit = walk(unit.clause.units);
+                    if (clauseHit) return clauseHit;
+                }
+            }
+            return null;
+        };
+
+        return walk(subSentenceAnalysis.units);
+    }, [hoveredSubUnitId, subSentenceAnalysis]);
+
 
     const className = [
         "sentence",
@@ -181,10 +233,20 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 className={className}
                 data-sentence-id={sentence.id}
             >
-                {sentence.text}
+                {subSentenceAnalysis ? (
+                    <SubSentenceComponent
+                        analysis={subSentenceAnalysis}
+                        focusUnitId={hoveredSubUnitId ?? undefined}
+                        onHoverUnit={setHoveredSubUnitId}
+                    />
+                ) : (
+                    sentence.text
+                )}
             </span>
 
             <SentenceHoverCard
+                onStartSubsentence={handleStartSubsentence}
+                subsentenceActive={Boolean(subSentenceAnalysis)}
                 open={(isHovered || isFrozen) && !(globalFrozenId !== null && globalFrozenId !== sentence.id)}
                 anchor={anchor ?? undefined}
             // 可以按需传额外参数：offset、maxWidth 等
@@ -231,6 +293,58 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     </div>
 
                     <div className="purpose">{sentence.purpose}</div>
+                    {isLoadingSubsentence && (
+                        <div className="subsentence-status">Loading subsentence analysis...</div>
+                    )}
+                    {subsentenceError && (
+                        <div className="subsentence-status subsentence-status--error">{subsentenceError}</div>
+                    )}
+                    {subSentenceAnalysis && !hoveredSubUnit && !isLoadingSubsentence && !subsentenceError && (
+                        <div className="subsentence-status">Hover highlighted segments to inspect units.</div>
+                    )}
+                    {hoveredSubUnit && (
+                        <div className="subsentence-unit-info">
+                            <div className="subsentence-unit-info-title">{hoveredSubUnit.text}</div>
+                            <div className="subsentence-unit-info-grid">
+                                {hoveredSubUnit.role ? (
+                                    <>
+                                        <span className="label">Role</span>
+                                        <span>{hoveredSubUnit.role}</span>
+                                    </>
+                                ) : null}
+                                {hoveredSubUnit.semantics && hoveredSubUnit.semantics !== "none" ? (
+                                    <>
+                                        <span className="label">Semantics</span>
+                                        <span>{hoveredSubUnit.semantics}</span>
+                                    </>
+                                ) : null}
+                                {hoveredSubUnit.semRole && hoveredSubUnit.semRole !== "None" ? (
+                                    <>
+                                        <span className="label">Semantic Role</span>
+                                        <span>{hoveredSubUnit.semRole}</span>
+                                    </>
+                                ) : null}
+                                {hoveredSubUnit.viewHint?.label ? (
+                                    <>
+                                        <span className="label">Label</span>
+                                        <span>{hoveredSubUnit.viewHint.label}</span>
+                                    </>
+                                ) : null}
+                                {hoveredSubUnit.source ? (
+                                    <>
+                                        <span className="label">Source</span>
+                                        <span>{hoveredSubUnit.source}</span>
+                                    </>
+                                ) : null}
+                                {typeof hoveredSubUnit.confidence === "number" ? (
+                                    <>
+                                        <span className="label">Confidence</span>
+                                        <span>{hoveredSubUnit.confidence.toFixed(2)}</span>
+                                    </>
+                                ) : null}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </SentenceHoverCard>
         </>

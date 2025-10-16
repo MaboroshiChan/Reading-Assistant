@@ -46,7 +46,48 @@
   .sentence.hovered {
     background: rgba(255, 160, 180, 0.25);
   }
-  .sentence.clicked {
+.sentence.clicked {
     background: rgba(255, 130, 150, 0.35);
   }
+}
+
+.subsentence-status {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.subsentence-status--error {
+  color: #f87171;
+}
+
+.subsentence-unit-info {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subsentence-unit-info-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.subsentence-unit-info-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.subsentence-unit-info-grid .label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  opacity: 0.7;
+  align-self: center;
 }

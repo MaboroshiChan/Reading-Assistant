@@ -1,0 +1,30 @@
+.subsentence-container {
+  display: inline;
+  white-space: normal;
+}
+
+.subsentence-chip {
+  display: inline;
+  padding: 1px 3px;
+  border-radius: 4px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.subsentence-chip:hover,
+.subsentence-chip--active {
+  background-color: var(--chip-bg, rgba(255, 255, 255, 0.12));
+  color: var(--chip-fg, inherit);
+  box-shadow: 0 0 0 1px var(--chip-dot, rgba(255, 255, 255, 0.4));
+}
+
+.subsentence-chip--interactive {
+  cursor: pointer;
+}
+
+.subsentence-space {
+  display: inline;
+  white-space: pre;
+}

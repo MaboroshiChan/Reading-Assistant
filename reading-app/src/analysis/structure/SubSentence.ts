@@ -29,8 +29,6 @@ export type SemanticRoleName =
 export interface SyntaxNode {
   id: string;
   label: string;      // 如 "S" | "VP" | "NP" | "PP" | "CP"
-  start: number;      // 在原句 text 中的起始 offset（包含）
-  end: number;        // 结束 offset（不包含）
   children?: SyntaxNode[];
 }
 
@@ -43,8 +41,6 @@ export interface SubUnit {
   semRole?: SemanticRoleName;    // 语义参与者（Agent/Patient 等）
 
   /** 与原句的位置信息（可选但强烈建议，有利于“原文切片高亮”） */
-  start?: number;
-  end?: number;
 
   /** 递归：如果这是一个从句壳（role === "clause" 或 semantics 指示），则承载完整从句分析 */
   clause?: SubSentenceAnalysis;
@@ -210,3 +206,4 @@ export function isSubSentenceAnalysis(x: unknown): x is SubSentenceAnalysis {
          // eslint-disable-next-line @typescript-eslint/no-explicit-any
          typeof (x as any).text === "string" && Array.isArray((x as any).units);
 }
+

@@ -12,6 +12,7 @@ interface SentenceHoverCardProps {
   children: React.ReactNode;
   onStartSubsentence?: () => void; // 点击按钮时触发，交给外层处理
   showSubsentenceButton?: boolean; // 是否显示按钮，默认 true
+  subsentenceActive?: boolean;     // 是否已显示子句分析，用于切换按钮文案
 }
 
 
@@ -23,6 +24,7 @@ export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
   children,
   onStartSubsentence,
   showSubsentenceButton = true,
+  subsentenceActive = false,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
@@ -87,8 +89,11 @@ export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
         {children}
         {showSubsentenceButton && ( /* ← 新增开始 */
           <div className="hovercard-footer">
-            <button type="button" onClick={(e)=>{ e.stopPropagation(); onStartSubsentence?.(); }} >
-              启动子结构分析
+            <button
+              type="button"
+              onClick={(e)=>{ e.stopPropagation(); onStartSubsentence?.(); }}
+            >
+              {subsentenceActive ? "关闭子结构分析" : "启动子结构分析"}
             </button>
           </div>
         )}  
