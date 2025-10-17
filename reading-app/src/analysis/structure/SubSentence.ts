@@ -124,10 +124,10 @@ export interface SubSentenceAnalysis {
 
 /** —— 推荐的默认颜色映射（与黑底 UI 协调） —— */
 export const DefaultVariantPalette: Record<ColorVariant, { bg: string; fg: string; dot: string }> = {
-  blue:   { bg: "rgba(64,128,255,0.18)",  fg: "#a8c8ff", dot: "#527fff" },
-  green:  { bg: "rgba(64,192,128,0.18)",  fg: "#b2f2bb", dot: "#4ade80" },
-  yellow: { bg: "rgba(255,220,80,0.18)",  fg: "#fde68a", dot: "#facc15" },
-  gray:   { bg: "rgba(255,255,255,0.12)", fg: "#e5e5e7", dot: "rgba(255,255,255,0.7)" },
+  blue:   { bg: "rgba(123,168,255,0.24)", fg: "#dde6ff", dot: "#84a9ff" },
+  green:  { bg: "rgba(103,232,185,0.22)", fg: "#d2f5ea", dot: "#34d399" },
+  yellow: { bg: "rgba(253,224,138,0.24)", fg: "#fef3c7", dot: "#facc15" },
+  gray:   { bg: "rgba(226,232,240,0.18)", fg: "#e2e8f0", dot: "#94a3b8" },
 };
 
 export const DefaultLegend: Required<NonNullable<SubSentenceAnalysis["legend"]>> = {
@@ -206,4 +206,3 @@ export function isSubSentenceAnalysis(x: unknown): x is SubSentenceAnalysis {
          // eslint-disable-next-line @typescript-eslint/no-explicit-any
          typeof (x as any).text === "string" && Array.isArray((x as any).units);
 }
-

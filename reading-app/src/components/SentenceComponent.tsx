@@ -140,26 +140,26 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const styleFor = (v: Variant) => {
         switch (v) {
             case "blue":
-                return { background: "rgba(64,128,255,0.18)", color: "#a8c8ff" };
+                return { background: "rgba(123,168,255,0.24)", color: "#dde6ff" };
             case "green":
-                return { background: "rgba(64,192,128,0.18)", color: "#b2f2bb" };
+                return { background: "rgba(103,232,185,0.22)", color: "#d2f5ea" };
             case "yellow":
-                return { background: "rgba(255,220,80,0.18)", color: "#fde68a" };
+                return { background: "rgba(253,224,138,0.24)", color: "#fef3c7" };
             default:
-                return { background: "rgba(255,255,255,0.12)", color: "#e5e5e7" };
+                return { background: "rgba(226,232,240,0.18)", color: "#e2e8f0" };
         }
     };
 
     const dotColor = (v: Variant) => {
         switch (v) {
             case "blue":
-                return "#527fff";
+                return "#84a9ff";
             case "green":
-                return "#4ade80";
+                return "#34d399";
             case "yellow":
                 return "#facc15";
             default:
-                return "rgba(255,255,255,0.7)";
+                return "#94a3b8";
         }
     };
 

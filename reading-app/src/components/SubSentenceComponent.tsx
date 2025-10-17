@@ -43,6 +43,7 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                     "--chip-bg": colors.bg,
                     "--chip-fg": colors.fg,
                     "--chip-dot": colors.dot,
+                    "--chip-border": colors.dot,
                 } as CSSProperties;
                 const className = [
                     "subsentence-chip",

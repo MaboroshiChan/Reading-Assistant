@@ -3,7 +3,8 @@
   margin: 1px;
   padding: 2px 4px;
   border-radius: 6px;
-  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+  border: 1px solid transparent;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 /* 默认状态 */
@@ -13,15 +14,17 @@
 
 /* hover 效果：淡淡的彩色雾感 */
 .sentence.hovered {
-  background-color: rgba(255, 214, 222, 0.5); /* 柔粉色半透明 */
-  box-shadow: 0 0 0 3px rgba(255, 214, 222, 0.4);
+  background-color: rgba(191, 196, 253, 0.45);
+  box-shadow: 0 0 0 3px rgba(191, 196, 253, 0.28);
+  border-color: rgba(191, 196, 253, 0.4);
 }
 
 /* 点击状态：略深的高亮，有阅读感 */
 .sentence.clicked,
 .sentence.component.clicked {
-  background-color: rgba(255, 180, 190, 0.7);
-  box-shadow: 0 0 0 4px rgba(255, 160, 170, 0.3);
+  background-color: rgba(165, 180, 252, 0.55);
+  box-shadow: 0 0 0 4px rgba(165, 180, 252, 0.3);
+  border-color: rgba(99, 102, 241, 0.45);
 }
 
 /* 让文字更平滑 */
@@ -35,8 +38,8 @@
   .sentence.hovered {
     background: linear-gradient(
       90deg,
-      rgba(255, 220, 230, 0.6),
-      rgba(255, 200, 210, 0.5)
+      rgba(191, 196, 253, 0.58),
+      rgba(165, 180, 252, 0.5)
     );
   }
 }
@@ -44,10 +47,15 @@
 /* 暗色模式微调对比 */
 @media (prefers-color-scheme: dark) {
   .sentence.hovered {
-    background: rgba(255, 160, 180, 0.25);
+    background: rgba(99, 102, 241, 0.32);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.24);
+    border-color: rgba(129, 140, 248, 0.4);
   }
-.sentence.clicked {
-    background: rgba(255, 130, 150, 0.35);
+
+  .sentence.clicked {
+    background: rgba(79, 70, 229, 0.38);
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.32);
+    border-color: rgba(99, 102, 241, 0.55);
   }
 }
 
