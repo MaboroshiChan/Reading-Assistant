@@ -1,0 +1,13 @@
+{
+  "sentenceId": "10",
+  "text": "But once they contemplated the more challenging scenario, their scores went way down.",
+  "units": [
+    { "id": "u1", "text": "But", "role": "connector", "semantics": "contrast" },
+    { "id": "u2", "text": "once they contemplated the more challenging scenario", "role": "modifier", "semantics": "condition" },
+    { "id": "u3", "text": "their scores", "role": "subject" },
+    { "id": "u4", "text": "went way down", "role": "predicate", "semantics": "result" }
+  ],
+  "version": 1,
+  "confidence": 0.72
+}
+

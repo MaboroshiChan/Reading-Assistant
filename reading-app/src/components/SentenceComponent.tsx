@@ -12,6 +12,7 @@ interface SentenceComponentProps {
     sentence: Sentence;
     onToggleFocus?: (id: number, isFocused: boolean) => void;
     onHoverChange?: (id: number, isHovered: boolean) => void;
+    interactionEnabled?: boolean;
 }
 
 // 鼠标坐标类型
@@ -21,6 +22,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     sentence,
     onToggleFocus,
     onHoverChange,
+    interactionEnabled = true,
 }) => {
     /**
      * 逻辑：
@@ -51,6 +53,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
 
     const handleClick = (e: MouseEvent<HTMLSpanElement>) => {
+        if (!interactionEnabled) return;
         e.stopPropagation();
         setIsClicked((prev) => {
             const next = !prev;
@@ -74,6 +77,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     };
 
     const handleKeyDown = (e: KeyboardEvent<HTMLSpanElement>) => {
+        if (!interactionEnabled) return;
         if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             setIsClicked((prev) => {
@@ -85,6 +89,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     };
 
     const handleMouseEnter = () => {
+        if (!interactionEnabled) return;
         // enter
         if (globalFrozenId !== null && globalFrozenId !== sentence.id) return;
         setIsHovered(true);
@@ -93,6 +98,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     const handleMouseLeave = () => {
         if (!isFrozen) setAnchor(null);
+        if (!interactionEnabled) return;
         if (globalFrozenId !== null && globalFrozenId !== sentence.id) return;
         setIsHovered(false);
         onHoverChange?.(sentence.id, false);
@@ -103,6 +109,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     // 新增：持续捕获鼠标坐标
     const handleMouseMove = (e: MouseEvent<HTMLSpanElement>) => {
         // move
+        if (!interactionEnabled) return;
         if (isFrozen || (globalFrozenId !== null && globalFrozenId !== sentence.id)) return;
         setAnchor({ x: e.clientX, y: e.clientY });
 
@@ -110,8 +117,25 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     const blocked = globalFrozenId !== null && globalFrozenId !== sentence.id;
 
+    React.useEffect(() => {
+        if (interactionEnabled) return;
+        setIsHovered(false);
+        setAnchor(null);
+        setHoveredSubUnitId(null);
+        setSubSentenceAnalysis(null);
+        setSubsentenceError(null);
+        setIsLoadingSubsentence(false);
+        setIsClicked(false);
+        setIsFrozen(prev => {
+            if (prev) {
+                window.dispatchEvent(new CustomEvent<number | null>(FREEZE_EVENT, { detail: null }));
+            }
+            return false;
+        });
+    }, [interactionEnabled]);
+
     // use for test
-    const handleStartSubsentence = useCallback(async () => {
+    const handleStartSubsentence = useCallback(async (analysisPath?: string) => {
         if (subSentenceAnalysis) {
             setSubSentenceAnalysis(null);
             setSubsentenceError(null);
@@ -123,11 +147,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         setSubsentenceError(null);
         setHoveredSubUnitId(null);
         try {
-            const module = await import("../../examples/subsentence-example.json");
+            const targetPath = analysisPath ?? "../../examples/subsentence-example.json";
+            const module = await import(/* @vite-ignore */ targetPath);
             const analysis = (module.default ?? module) as SubSentenceAnalysis;
             setSubSentenceAnalysis(analysis);
         } catch (error) {
-            setSubsentenceError("Failed to load subsentence example.");
+            setSubsentenceError("Failed to load subsentence analysis.");
             console.error(error);
         } finally {
             setIsLoadingSubsentence(false);
@@ -213,17 +238,19 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const className = [
         "sentence",
         "component",
-        isHovered && !blocked ? "hovered" : "",
-        isClicked ? "clicked" : "",
+        interactionEnabled && isHovered && !blocked ? "hovered" : "",
+        interactionEnabled && isClicked ? "clicked" : "",
     ]
         .filter(Boolean)
         .join(" ");
 
+    const sentenceAnalysisPath = `../../examples/sentences/${sentence.id}.json`;
+
     return (
         <>
             <span
-                role="button"
-                tabIndex={0}
+                role={interactionEnabled ? "button" : undefined}
+                tabIndex={interactionEnabled ? 0 : undefined}
                 aria-pressed={isClicked}
                 onClick={handleClick}
                 onKeyDown={handleKeyDown}
@@ -245,10 +272,14 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             </span>
 
             <SentenceHoverCard
-                onStartSubsentence={handleStartSubsentence}
+                onStartSubsentence={() => handleStartSubsentence(sentenceAnalysisPath)}
                 subsentenceActive={Boolean(subSentenceAnalysis)}
-                open={(isHovered || isFrozen) && !(globalFrozenId !== null && globalFrozenId !== sentence.id)}
-                anchor={anchor ?? undefined}
+                open={
+                    interactionEnabled &&
+                    (isHovered || isFrozen) &&
+                    !(globalFrozenId !== null && globalFrozenId !== sentence.id)
+                }
+                anchor={interactionEnabled ? anchor ?? undefined : undefined}
             // 可以按需传额外参数：offset、maxWidth 等
             >
                 {/* 先放一些可见元数据，等你确认再细化 */}

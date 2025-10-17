@@ -1,0 +1,14 @@
+{
+  "sentenceId": "8",
+  "text": "We divided the participants by household income and found that the rich people in the mall did equally well on the cognitive tests, whether they were thinking of the challenging or the less challenging scenario related to the car.",
+  "units": [
+    { "id": "u1", "text": "We", "role": "subject" },
+    { "id": "u2", "text": "divided the participants by household income", "role": "predicate" },
+    { "id": "u3", "text": "and found", "role": "connector", "semantics": "reporting" },
+    { "id": "u4", "text": "that the rich people in the mall did equally well on the cognitive tests", "role": "clause", "semantics": "reporting" },
+    { "id": "u5", "text": "whether they were thinking of the challenging or the less challenging scenario related to the car", "role": "modifier", "semantics": "condition" }
+  ],
+  "version": 1,
+  "confidence": 0.7
+}
+

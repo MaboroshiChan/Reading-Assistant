@@ -1,0 +1,15 @@
+{
+  "sentenceId": "15",
+  "text": "It's the same person, same education and values, but they, too, scored the equivalent of 10 IQ points less before harvest compared to after harvest.",
+  "units": [
+    { "id": "u1", "text": "It's the same person, same education and values", "role": "comment", "semantics": "emphasis" },
+    { "id": "u2", "text": "but", "role": "connector", "semantics": "contrast" },
+    { "id": "u3", "text": "they, too", "role": "subject" },
+    { "id": "u4", "text": "scored the equivalent of 10 IQ points less", "role": "predicate", "semantics": "result" },
+    { "id": "u5", "text": "before harvest", "role": "modifier", "semantics": "time" },
+    { "id": "u6", "text": "compared to after harvest", "role": "modifier", "semantics": "contrast" }
+  ],
+  "version": 1,
+  "confidence": 0.7
+}
+

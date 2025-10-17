@@ -10,7 +10,7 @@ interface SentenceHoverCardProps {
   offset?: number;     // 鼠标到卡片的垂直间距，默认 12px
   maxWidth?: number;   // 可选最大宽度，默认 420
   children: React.ReactNode;
-  onStartSubsentence?: () => void; // 点击按钮时触发，交给外层处理
+  onStartSubsentence?: (path?: string) => void; // 点击按钮时触发，交给外层处理
   showSubsentenceButton?: boolean; // 是否显示按钮，默认 true
   subsentenceActive?: boolean;     // 是否已显示子句分析，用于切换按钮文案
 }

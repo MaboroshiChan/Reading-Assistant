@@ -1,0 +1,15 @@
+{
+  "sentenceId": "4",
+  "text": "It seemed to have a logic of its own — this need to focus on the day to day and not having the capacity to adjust over the long run.",
+  "units": [
+    { "id": "u1", "text": "It", "role": "subject", "semantics": "topic" },
+    { "id": "u2", "text": "seemed", "role": "predicate", "semantics": "modality" },
+    { "id": "u3", "text": "to have a logic of its own", "role": "complement", "semantics": "definition" },
+    { "id": "u4", "text": "—", "role": "connector", "semantics": "elaboration" },
+    { "id": "u5", "text": "this need to focus on the day to day", "role": "comment", "semantics": "definition" },
+    { "id": "u6", "text": "and not having the capacity to adjust over the long run", "role": "comment", "semantics": "contrast" }
+  ],
+  "version": 1,
+  "confidence": 0.66
+}
+

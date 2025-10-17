@@ -1,0 +1,15 @@
+{
+  "sentenceId": "6",
+  "text": "First, together with Jiaying Zhao, who was then a graduate student, we went to a mall in New Jersey where we asked people to complete tests measuring cognitive control and fluid intelligence, a component of IQ.",
+  "units": [
+    { "id": "u1", "text": "First", "role": "modifier", "semantics": "time" },
+    { "id": "u2", "text": "together with Jiaying Zhao", "role": "modifier", "semantics": "attribution" },
+    { "id": "u3", "text": "who was then a graduate student", "role": "clause", "semantics": "definition" },
+    { "id": "u4", "text": "we", "role": "subject" },
+    { "id": "u5", "text": "went to a mall in New Jersey", "role": "predicate", "semantics": "location" },
+    { "id": "u6", "text": "where we asked people to complete tests measuring cognitive control and fluid intelligence, a component of IQ", "role": "clause", "semantics": "reporting" }
+  ],
+  "version": 1,
+  "confidence": 0.68
+}
+

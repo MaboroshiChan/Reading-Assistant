@@ -2,23 +2,18 @@ import React, { useState, type ReactNode, type CSSProperties } from 'react';
 import './css/ArticleSkeleton.css';
 import './css/Highlighted.css';
 import type { Paragraph } from '../analysis/structure/Paragraph';
-import type { Sentence } from '../analysis/structure/Sentence';
 import { ParagraphComponent } from './ParagraphComponent';
-import exampleSentences from '../../examples/example6.json'
+import exampleArticle from '../../examples/example-article.json';
 
 const ExampleParagraph: React.FC = () => {
 
-  const paragraph: Paragraph = {
-    id: '1',
-    sentences: exampleSentences as Sentence[],
-    centralIdea: "Conversation structure and function"
-  };
+  const article: Paragraph[] = exampleArticle as Paragraph[];
 
   return (
     <div>
-      <ParagraphComponent
-        paragraph={paragraph}
-      />
+      {article.map(p => (
+        <ParagraphComponent paragraph={p}/>
+      ))}
     </div>
   );
 };

@@ -1,7 +1,0 @@
-{
-    "id": "n1",
-    "label": ["structure-subject", "semantic-patient"],
-    "text": "Conversation",
-    "children": [],
-    "linkedBy": ["n2-1", "n2-3"] 
-}

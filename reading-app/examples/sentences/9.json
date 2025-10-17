@@ -1,0 +1,13 @@
+{
+  "sentenceId": "9",
+  "text": "The poorer people in the mall were equally capable cognitively and did just as well on fluid intelligence as the rich when they were thinking about the manageable scenario.",
+  "units": [
+    { "id": "u1", "text": "The poorer people in the mall", "role": "subject" },
+    { "id": "u2", "text": "were equally capable cognitively", "role": "predicate", "semantics": "evaluation" },
+    { "id": "u3", "text": "and did just as well on fluid intelligence as the rich", "role": "predicate", "semantics": "comparison" },
+    { "id": "u4", "text": "when they were thinking about the manageable scenario", "role": "modifier", "semantics": "condition" }
+  ],
+  "version": 1,
+  "confidence": 0.7
+}
+
