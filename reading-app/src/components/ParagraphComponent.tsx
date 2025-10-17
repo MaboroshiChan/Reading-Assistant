@@ -1,53 +1,62 @@
-import React, { useState } from "react";
+import React, { useCallback, useState, type MouseEvent } from "react";
 import type { Paragraph } from "../analysis/structure/Paragraph";
-import { SentenceComponent } from "./SentenceComponent";
-import './css/SemanticParagraph.css'
-import { Set } from "immutable";
+import "./css/SemanticParagraph.css";
+import SentenceComponent from "./SentenceComponent";
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
 }
 
 export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isClicked, setIsClicked] = useState(false);
 
-  const [group, setGroup] = useState<Set<string>>(Set());
+  const handleMouseEnter = useCallback((_event: MouseEvent<HTMLDivElement>) => {
+    setIsHovered(true);
+  }, []);
 
-  const getGroup = (grp: string[]) => { 
-      setGroup(group => group.concat(grp))
-  }
+  const handleMouseMove = useCallback((_event: MouseEvent<HTMLDivElement>) => {
+    // no-op for now; reserved for future pointer sync
+  }, []);
 
-  const remove = (grp: string[]) => {
-    setGroup(group => group.filter(x=>!grp.includes(x)))
-  }
+  const handleMouseLeave = useCallback(() => {
+    setIsHovered(false);
+  }, []);
 
-  const [highLightId, setHighlightId] = useState<string | null>(null);
+  const handleClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    setIsClicked((prev) => {
+      const next = !prev;
+      if (!next) {
+        setIsHovered(false);
+      }
+      return next;
+    });
+  }, []);
 
-  const select = (id: string) => {
-    if(!highLightId) {
-      return true;
-    }
-    return highLightId === id;
-  }
+  const className = [
+    "paragraph",
+    "component",
+    isHovered ? "hovered" : "",
+    isClicked ? "clicked" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  const sendClickedSentence = (id: string | null) => {
-    setHighlightId(id);
-  }
-
-  console.log(`group = ${group}`);
-  
   return (
-    <div className="paragraph" data-paragraph-id={paragraph.id}>
+    <div
+      className={className}
+      data-paragraph-id={paragraph.id}
+      onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onClick={handleClick}
+    >
       {paragraph.sentences.map((sentence) => (
         <SentenceComponent
-          getGroup={getGroup}
-          remove={remove}
-          highlight={group.toArray()}
-          highlightable={select(sentence.semanticTree.id)} // select the clicked sentence
-          sendClicked={sendClickedSentence}
           key={sentence.id}
-          node={sentence.semanticTree}
-          increase={()=>{}}
-          decrease={()=>{}}
+          sentence={sentence}
+          interactionEnabled={isClicked}
         />
       ))}
     </div>

@@ -1,0 +1,17 @@
+{
+  "sentenceId": "3",
+  "text": "Then they get up the next morning and take on this incredibly high interest loan again, every day for an average of about 10 years, and if they saved just a little more or borrowed a little less they would soon be debt-free and could double their income.",
+  "units": [
+    { "id": "u1", "text": "Then", "role": "modifier", "semantics": "time" },
+    { "id": "u2", "text": "they", "role": "subject" },
+    { "id": "u3", "text": "get up the next morning", "role": "predicate", "semantics": "time" },
+    { "id": "u4", "text": "and take on this incredibly high interest loan again", "role": "predicate" },
+    { "id": "u5", "text": "every day for an average of about 10 years", "role": "modifier", "semantics": "time" },
+    { "id": "u6", "text": "and if they saved just a little more or borrowed a little less", "role": "connector", "semantics": "condition" },
+    { "id": "u7", "text": "they would soon be debt-free", "role": "clause", "semantics": "result" },
+    { "id": "u8", "text": "and could double their income", "role": "clause", "semantics": "result" }
+  ],
+  "version": 1,
+  "confidence": 0.68
+}
+

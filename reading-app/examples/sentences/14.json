@@ -1,0 +1,14 @@
+{
+  "sentenceId": "14",
+  "text": "These are people who are basically rich after the harvest but poor before, so we conducted these cognitive tests on the same farmers, two months before and two months after harvest.",
+  "units": [
+    { "id": "u1", "text": "These are people", "role": "subject" },
+    { "id": "u2", "text": "who are basically rich after the harvest but poor before", "role": "clause", "semantics": "contrast" },
+    { "id": "u3", "text": "so", "role": "connector", "semantics": "cause" },
+    { "id": "u4", "text": "we conducted these cognitive tests on the same farmers", "role": "predicate", "semantics": "reporting" },
+    { "id": "u5", "text": "two months before and two months after harvest", "role": "modifier", "semantics": "time" }
+  ],
+  "version": 1,
+  "confidence": 0.7
+}
+

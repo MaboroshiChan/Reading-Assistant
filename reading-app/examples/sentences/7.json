@@ -1,0 +1,15 @@
+{
+  "sentenceId": "7",
+  "text": "We had them do these things while they were contemplating a financial scenario — something that's manageable, requiring $150 to fix a car that broke down, or more demanding, requiring $1,500 in car-related expenses.",
+  "units": [
+    { "id": "u1", "text": "We", "role": "subject" },
+    { "id": "u2", "text": "had them do these things", "role": "predicate" },
+    { "id": "u3", "text": "while they were contemplating a financial scenario", "role": "modifier", "semantics": "time" },
+    { "id": "u4", "text": "—", "role": "connector", "semantics": "example" },
+    { "id": "u5", "text": "something that's manageable, requiring $150 to fix a car that broke down", "role": "clause", "semantics": "example" },
+    { "id": "u6", "text": "or more demanding, requiring $1,500 in car-related expenses", "role": "clause", "semantics": "contrast" }
+  ],
+  "version": 1,
+  "confidence": 0.68
+}
+

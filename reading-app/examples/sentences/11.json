@@ -1,0 +1,14 @@
+{
+  "sentenceId": "11",
+  "text": "Simply being preoccupied with this demanding financial challenge makes them perform worse.",
+  "units": [
+    { "id": "u1", "text": "Simply", "role": "modifier", "semantics": "emphasis" },
+    { "id": "u2", "text": "being preoccupied with this demanding financial challenge", "role": "subject", "semantics": "topic" },
+    { "id": "u3", "text": "makes", "role": "predicate" },
+    { "id": "u4", "text": "them", "role": "object" },
+    { "id": "u5", "text": "perform worse", "role": "complement", "semantics": "evaluation" }
+  ],
+  "version": 1,
+  "confidence": 0.72
+}
+

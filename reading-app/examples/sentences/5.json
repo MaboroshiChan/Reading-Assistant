@@ -1,0 +1,14 @@
+{
+  "sentenceId": "5",
+  "text": "We then completed a battery of studies where we saw that manipulating scarcity has an enormous impact on people's cognitive capacity.",
+  "units": [
+    { "id": "u1", "text": "We", "role": "subject" },
+    { "id": "u2", "text": "then completed", "role": "predicate", "semantics": "time" },
+    { "id": "u3", "text": "a battery of studies", "role": "object" },
+    { "id": "u4", "text": "where", "role": "connector", "semantics": "reporting" },
+    { "id": "u5", "text": "we saw that manipulating scarcity has an enormous impact on people's cognitive capacity", "role": "clause", "semantics": "reporting" }
+  ],
+  "version": 1,
+  "confidence": 0.7
+}
+

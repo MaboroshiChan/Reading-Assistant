@@ -1,0 +1,36 @@
+.subsentence-container {
+  display: inline;
+  white-space: normal;
+}
+
+.subsentence-chip {
+  display: inline;
+  padding: 1px 3px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.subsentence-chip:hover {
+  background-color: var(--chip-bg, rgba(255, 255, 255, 0.12));
+  border-color: var(--chip-border, rgba(148, 163, 184, 0.4));
+  box-shadow: 0 0 0 1px var(--chip-border, rgba(148, 163, 184, 0.4));
+}
+
+.subsentence-chip--active {
+  background-color: var(--chip-bg, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 0 0 1px var(--chip-dot, rgba(255, 255, 255, 0.4));
+  border-color: var(--chip-border, var(--chip-dot, rgba(255, 255, 255, 0.4)));
+}
+
+.subsentence-chip--interactive {
+  cursor: pointer;
+}
+
+.subsentence-space {
+  display: inline;
+  white-space: pre;
+}

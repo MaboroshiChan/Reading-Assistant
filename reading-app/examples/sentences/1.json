@@ -1,0 +1,14 @@
+{
+  "sentenceId": "1",
+  "text": "We started with a series of observations with fruit and flower vendors in a giant market outside Chennai, India.",
+  "units": [
+    { "id": "u1", "text": "We", "role": "subject", "semantics": "topic" },
+    { "id": "u2", "text": "started", "role": "predicate" },
+    { "id": "u3", "text": "with a series of observations", "role": "modifier", "semantics": "comment" },
+    { "id": "u4", "text": "with fruit and flower vendors", "role": "modifier", "semantics": "comment" },
+    { "id": "u5", "text": "in a giant market outside Chennai, India", "role": "modifier", "semantics": "location" }
+  ],
+  "version": 1,
+  "confidence": 0.75
+}
+

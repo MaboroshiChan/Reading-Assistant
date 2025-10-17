@@ -1,11 +1,14 @@
 import './App.css'
 import { ExampleArticle } from './components/ArticleSkeleton';
+// import {SentenceCardComponent} from './components/InfoComponent';
 
 function App() {
-  
-  /** */
-  return (
-    <ExampleArticle />
+
+
+  return (  
+   <div className="App">
+      <ExampleArticle />
+    </div>
   )
 }
 

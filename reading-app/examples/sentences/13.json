@@ -1,0 +1,14 @@
+{
+  "sentenceId": "13",
+  "text": "So then we went to India and studied sugar cane farmers, who earn the bulk of their income once a year after they harvest, and then have to make sure their funds keep them going until the following harvest.",
+  "units": [
+    { "id": "u1", "text": "So then", "role": "modifier", "semantics": "transition" },
+    { "id": "u2", "text": "we", "role": "subject" },
+    { "id": "u3", "text": "went to India and studied sugar cane farmers", "role": "predicate", "semantics": "reporting" },
+    { "id": "u4", "text": "who earn the bulk of their income once a year after they harvest", "role": "clause", "semantics": "definition" },
+    { "id": "u5", "text": "and then have to make sure their funds keep them going until the following harvest", "role": "clause", "semantics": "purpose" }
+  ],
+  "version": 1,
+  "confidence": 0.7
+}
+

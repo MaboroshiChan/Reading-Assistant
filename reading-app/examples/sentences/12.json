@@ -1,0 +1,17 @@
+{
+  "sentenceId": "12",
+  "text": "Obviously, in that experiment, we controlled for everything we could, but at the end of the day, these are rich vs. poor and you could say that they differ in things like health and education.",
+  "units": [
+    { "id": "u1", "text": "Obviously", "role": "modifier", "semantics": "modality" },
+    { "id": "u2", "text": "in that experiment", "role": "modifier", "semantics": "time" },
+    { "id": "u3", "text": "we", "role": "subject" },
+    { "id": "u4", "text": "controlled for everything we could", "role": "predicate" },
+    { "id": "u5", "text": "but", "role": "connector", "semantics": "contrast" },
+    { "id": "u6", "text": "at the end of the day", "role": "modifier", "semantics": "time" },
+    { "id": "u7", "text": "these are rich vs. poor", "role": "clause", "semantics": "definition" },
+    { "id": "u8", "text": "and you could say that they differ in things like health and education", "role": "clause", "semantics": "reporting" }
+  ],
+  "version": 1,
+  "confidence": 0.65
+}
+

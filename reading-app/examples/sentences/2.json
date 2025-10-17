@@ -1,0 +1,19 @@
+{
+  "sentenceId": "2",
+  "text": "No one can call these women lazy or myopic — they work extremely hard and plan their days very carefully, spending from early morning until evening buying flowers or mangoes for 1,000 rupees, selling them for 1,100 rupees and then giving back to the supplier 1,050 rupees.",
+  "units": [
+    { "id": "u1", "text": "No one", "role": "subject" },
+    { "id": "u2", "text": "can call", "role": "predicate" },
+    { "id": "u3", "text": "these women lazy or myopic", "role": "object", "semantics": "evaluation" },
+    { "id": "u4", "text": "—", "role": "connector", "semantics": "contrast" },
+    { "id": "u5", "text": "they", "role": "subject" },
+    { "id": "u6", "text": "work extremely hard", "role": "predicate", "semantics": "emphasis" },
+    { "id": "u7", "text": "and plan their days very carefully", "role": "predicate", "semantics": "expansion" },
+    { "id": "u8", "text": "spending from early morning until evening buying flowers or mangoes for 1,000 rupees", "role": "modifier", "semantics": "time" },
+    { "id": "u9", "text": "selling them for 1,100 rupees", "role": "modifier", "semantics": "result" },
+    { "id": "u10", "text": "and then giving back to the supplier 1,050 rupees", "role": "modifier", "semantics": "result" }
+  ],
+  "version": 1,
+  "confidence": 0.7
+}
+
