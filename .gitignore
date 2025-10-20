@@ -4,3 +4,4 @@ node_modules/
 # macOS
 .DS_Store
 /.VSCodeCounter
+reading-app-server/.env
