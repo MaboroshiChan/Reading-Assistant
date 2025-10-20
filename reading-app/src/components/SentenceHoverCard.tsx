@@ -83,7 +83,7 @@ export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
       }}
       aria-hidden={false}
     >
-      <div ref={cardRef} className="hovercard-inner">
+      <div ref={cardRef} className="hovercard-inner" style={{ maxWidth }}>
         {/* 顶部小三角：稍后在 Info.css 里让它 left:50% + translateX(-50%) 水平居中 */}
         <div className="hovercard-caret" aria-hidden />
         {children}
