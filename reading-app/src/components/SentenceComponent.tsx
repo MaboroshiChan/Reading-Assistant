@@ -297,8 +297,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             </span>
 
             <SentenceHoverCard
-                onStartSubsentence={() => handleStartSubsentence(sentenceAnalysisPath)}
-                subsentenceActive={Boolean(subSentenceAnalysis)}
+                onStartSubSentence={() => handleStartSubsentence(sentenceAnalysisPath)}
+                subSentenceActive={Boolean(subSentenceAnalysis)}
                 open={
                     interactionEnabled &&
                     (isHovered || isFrozen) &&
