@@ -35,6 +35,10 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [isFrozen, setIsFrozen] = useState(false);
     const [globalFrozenId, setGlobalFrozenId] = useState<number | null>(null);
     const [subSentenceAnalysis, setSubSentenceAnalysis] = useState<SubSentenceAnalysis | null>(null);
+    const [lastSubSentenceAnalysis, setLastSubSentenceAnalysis] = useState<SubSentenceAnalysis | null>(null);
+    const [showSubUI, setShowSubUI] = useState(false);
+    const [closingSubUI, setClosingSubUI] = useState(false);
+    const closeTimerRef = React.useRef<number | null>(null);
     const [isLoadingSubsentence, setIsLoadingSubsentence] = useState(false);
     const [subsentenceError, setSubsentenceError] = useState<string | null>(null);
     const [hoveredSubUnitId, setHoveredSubUnitId] = useState<string | null>(null);
@@ -246,6 +250,35 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     const sentenceAnalysisPath = `../../examples/sentences/${sentence.id}.json`;
 
+    // Animate mount/unmount of SubSentenceComponent inside hover card
+    React.useEffect(() => {
+        // Clear any pending timer when state changes
+        if (closeTimerRef.current) {
+            window.clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+        }
+        if (subSentenceAnalysis) {
+            setLastSubSentenceAnalysis(subSentenceAnalysis);
+            setShowSubUI(true);
+            setClosingSubUI(false);
+        } else if (showSubUI) {
+            setClosingSubUI(true);
+            closeTimerRef.current = window.setTimeout(() => {
+                setShowSubUI(false);
+                setClosingSubUI(false);
+                setLastSubSentenceAnalysis(null);
+                closeTimerRef.current = null;
+            }, 260); // keep in sync with CSS transition duration
+        }
+        // Cleanup on unmount
+        return () => {
+            if (closeTimerRef.current) {
+                window.clearTimeout(closeTimerRef.current);
+                closeTimerRef.current = null;
+            }
+        };
+    }, [subSentenceAnalysis, showSubUI]);
+
     return (
         <>
             <span
@@ -260,15 +293,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 className={className}
                 data-sentence-id={sentence.id}
             >
-                {subSentenceAnalysis ? (
-                    <SubSentenceComponent
-                        analysis={subSentenceAnalysis}
-                        focusUnitId={hoveredSubUnitId ?? undefined}
-                        onHoverUnit={setHoveredSubUnitId}
-                    />
-                ) : (
-                    sentence.text
-                )}
+                {sentence.text}
             </span>
 
             <SentenceHoverCard
@@ -280,9 +305,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     !(globalFrozenId !== null && globalFrozenId !== sentence.id)
                 }
                 anchor={interactionEnabled ? anchor ?? undefined : undefined}
+                maxWidth={showSubUI ? 820 : 520}
             // 可以按需传额外参数：offset、maxWidth 等
             >
-                {/* 先放一些可见元数据，等你确认再细化 */}
                 <div className="hovercard-content">
                     <div className="tags">
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
@@ -324,6 +349,17 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     </div>
 
                     <div className="purpose">{sentence.purpose}</div>
+                    {showSubUI ? (
+                        <div className={`subsentence-wrapper${closingSubUI ? " is-closing" : ""}`}>
+                            {(subSentenceAnalysis ?? lastSubSentenceAnalysis) ? (
+                                <SubSentenceComponent
+                                    analysis={(subSentenceAnalysis ?? lastSubSentenceAnalysis)!}
+                                    focusUnitId={hoveredSubUnitId ?? undefined}
+                                    onHoverUnit={setHoveredSubUnitId}
+                                />
+                            ) : null}
+                        </div>
+                    ) : null}
                     {isLoadingSubsentence && (
                         <div className="subsentence-status">Loading subsentence analysis...</div>
                     )}
