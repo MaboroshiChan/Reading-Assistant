@@ -1,30 +1,22 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { generateLLMAnalysis } from "./services/llmService";
+// index.ts
+import http from 'node:http';
+import { handleMsg } from './http/router';
 
-dotenv.config();
-const app = express();
-const PORT = process.env.PORT || 3001;
-
-app.use(cors());
-app.use(express.json());
-
-app.post("/generate-llm-analysis", async (req, res) => {
-  const { paragraph } = req.body;
-  if (!paragraph || typeof paragraph !== "string") {
-    return res.status(400).json({ error: "Missing or invalid paragraph" });
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/msg') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      const result = await handleMsg(body);
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(result.status === 'error' ? (result.error.http ?? 500) : 200);
+      res.end(JSON.stringify(result));
+    });
+    return;
   }
-
-  try {
-    const result = await generateLLMAnalysis(paragraph); // This uses OpenAI and process.env
-    res.json({ analysis: result });
-  } catch (err) {
-    console.error("LLM error:", err);
-    res.status(500).json({ error: "LLM analysis failed" });
-  }
+  res.writeHead(404); res.end('Not Found');
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
+server.listen(process.env.PORT ?? 8787, () => {
+  console.log(`server on :${process.env.PORT ?? 8787}`);
 });

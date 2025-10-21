@@ -1,0 +1,37 @@
+reading-app-server/
+.
+├── index.ts                  # 仅启动与路由挂载
+├── package.json
+├── package-lock.json
+├── tsconfig.json             # 建议加，strict:true，target:ES2022
+├── .env.example              # 建议加：MODEL_ID、API_KEY、PORT 等
+├── prompts/
+│   ├── v1/                   # 建议版本化，便于后续升级不破坏缓存
+│   │   ├── skeleton.txt
+│   │   ├── paragraph.txt
+│   │   ├── sentence.txt
+│   │   └── subsentence.txt
+│   └── system-prompt.txt
+├── services/
+│   ├── llmService.ts         # 你已存在：提供 json()/complete()
+│   ├── storage.ts            # 你已存在：先内存实现，接口不变将来可换Redis/DB
+│   ├── cache.ts              # 轻量 LRU（Map 或 tiny-lru），封装 get/set
+│   └── config.ts             # 统一读 env、默认值、开关（auth 开关、超时、缓存大小）
+├── http/
+│   ├── router.ts             # 单一 POST /msg，按 type 分发到 handlers
+│   └── validate.ts           # AJV 编译与校验（加载 schema）
+├── handlers/
+│   ├── skeleton.ts           # handleSkeleton(req): Promise<Data>
+│   ├── paragraph.ts
+│   ├── sentence.ts
+│   └── subsentence.ts
+├── schemas/
+│   ├── envelope.request.schema.json   # 统一信封
+│   ├── analyze.skeleton.request.json  # 各 payload
+│   ├── analyze.paragraph.request.json
+│   ├── analyze.sentence.request.json
+│   └── analyze.subsentence.request.json
+└── utils/
+    ├── cacheKey.ts           # 生成 cache_key 的纯函数
+    ├── anchors.ts            # anchor_hash 计算（sha1/xxhash）
+    └── logger.ts             # 简单 logger（request_id、latency、model_id、tokens）
