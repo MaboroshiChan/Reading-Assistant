@@ -163,7 +163,7 @@ export class MessageService {
     return this.send<ResponseEnvelopeSentence, Partial<AnalyzeSentenceData>>(env, sendOptions);
   }
 
-  /** Analyze a subsentence span within a sentence */
+  /** Analyze a sub-sentence span within a sentence */
   async analyzeSubSentence(
     payload: AnalyzeSubSentencePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
