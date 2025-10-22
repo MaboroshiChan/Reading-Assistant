@@ -9,7 +9,10 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       const result = await handleMsg(body);
       res.setHeader('Content-Type', 'application/json');
-      res.writeHead(result.status === 'error' ? (result.error.http ?? 500) : 200);
+      const statusCode = result.status === 'error'
+        ? result.error?.http ?? 500
+        : 200;
+      res.writeHead(statusCode);
       res.end(JSON.stringify(result));
     });
     return;
