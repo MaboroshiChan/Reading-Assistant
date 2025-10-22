@@ -14,15 +14,15 @@ import type {
   ResponseEnvelopeSkeleton,
   ResponseEnvelopeParagraph,
   ResponseEnvelopeSentence,
-  ResponseEnvelopeSubsentence,
+  ResponseEnvelopeSubSentence as ResponseEnvelopeSubSentence,
   AnalyzeSkeletonPayload,
   AnalyzeSkeletonData,
   AnalyzeParagraphPayload,
   AnalyzeParagraphData,
   AnalyzeSentencePayload,
   AnalyzeSentenceData,
-  AnalyzeSubsentencePayload,
-  AnalyzeSubsentenceData,
+  AnalyzeSubSentencePayload as AnalyzeSubSentencePayload,
+  AnalyzeSubSentenceData as AnalyzeSubSentenceData,
   StandardContext,
   ApiVersion,
   Priority,
@@ -164,11 +164,11 @@ export class MessageService {
   }
 
   /** Analyze a subsentence span within a sentence */
-  async analyzeSubsentence(
-    payload: AnalyzeSubsentencePayload,
+  async analyzeSubSentence(
+    payload: AnalyzeSubSentencePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
-    sendOptions?: SendOptions<Partial<AnalyzeSubsentenceData>>
-  ): Promise<ResponseEnvelopeSubsentence> {
+    sendOptions?: SendOptions<Partial<AnalyzeSubSentenceData>>
+  ): Promise<ResponseEnvelopeSubSentence> {
     const env: RequestEnvelope = {
       type: 'analyze.subsentence.v1',
       api_version: this.defaults.apiVersion ?? 'v1',
@@ -180,7 +180,7 @@ export class MessageService {
       payload,
     } as RequestEnvelope;
 
-    return this.send<ResponseEnvelopeSubsentence, Partial<AnalyzeSubsentenceData>>(env, sendOptions);
+    return this.send<ResponseEnvelopeSubSentence, Partial<AnalyzeSubSentenceData>>(env, sendOptions);
   }
 
   /** Cancel in-flight request by request_id */

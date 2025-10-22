@@ -227,7 +227,7 @@ export interface AnalyzeSentenceData {
 }
 
 // 4) analyze.subsentence.v1
-export interface AnalyzeSubsentencePayload {
+export interface AnalyzeSubSentencePayload {
   doc_id: string;
   sentence_id: string;
   span: AnchorSpan; // subspan within sentence_text
@@ -238,7 +238,7 @@ export interface MicroRole { label: string; anchors: Anchor[]; confidence?: numb
 export interface CueInteraction { cues: string[]; relation?: string; scope?: AnchorSpan }
 export interface ContrastResolution { a_span: AnchorSpan; b_span: AnchorSpan; relation: string }
 
-export interface AnalyzeSubsentenceData {
+export interface AnalyzeSubSentenceData {
   micro_roles?: MicroRole[];
   cue_interaction?: CueInteraction;
   contrast_resolution?: ContrastResolution;
@@ -281,7 +281,7 @@ export interface RequestEnvelopeSentence extends StandardEnvelopeBase {
 
 export interface RequestEnvelopeSubsentence extends StandardEnvelopeBase {
   type: 'analyze.subsentence.v1';
-  payload: AnalyzeSubsentencePayload;
+  payload: AnalyzeSubSentencePayload;
 }
 
 export type RequestEnvelope =
@@ -317,16 +317,16 @@ export interface ResponseEnvelopeSentence extends ResponseEnvelopeBase {
   frames?: EnvelopeFrame<Partial<AnalyzeSentenceData>>[];
 }
 
-export interface ResponseEnvelopeSubsentence extends ResponseEnvelopeBase {
-  data?: AnalyzeSubsentenceData;
-  frames?: EnvelopeFrame<Partial<AnalyzeSubsentenceData>>[];
+export interface ResponseEnvelopeSubSentence extends ResponseEnvelopeBase {
+  data?: AnalyzeSubSentenceData;
+  frames?: EnvelopeFrame<Partial<AnalyzeSubSentenceData>>[];
 }
 
 export type ResponseEnvelope =
   | ResponseEnvelopeSkeleton
   | ResponseEnvelopeParagraph
   | ResponseEnvelopeSentence
-  | ResponseEnvelopeSubsentence;
+  | ResponseEnvelopeSubSentence;
 
 // -----------------------------
 // Utility guards (optional)
