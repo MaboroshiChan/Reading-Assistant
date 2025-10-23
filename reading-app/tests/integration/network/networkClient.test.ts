@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { NetworkClient } from '../../services/networkClient';
-import type { RequestEnvelopeSkeleton, ResponseEnvelopeSkeleton } from '../../services/envelopes';
+import { NetworkClient } from '../../../src/services/networkClient';
+import type { RequestEnvelopeSkeleton, ResponseEnvelopeSkeleton } from '../../../src/services/envelopes';
 
 describe('NetworkClient', () => {
   afterEach(() => {
