@@ -3,6 +3,13 @@ import getPort from 'get-port'
 import waitPort from 'wait-port'
 
 export default async function() {
+  // If the caller already provided a live server URL, skip spawning.
+  if (process.env.LIVE_SERVER_URL) {
+    process.env.TEST_BASE_URL = process.env.LIVE_SERVER_URL;
+    process.env.LIVE_PING = '1';
+    return;
+  }
+
   // 优先 8787，占用则自动换
   const port = await getPort({ port: 8787 })
   const host = '127.0.0.1' // ✅ 强制 IPv4，绕开 ::1
@@ -22,6 +29,7 @@ export default async function() {
 
   // 暴露给测试使用（在测试里用 process.env.TEST_BASE_URL）
   process.env.TEST_BASE_URL = `http://${host}:${port}`
+  process.env.LIVE_PING = '1'
 
   // 返回 teardown
   return async () => {

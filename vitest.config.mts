@@ -11,6 +11,7 @@ export default defineConfig({
       'reading-app-server/tests/**/*.test.ts',
     ],
     exclude: ['node_modules', 'dist', 'build'],
+    globalSetup: ['./vitest.globalSetup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
