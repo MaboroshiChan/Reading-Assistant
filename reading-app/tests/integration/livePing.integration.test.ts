@@ -12,7 +12,6 @@ describe.skipIf(!shouldRun)('Live server ping', () => {
     const client = new NetworkClient({ baseUrl: LIVE_SERVER_URL });
     const service = new MessageService(client);
 
-    console.log("running an integration test");
     const result = await service.ping();
 
     expect(result.status).toBe('ok');
