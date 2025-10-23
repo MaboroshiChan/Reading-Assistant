@@ -199,6 +199,49 @@ export class NetworkClient {
     throw lastErr instanceof Error ? lastErr : new NetworkError('Request failed', lastErr);
   }
 
+  /** Lightweight heartbeat to confirm server availability. */
+  async ping(signal?: AbortSignal): Promise<{ status: string; serverTime: string }> {
+    const url = `${this.baseUrl}/ping`;
+    const controller = new AbortController();
+    const combined = this.chainWith(controller, signal);
+    const timeout = setTimeout(() => controller.abort(), this.defaultTimeoutMs);
+
+    const headers = this.createPingHeaders();
+
+    try {
+      const authHeader = await this.resolveAuthHeader();
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          ...headers,
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
+        signal: combined,
+      });
+
+      const http = res.status;
+      let payload: unknown;
+      try {
+        payload = await res.json();
+      } catch (err) {
+        throw new NetworkError(`Ping returned non-JSON response (HTTP ${http})`, err, http);
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!res.ok) {
+        throw new NetworkError(`Ping failed (HTTP ${http})`, payload, http);
+      }
+
+      return payload as { status: string; serverTime: string };
+    } catch (err) {
+      if (err instanceof NetworkError) throw err;
+      throw new NetworkError('Ping request failed', err);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   /** Cancel an in-flight request by request_id */
   cancel(requestId: string): void {
     const ac = this.controllers.get(String(requestId));
@@ -291,6 +334,15 @@ export class NetworkClient {
         // ignore
       }
     }
+  }
+
+  private createPingHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    for (const [key, value] of Object.entries(this.defaultHeaders)) {
+      if (key.toLowerCase() === 'content-type') continue;
+      headers[key] = value;
+    }
+    return headers;
   }
 }
 

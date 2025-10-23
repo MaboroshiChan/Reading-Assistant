@@ -3,6 +3,12 @@ import http from 'node:http';
 import { handleMsg } from './http/router';
 
 const server = http.createServer(async (req, res) => {
+  if (req.method === 'GET' && req.url === '/ping') {
+    res.setHeader('Content-Type', 'application/json');
+    res.writeHead(200);
+    res.end(JSON.stringify({ status: 'ok', serverTime: new Date().toISOString() }));
+    return;
+  }
   if (req.method === 'POST' && req.url === '/msg') {
     let body = '';
     req.on('data', chunk => { body += chunk; });

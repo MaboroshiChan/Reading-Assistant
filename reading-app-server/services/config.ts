@@ -5,6 +5,7 @@ export interface Config {
   timeoutMs: number;
   cacheMax: number;
   cacheTtlMs: number;
+  useMockLLM: boolean;
 }
 
 export const config: Config = {
@@ -14,4 +15,5 @@ export const config: Config = {
   timeoutMs: 15_000,
   cacheMax: 500,
   cacheTtlMs: 7 * 24 * 3600_000,
+  useMockLLM: process.env.MOCK_LLM === '1' || process.env.NODE_ENV === 'test',
 };

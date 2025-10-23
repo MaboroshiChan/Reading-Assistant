@@ -183,6 +183,11 @@ export class MessageService {
     return this.send<ResponseEnvelopeSubSentence, Partial<AnalyzeSubSentenceData>>(env, sendOptions);
   }
 
+  /** Health check helper that proxies through to the underlying NetworkClient. */
+  async ping(signal?: AbortSignal): Promise<{ status: string; serverTime: string }> {
+    return this.client.ping(signal);
+  }
+
   /** Cancel in-flight request by request_id */
   cancel(requestId: string): void {
     this.client.cancel(requestId);

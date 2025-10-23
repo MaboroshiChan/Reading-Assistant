@@ -120,6 +120,9 @@ interface CallReturn<T> { data: T; usage: LLMUsage }
 let cachedClient: OpenAI | null = null;
 
 function getClient(): OpenAI {
+  if (config.useMockLLM) {
+    throw new Error('Mock LLM mode does not create a live OpenAI client');
+  }
   if (!config.apiKey) {
     throw new Error('Missing OPENAI_API_KEY environment variable for OpenAI client');
   }
@@ -130,6 +133,10 @@ function getClient(): OpenAI {
 }
 
 async function callLLM<T extends string | unknown>(args: CallArgs): Promise<CallReturn<T>> {
+  if (config.useMockLLM) {
+    return callMockLLM<T>(args);
+  }
+
   const controller = new AbortController();
   const signal = linkSignals(controller, args.signal);
   const timeout = setTimeout(() => controller.abort(), args.timeoutMs);
@@ -164,6 +171,30 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function callMockLLM<T extends string | unknown>(args: CallArgs): Promise<CallReturn<T>> {
+  if (args.signal?.aborted) {
+    throw new Error('Mock LLM call aborted');
+  }
+
+  const usage: LLMUsage = {
+    modelId: `mock:${args.model}`,
+    inputTokens: 0,
+    outputTokens: 0,
+  };
+
+  if (args.responseAs === 'text') {
+    const reply = `[mock:${args.model}] ${truncate(args.prompt.replace(/\s+/g, ' ').trim(), 200)}`;
+    return { data: reply as T, usage };
+  }
+
+  const json = extractJsonFromPrompt(args.prompt) ?? {
+    mock: true,
+    model: args.model,
+    prompt_preview: truncate(args.prompt, 200),
+  };
+  return { data: json as T, usage };
 }
 
 function buildRequestBody(
@@ -270,4 +301,37 @@ function normalizeError(error: unknown): Error {
   }
   if (error instanceof Error) return error;
   return new Error('Unknown OpenAI client error');
+}
+
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 3)}...`;
+}
+
+function extractJsonFromPrompt(prompt: string): unknown | null {
+  const fenceMatch = prompt.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenceMatch ? fenceMatch[1] : findFirstJsonBlock(prompt);
+  if (!candidate) return null;
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    return null;
+  }
+}
+
+function findFirstJsonBlock(prompt: string): string | null {
+  const firstBrace = prompt.indexOf('{');
+  if (firstBrace === -1) return null;
+  let depth = 0;
+  for (let i = firstBrace; i < prompt.length; i++) {
+    const char = prompt[i];
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return prompt.slice(firstBrace, i + 1);
+      }
+    }
+  }
+  return null;
 }

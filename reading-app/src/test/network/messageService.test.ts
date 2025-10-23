@@ -15,6 +15,7 @@ describe('MessageService', () => {
       send,
       cancel: vi.fn(),
       setAuthTokenSupplier: vi.fn(),
+      ping: vi.fn(),
     } as unknown as NetworkClient;
 
     const service = new MessageService(fakeClient, {
@@ -59,5 +60,21 @@ describe('MessageService', () => {
     const context = envelope.context!;
     expect(context.prompt_version).toBe('2024-03-01');
     expect(context.quality_policy?.model_tier).toBe('high');
+  });
+  test('ping delegates to network client', async () => {
+    const pingResult = { status: 'ok', serverTime: '2024-01-01T00:00:00.000Z' };
+    const fakeClient = {
+      send: vi.fn(),
+      cancel: vi.fn(),
+      setAuthTokenSupplier: vi.fn(),
+      ping: vi.fn().mockResolvedValue(pingResult),
+    } as unknown as NetworkClient;
+
+    const service = new MessageService(fakeClient);
+
+    const result = await service.ping();
+
+    expect(result).toEqual(pingResult);
+    expect(fakeClient.ping).toHaveBeenCalledTimes(1);
   });
 });

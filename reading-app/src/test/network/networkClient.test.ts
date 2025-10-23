@@ -71,4 +71,27 @@ describe('NetworkClient', () => {
       locale: 'en-US',
     });
   });
+
+  test('ping hits /ping endpoint and parses response', async () => {
+    const payload = { status: 'ok', serverTime: '2024-01-01T00:00:00.000Z' };
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new NetworkClient({
+      baseUrl: 'http://localhost:8787/',
+    });
+
+    const result = await client.ping();
+
+    expect(result).toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const call = fetchMock.mock.calls[0];
+    expect(call).toBeDefined();
+    if (!call) throw new Error('fetch was not called');
+    expect(call[0]).toBe('http://localhost:8787/ping');
+    expect(call[1]).toMatchObject({ method: 'GET' });
+  });
 });
