@@ -1,4 +1,4 @@
-// vitest.config.ts at repo root
+// vitest.config.mts at repo root
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({

@@ -1,9 +1,15 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import MessageService from '../../services/messageService';
 import type { RequestEnvelopeSkeleton, ResponseEnvelopeSkeleton } from '../../services/envelopes';
-import type { NetworkClient } from '../../services/networkClient';
+import NetworkClient from '../../services/networkClient';
+import type { NetworkClient as NetworkClientType } from '../../services/networkClient';
 
 describe('MessageService', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   test('applies service defaults before delegating to NetworkClient', async () => {
     const response: ResponseEnvelopeSkeleton = {
       request_id: 'req-123',
@@ -16,7 +22,7 @@ describe('MessageService', () => {
       cancel: vi.fn(),
       setAuthTokenSupplier: vi.fn(),
       ping: vi.fn(),
-    } as unknown as NetworkClient;
+    } as unknown as NetworkClientType;
 
     const service = new MessageService(fakeClient, {
       apiVersion: 'v1',
@@ -61,20 +67,28 @@ describe('MessageService', () => {
     expect(context.prompt_version).toBe('2024-03-01');
     expect(context.quality_policy?.model_tier).toBe('high');
   });
-  test('ping delegates to network client', async () => {
-    const pingResult = { status: 'ok', serverTime: '2024-01-01T00:00:00.000Z' };
-    const fakeClient = {
-      send: vi.fn(),
-      cancel: vi.fn(),
-      setAuthTokenSupplier: vi.fn(),
-      ping: vi.fn().mockResolvedValue(pingResult),
-    } as unknown as NetworkClient;
+  test('ping performs heartbeat against /ping endpoint', async () => {
+    const payload = { status: 'ok', serverTime: '2024-01-01T00:00:00.000Z' };
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
 
-    const service = new MessageService(fakeClient);
+    const client = new NetworkClient({
+      baseUrl: 'http://localhost:8787/',
+    });
+    const service = new MessageService(client);
 
     const result = await service.ping();
 
-    expect(result).toEqual(pingResult);
-    expect(fakeClient.ping).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const call = fetchMock.mock.calls[0];
+    expect(call).toBeDefined();
+    if (!call) throw new Error('fetch was not called');
+    const [url, init] = call;
+    expect(url).toBe('http://localhost:8787/ping');
+    expect(init).toMatchObject({ method: 'GET' });
   });
 });

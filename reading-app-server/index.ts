@@ -4,6 +4,8 @@ import { handleMsg } from './http/router';
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/ping') {
+    const remote = req.socket.remoteAddress ?? 'unknown';
+    console.log(`[server] ping received from ${remote} @ ${new Date().toISOString()}`);
     res.setHeader('Content-Type', 'application/json');
     res.writeHead(200);
     res.end(JSON.stringify({ status: 'ok', serverTime: new Date().toISOString() }));
