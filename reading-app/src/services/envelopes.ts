@@ -99,6 +99,7 @@ export interface EnvelopeError {
   details?: unknown;   // structured details (kept machine-readable)
 }
 
+// Usage metadata mirrors what the backend reports for cost/latency tracking.
 export interface UsageMeta {
   tokens_in?: number;
   tokens_out?: number;
@@ -110,6 +111,7 @@ export interface UsageMeta {
 // Frames (partial/streamed responses)
 // -----------------------------
 
+// Each frame represents a single streamed chunk in partial responses (NDJSON/SSE).
 export interface EnvelopeFrame<T = unknown> {
   seq: number;               // sequence number (1-based)
   of?: number | null;        // optional total frames (null if unknown/open-ended)
@@ -250,6 +252,7 @@ export interface AnalyzeSubSentenceData {
 // Union helpers per message type
 // -----------------------------
 
+// Base fields shared by all outgoing envelopes regardless of analysis task.
 export interface StandardEnvelopeBase {
   api_version: ApiVersion;      // "v1"
   request_id: UUID | ULID;      // caller-provided
@@ -284,6 +287,7 @@ export interface RequestEnvelopeSubsentence extends StandardEnvelopeBase {
   payload: AnalyzeSubSentencePayload;
 }
 
+// Union of every request envelope so transports can accept a single type.
 export type RequestEnvelope =
   | RequestEnvelopeSkeleton
   | RequestEnvelopeParagraph
@@ -291,6 +295,7 @@ export type RequestEnvelope =
   | RequestEnvelopeSubsentence;
 
 // Response envelopes
+// Every response echoes back tracking fields so clients can correlate requests.
 export interface ResponseEnvelopeBase {
   request_id: UUID | ULID; // echo from request
   status: EnvelopeStatus;
@@ -332,12 +337,14 @@ export type ResponseEnvelope =
 // Utility guards (optional)
 // -----------------------------
 
+// Quick predicate for narrowing string -> AnalyzeMessageType.
 export const isAnalyzeType = (t: string): t is AnalyzeMessageType =>
   t === 'analyze.skeleton.v1' ||
   t === 'analyze.paragraph.v1' ||
   t === 'analyze.sentence.v1' ||
   t === 'analyze.subsentence.v1';
 
+// Type guards that help SDK callers branch on response status.
 export const isPartial = (r: ResponseEnvelope): r is ResponseEnvelope & { status: 'partial' } => r.status === 'partial';
 export const isError = (r: ResponseEnvelope): r is ResponseEnvelope & { status: 'error'; error: EnvelopeError } => r.status === 'error';
 export const isOk = (r: ResponseEnvelope): r is ResponseEnvelope & { status: 'ok' } => r.status === 'ok';

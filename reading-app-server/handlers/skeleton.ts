@@ -2,16 +2,11 @@ import type {
   AnalyzeSkeletonData,
   RequestEnvelopeSkeleton,
   ResponseEnvelopeSkeleton,
-  SkeletonParagraph,
-  SkeletonSentence,
 } from '../../reading-app/src/services/envelopes';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
-import {
-  hashString,
-  splitIntoSentences,
-  summarize,
-} from './shared';
+import { hashString } from './shared';
+import { buildMockSkeletonData } from './mock/skeletonMock';
 
 const CACHE_PREFIX = 'skeleton';
 
@@ -21,45 +16,15 @@ const buildCacheKey = (req: RequestEnvelopeSkeleton): string => {
   return `${CACHE_PREFIX}:${payloadKey}:${contextKey}`;
 };
 
-const buildSkeletonData = (
+const buildSkeletonData = async (
   req: RequestEnvelopeSkeleton,
-): AnalyzeSkeletonData => {
-  const paragraphs: SkeletonParagraph[] = [];
-  const sentences: SkeletonSentence[] = [];
+): Promise<AnalyzeSkeletonData> => {
+  if (config.useMockLLM) {
+    return buildMockSkeletonData(req);
+  }
 
-  req.payload.sections.forEach((section, sectionIndex) => {
-    const text = (section.text ?? '').trim();
-    if (!text) return;
-
-    const paragraphId = section.id || `section-${sectionIndex + 1}`;
-    const fragments = splitIntoSentences(text);
-    const sentenceIds: string[] = [];
-
-    fragments.forEach((fragment, idx) => {
-      const sentenceId = `${paragraphId}-s${idx + 1}`;
-      sentenceIds.push(sentenceId);
-      sentences.push({
-        sentence_id: sentenceId,
-        paragraph_id: paragraphId,
-        text: fragment.text,
-        text_hash: hashString(fragment.text),
-        char_start: fragment.start,
-        char_end: fragment.end,
-      });
-    });
-
-    paragraphs.push({
-      paragraph_id: paragraphId,
-      text_hash: hashString(text),
-      sentence_ids: sentenceIds,
-      brief_summary: summarize(fragments[0]?.text ?? text, 200),
-    });
-  });
-
-  return {
-    paragraphs,
-    sentences,
-  };
+  // TODO: integrate with real LLM-backed skeleton endpoint.
+  return buildMockSkeletonData(req);
 };
 
 export const handleSkeleton = async (
@@ -72,7 +37,7 @@ export const handleSkeleton = async (
   }
 
   const started = Date.now();
-  const data = buildSkeletonData(req);
+  const data = await buildSkeletonData(req);
 
   const response: ResponseEnvelopeSkeleton = {
     request_id: req.request_id,
@@ -81,6 +46,9 @@ export const handleSkeleton = async (
     data,
     usage: {
       latency_ms: Date.now() - started,
+      model_id: config.useMockLLM ? `mock:${config.model}` : undefined,
+      tokens_in: config.useMockLLM ? 0 : undefined,
+      tokens_out: config.useMockLLM ? 0 : undefined,
     },
   };
 
