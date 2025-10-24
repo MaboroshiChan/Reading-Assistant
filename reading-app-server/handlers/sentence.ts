@@ -433,11 +433,16 @@ const coerceDependencyLight = (value: Record<string, unknown>): LLMSentenceDepen
   const headIndexed = typeof value.head_indexed === 'boolean' ? value.head_indexed : undefined;
   const arcs = Array.isArray(value.arcs)
     ? value.arcs
-        .map((arc) => (isRecord(arc) ? {
-          head: typeof arc.head === 'number' ? arc.head : undefined,
-          dep: typeof arc.dep === 'number' ? arc.dep : undefined,
-          label: asString(arc.label),
-        } : null))
+        .map((arc): LLMSentenceDependencyArc | null => {
+          if (!isRecord(arc)) return null;
+          const head = asNumber(arc.head);
+          const dep = asNumber(arc.dep);
+          const label = asString(arc.label);
+          if (typeof head !== 'number' || typeof dep !== 'number' || !label) {
+            return null;
+          }
+          return { head, dep, label };
+        })
         .filter((arc): arc is LLMSentenceDependencyArc => arc !== null)
     : undefined;
   return {
