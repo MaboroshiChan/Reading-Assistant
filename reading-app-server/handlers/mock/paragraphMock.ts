@@ -10,6 +10,12 @@ import {
   splitIntoSentences,
   summarize,
 } from '../shared';
+import { handlerLog } from '../logger';
+import {
+  buildParagraphPrompt,
+  buildParagraphTasks,
+  PARAGRAPH_PROMPT_VERSION,
+} from '../paragraph';
 
 const filterByTasks = (
   base: AnalyzeParagraphData,
@@ -27,9 +33,21 @@ const filterByTasks = (
   };
 };
 
-export const buildMockParagraphData = (
+export const buildMockParagraphData = async (
   req: RequestEnvelopeParagraph,
-): AnalyzeParagraphData => {
+): Promise<AnalyzeParagraphData> => {
+  const tasks = buildParagraphTasks(req);
+  const prompt = await buildParagraphPrompt(req);
+  handlerLog('paragraph', 'LLM prompt prepared', {
+    requestId: req.request_id,
+    paragraphId: req.payload.paragraph_id,
+    promptVersion: PARAGRAPH_PROMPT_VERSION,
+    tasks,
+    promptLength: prompt.length,
+    prompt,
+    mock: true,
+  });
+
   const text = req.payload.paragraph_text.trim();
   const fragments = splitIntoSentences(text);
 
@@ -83,5 +101,5 @@ export const buildMockParagraphData = (
     confidence: 0.6,
   };
 
-  return filterByTasks(base, req.payload.options?.tasks);
+  return filterByTasks(base, tasks);
 };

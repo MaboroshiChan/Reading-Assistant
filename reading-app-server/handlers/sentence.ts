@@ -23,7 +23,8 @@ const PROMPT_VERSION = 'sentence.v1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
 const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'discourse_function', 'dependency_light', 'modal_markers'];
 
-type SentenceTask = 'semantic_roles' | 'discourse_function' | 'dependency_light' | 'modal_markers';
+export type SentenceTask = 'semantic_roles' | 'discourse_function' | 'dependency_light' | 'modal_markers';
+export { PROMPT_VERSION as SENTENCE_PROMPT_VERSION };
 
 interface LLMSentenceSpan {
   start: number;
@@ -219,6 +220,8 @@ const buildPrompt = async (req: RequestEnvelopeSentence): Promise<string> => {
 const buildSentenceData = async (
   req: RequestEnvelopeSentence,
 ): Promise<SentenceBuildResult> => {
+  const tasks = buildTasks(req);
+
   if (config.useMockLLM) {
     handlerLog('sentence', 'building mock payload', {
       requestId: req.request_id,
@@ -226,16 +229,25 @@ const buildSentenceData = async (
       promptVersion: PROMPT_VERSION,
       mock: true,
     });
-    return { data: buildMockSentenceData(req) };
+    return { data: await buildMockSentenceData(req) };
   }
 
   handlerLog('sentence', 'building LLM payload', {
     requestId: req.request_id,
     sentenceId: req.payload.sentence_id,
     promptVersion: PROMPT_VERSION,
-    tasks: buildTasks(req),
+    tasks,
   });
   const prompt = await buildPrompt(req);
+  handlerLog('sentence', 'LLM prompt prepared', {
+    requestId: req.request_id,
+    sentenceId: req.payload.sentence_id,
+    promptVersion: PROMPT_VERSION,
+    tasks,
+    promptLength: prompt.length,
+    prompt,
+    mock: false,
+  });
   const { object, usage } = await llmJson(prompt, coerceSentenceResponse);
   handlerLog('sentence', 'LLM response received', {
     requestId: req.request_id,
@@ -312,6 +324,8 @@ export const handleSentence = async (
   });
   return response;
 };
+
+export { buildPrompt as buildSentencePrompt, buildTasks as buildSentenceTasks };
 
 const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
   if (!isRecord(value)) return {};

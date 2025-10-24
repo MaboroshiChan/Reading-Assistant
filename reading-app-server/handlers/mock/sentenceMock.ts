@@ -6,6 +6,12 @@ import type {
   SentenceRole,
 } from '../../../reading-app/src/services/envelopes';
 import { makeAnchor, tokenize } from '../shared';
+import { handlerLog } from '../logger';
+import {
+  buildSentencePrompt,
+  buildSentenceTasks,
+  SENTENCE_PROMPT_VERSION,
+} from '../sentence';
 
 const modalMap: Record<string, ModalMarker['type']> = {
   must: 'necessity',
@@ -35,9 +41,21 @@ const filterByTasks = (
   };
 };
 
-export const buildMockSentenceData = (
+export const buildMockSentenceData = async (
   req: RequestEnvelopeSentence,
-): AnalyzeSentenceData => {
+): Promise<AnalyzeSentenceData> => {
+  const tasks = buildSentenceTasks(req);
+  const prompt = await buildSentencePrompt(req);
+  handlerLog('sentence', 'LLM prompt prepared', {
+    requestId: req.request_id,
+    sentenceId: req.payload.sentence_id,
+    promptVersion: SENTENCE_PROMPT_VERSION,
+    tasks,
+    promptLength: prompt.length,
+    prompt,
+    mock: true,
+  });
+
   const text = req.payload.sentence_text.trim();
   const tokens = tokenize(text);
 
@@ -136,5 +154,5 @@ export const buildMockSentenceData = (
     confidence: Math.min(0.9, 0.4 + tokens.length * 0.05),
   };
 
-  return filterByTasks(base, req.payload.options?.tasks);
+  return filterByTasks(base, tasks);
 };

@@ -13,6 +13,8 @@
  *  - If you use a different provider, only edit `callLLM()` and the text extraction helpers.
  */
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { config } from './config';
 import OpenAI, { APIError } from 'openai';
 
@@ -117,6 +119,9 @@ interface CallArgs {
 
 interface CallReturn<T> { data: T; usage: LLMUsage }
 
+const LOG_DIR = path.join(__dirname, '..', 'log');
+const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
+
 let cachedClient: OpenAI | null = null;
 
 function getClient(): OpenAI {
@@ -133,6 +138,8 @@ function getClient(): OpenAI {
 }
 
 async function callLLM<T extends string | unknown>(args: CallArgs): Promise<CallReturn<T>> {
+  await logPromptIfDebug(args);
+
   if (config.useMockLLM) {
     return callMockLLM<T>(args);
   }
@@ -170,6 +177,30 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
     throw normalizeError(error);
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function logPromptIfDebug(args: CallArgs): Promise<void> {
+  if (!config.debugMode) return;
+  const timestamp = new Date().toISOString();
+  const entry = {
+    timestamp,
+    model: args.model,
+    responseAs: args.responseAs,
+    temperature: args.temperature,
+    maxOutputTokens: args.maxOutputTokens,
+    prompt: args.prompt,
+  };
+
+  try {
+    await fs.mkdir(LOG_DIR, { recursive: true });
+    await fs.appendFile(LOG_FILE, `${JSON.stringify(entry)}\n`, 'utf8');
+    console.log(
+      `[llm-debug] ${timestamp} model=${args.model} responseAs=${args.responseAs}\n${args.prompt}`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[llm-debug] failed to persist prompt log: ${message}`);
   }
 }
 

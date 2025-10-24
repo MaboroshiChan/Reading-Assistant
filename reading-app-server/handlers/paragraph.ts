@@ -24,7 +24,8 @@ const PROMPT_VERSION = 'paragraph.v1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
 const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims'];
 
-type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary';
+export type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary';
+export { PROMPT_VERSION as PARAGRAPH_PROMPT_VERSION };
 
 interface LLMParagraphAnchor {
   start: number;
@@ -163,6 +164,8 @@ const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
 const buildParagraphData = async (
   req: RequestEnvelopeParagraph,
 ): Promise<ParagraphBuildResult> => {
+  const tasks = buildTasks(req);
+
   if (config.useMockLLM) {
     handlerLog('paragraph', 'building mock payload', {
       requestId: req.request_id,
@@ -170,15 +173,24 @@ const buildParagraphData = async (
       promptVersion: PROMPT_VERSION,
       mock: true,
     });
-    return { data: buildMockParagraphData(req) };
+    return { data: await buildMockParagraphData(req) };
   }
 
   handlerLog('paragraph', 'building LLM prompt', {
     requestId: req.request_id,
-    tasks: buildTasks(req),
+    tasks,
     promptVersion: PROMPT_VERSION,
   });
   const prompt = await buildPrompt(req);
+  handlerLog('paragraph', 'LLM prompt prepared', {
+    requestId: req.request_id,
+    paragraphId: req.payload.paragraph_id,
+    promptVersion: PROMPT_VERSION,
+    tasks,
+    promptLength: prompt.length,
+    prompt,
+    mock: false,
+  });
   const { object, usage } = await llmJson(prompt, coerceParagraphResponse);
   handlerLog('paragraph', 'LLM response received', {
     requestId: req.request_id,
@@ -256,6 +268,8 @@ export const handleParagraph = async (
   });
   return response;
 };
+
+export { buildPrompt as buildParagraphPrompt, buildTasks as buildParagraphTasks };
 
 const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
   if (!isRecord(value)) return {};
