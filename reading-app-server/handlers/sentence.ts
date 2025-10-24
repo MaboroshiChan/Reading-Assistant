@@ -1,5 +1,5 @@
-import path from 'path';
-import { promises as fs } from 'fs';
+import path from 'node:path';
+import fs from 'node:fs/promises';
 import type {
   AnalyzeSentenceData,
   Anchor,
@@ -13,13 +13,15 @@ import type {
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { json as llmJson, type LLMUsage } from '../services/llmService';
-import { hashString, makeAnchor } from './shared';
+import { buildStableCacheKey, makeAnchor, sortAnchors } from './shared';
 import { buildMockSentenceData } from './mock/sentenceMock';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'sentence';
+const CACHE_VERSION = 'v2';
+const PROMPT_VERSION = 'sentence.v1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
-const DEFAULT_TASKS: SentenceTask[] = ['semantic_roles', 'discourse_function', 'dependency_light', 'modal_markers'];
+const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'discourse_function', 'dependency_light', 'modal_markers'];
 
 type SentenceTask = 'semantic_roles' | 'discourse_function' | 'dependency_light' | 'modal_markers';
 
@@ -70,10 +72,62 @@ interface SentenceBuildResult {
   usage?: LLMUsage;
 }
 
+const ROLE_ALIAS: Record<string, string> = {
+  subject: 'subject',
+  predicate: 'predicate',
+  object: 'object',
+  agent: 'subject',
+  patient: 'object',
+  topic: 'topic',
+  claim: 'claim',
+  evidence: 'evidence',
+  concession: 'concession',
+  support: 'support',
+  counter: 'counter',
+  background: 'background',
+  summary: 'summary',
+};
+
+const MODAL_TYPE_CANONICAL: Record<string, ModalMarker['type']> = {
+  must: 'necessity',
+  should: 'necessity',
+  shall: 'necessity',
+  ought: 'necessity',
+  need: 'necessity',
+  needs: 'necessity',
+  needed: 'necessity',
+  can: 'possibility',
+  could: 'possibility',
+  might: 'possibility',
+  may: 'possibility',
+  possibly: 'possibility',
+  perhaps: 'possibility',
+  maybe: 'possibility',
+  likely: 'possibility',
+  will: 'certainty',
+  would: 'volition',
+  desire: 'volition',
+  want: 'volition',
+};
+
+const normalizeRoleLabel = (value: string): string => {
+  const key = value.trim().toLowerCase();
+  const candidate = ROLE_ALIAS[key] ?? key;
+  return candidate || 'unknown';
+};
+
+const normalizeModalType = (value: string): ModalMarker['type'] => {
+  const key = value.trim().toLowerCase();
+  return MODAL_TYPE_CANONICAL[key] ?? (key || 'unknown');
+};
+
 const buildCacheKey = (req: RequestEnvelopeSentence): string => {
-  const payloadKey = hashString(JSON.stringify(req.payload));
-  const contextKey = hashString(JSON.stringify(req.context ?? {}));
-  return `${CACHE_PREFIX}:${payloadKey}:${contextKey}`;
+  return buildStableCacheKey(CACHE_PREFIX, CACHE_VERSION, {
+    payload: req.payload,
+    context: req.context ?? {},
+    prompt_version: PROMPT_VERSION,
+    model: config.useMockLLM ? `mock:${config.model}` : config.model,
+  });
 };
 
 let cachedSentencePrompt: string | null = null;
@@ -85,9 +139,14 @@ const loadSentencePrompt = async (): Promise<string> => {
 };
 
 const buildTasks = (req: RequestEnvelopeSentence): SentenceTask[] => {
-  return (req.payload.options?.tasks?.length
-    ? req.payload.options.tasks
-    : DEFAULT_TASKS) as SentenceTask[];
+  const requested = req.payload.options?.tasks ?? TASK_ORDER;
+  const normalized = new Set<SentenceTask>();
+  for (const rawTask of requested) {
+    if (!TASK_ORDER.includes(rawTask as SentenceTask)) continue;
+    normalized.add(rawTask as SentenceTask);
+  }
+  const ordered = TASK_ORDER.filter((task) => normalized.size === 0 || normalized.has(task));
+  return ordered.length ? ordered : [...TASK_ORDER];
 };
 
 const formatContext = (req: RequestEnvelopeSentence): string | null => {
@@ -135,6 +194,7 @@ const buildPrompt = async (req: RequestEnvelopeSentence): Promise<string> => {
     '',
     `Document ID: ${req.payload.doc_id}`,
     `Sentence ID: ${req.payload.sentence_id}`,
+    `Prompt Version: ${PROMPT_VERSION}`,
     `Requested tasks: ${tasks.join(', ')}`,
     '',
     'Sentence text (0-based offsets):',
@@ -163,6 +223,8 @@ const buildSentenceData = async (
     handlerLog('sentence', 'building mock payload', {
       requestId: req.request_id,
       sentenceId: req.payload.sentence_id,
+      promptVersion: PROMPT_VERSION,
+      mock: true,
     });
     return { data: buildMockSentenceData(req) };
   }
@@ -170,10 +232,33 @@ const buildSentenceData = async (
   handlerLog('sentence', 'building LLM payload', {
     requestId: req.request_id,
     sentenceId: req.payload.sentence_id,
+    promptVersion: PROMPT_VERSION,
+    tasks: buildTasks(req),
   });
   const prompt = await buildPrompt(req);
   const { object, usage } = await llmJson(prompt, coerceSentenceResponse);
+  handlerLog('sentence', 'LLM response received', {
+    requestId: req.request_id,
+    sentenceId: req.payload.sentence_id,
+    model: usage?.modelId,
+    tokensIn: usage?.inputTokens,
+    tokensOut: usage?.outputTokens,
+    promptVersion: PROMPT_VERSION,
+  });
   const data = mapSentenceResponse(object, req);
+  const hasContent =
+    (object.semantic_roles?.length ?? 0) > 0 ||
+    (object.modal_markers?.length ?? 0) > 0 ||
+    (object.dependency_light?.arcs?.length ?? 0) > 0 ||
+    Boolean(object.discourse_function);
+  if (!hasContent) {
+    handlerLog(
+      'sentence',
+      'LLM payload missing expected fields; using fallbacks',
+      { requestId: req.request_id, promptVersion: PROMPT_VERSION },
+      'warn',
+    );
+  }
   return { data, usage };
 };
 
@@ -183,11 +268,16 @@ export const handleSentence = async (
   handlerLog('sentence', 'request received', {
     requestId: req.request_id,
     mock: config.useMockLLM,
+    promptVersion: PROMPT_VERSION,
   });
   const cacheKey = buildCacheKey(req);
   const cached = cache.get<ResponseEnvelopeSentence>(cacheKey);
   if (cached) {
-    handlerLog('sentence', 'cache hit', { requestId: req.request_id });
+    handlerLog('sentence', 'cache hit', {
+      requestId: req.request_id,
+      cacheKey,
+      promptVersion: PROMPT_VERSION,
+    });
     return { ...cached, served_from: 'cache' };
   }
 
@@ -196,6 +286,9 @@ export const handleSentence = async (
   handlerLog('sentence', 'data prepared', {
     requestId: req.request_id,
     source: config.useMockLLM ? 'mock' : 'llm',
+    promptVersion: PROMPT_VERSION,
+    roles: data.semantic_roles?.length ?? 0,
+    modalMarkers: data.modal_markers?.length ?? 0,
   });
   const response: ResponseEnvelopeSentence = {
     request_id: req.request_id,
@@ -214,6 +307,8 @@ export const handleSentence = async (
   handlerLog('sentence', 'response cached', {
     requestId: req.request_id,
     latencyMs: Date.now() - started,
+    cacheKey,
+    promptVersion: PROMPT_VERSION,
   });
   return response;
 };
@@ -297,7 +392,7 @@ const mapSentenceResponse = (
           const span = role.span ? normalizeSpan(role.span.start, role.span.end, text.length) : null;
           const anchors = collectAnchors(role.anchors, true);
           roles.push({
-            role: role.role,
+            role: normalizeRoleLabel(role.role),
             span: span ?? undefined,
             anchors: anchors.length ? anchors : undefined,
             confidence: role.confidence,
@@ -318,12 +413,17 @@ const mapSentenceResponse = (
   const modalMarkers = shouldInclude('modal_markers') && payload.modal_markers
     ? (() => {
         const markers: ModalMarker[] = [];
+        const seen = new Set<string>();
         for (const marker of payload.modal_markers) {
           if (!marker.type || !marker.cue) continue;
           const span = marker.span ? normalizeSpan(marker.span.start, marker.span.end, text.length) : null;
           if (!span) continue;
+          const normalizedType = normalizeModalType(marker.type);
+          const key = `${normalizedType}:${span.start}:${span.end}:${marker.cue.toLowerCase()}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
           markers.push({
-            type: marker.type as ModalMarker['type'],
+            type: normalizedType,
             cue: marker.cue,
             span,
           });
@@ -342,7 +442,7 @@ const mapSentenceResponse = (
     collectAnchors(payload.anchors, true);
   }
 
-  const anchorList = anchorIndex.size ? Array.from(anchorIndex.values()) : undefined;
+  const anchorList = anchorIndex.size ? sortAnchors(Array.from(anchorIndex.values())) : undefined;
 
   return {
     semantic_roles: semanticRoles,
@@ -360,7 +460,8 @@ const mapDependencyLight = (raw: LLMSentenceDependencyLight): DependencyLight | 
     const dep = typeof arc.dep === 'number' && Number.isFinite(arc.dep) ? Math.trunc(arc.dep) : null;
     const label = asString(arc.label);
     if (head === null || dep === null || !label) return null;
-    return { head, dep, label } satisfies DependencyArc;
+    if (head === dep) return null;
+    return { head, dep, label: label.toLowerCase() } satisfies DependencyArc;
   }).filter((arc): arc is DependencyArc => arc !== null);
 
   if (!arcs || arcs.length === 0) {
@@ -368,9 +469,21 @@ const mapDependencyLight = (raw: LLMSentenceDependencyLight): DependencyLight | 
     return { head_indexed: !!raw.head_indexed };
   }
 
+  const deduped = new Map<string, DependencyArc>();
+  for (const arc of arcs) {
+    const key = `${arc.head}:${arc.dep}:${arc.label}`;
+    if (!deduped.has(key)) {
+      deduped.set(key, arc);
+    }
+  }
+
   return {
     head_indexed: raw.head_indexed ?? true,
-    arcs,
+    arcs: Array.from(deduped.values()).sort((a, b) => {
+      if (a.head !== b.head) return a.head - b.head;
+      if (a.dep !== b.dep) return a.dep - b.dep;
+      return a.label.localeCompare(b.label);
+    }),
   };
 };
 
@@ -393,8 +506,8 @@ const anchorFromSpan = (
 
 const normalizeSpan = (start: number, end: number, maxLength: number) => {
   if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  let s = Math.round(start);
-  let e = Math.round(end);
+  let s = Math.floor(start);
+  let e = Math.floor(end);
   if (e < s) {
     const tmp = s;
     s = e;
@@ -423,7 +536,7 @@ const coerceModalMarker = (value: unknown): LLMSentenceModalMarker | null => {
   const span = coerceSpan(value.span);
   if (!type || !cue || !span) return null;
   return {
-    type,
+    type: normalizeModalType(type),
     cue,
     span,
   };

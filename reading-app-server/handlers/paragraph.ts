@@ -1,5 +1,5 @@
-import path from 'path';
-import { promises as fs } from 'fs';
+import path from 'node:path';
+import fs from 'node:fs/promises';
 import type {
   AnalyzeParagraphData,
   Anchor,
@@ -10,16 +10,19 @@ import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { json as llmJson, type LLMUsage } from '../services/llmService';
 import {
-  hashString,
+  buildStableCacheKey,
   makeAnchor,
+  sortAnchors,
   summarize,
 } from './shared';
 import { buildMockParagraphData } from './mock/paragraphMock';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'paragraph';
+const CACHE_VERSION = 'v2';
+const PROMPT_VERSION = 'paragraph.v1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
-const DEFAULT_TASKS: ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims'];
+const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims'];
 
 type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary';
 
@@ -64,9 +67,12 @@ interface ParagraphBuildResult {
 }
 
 const buildCacheKey = (req: RequestEnvelopeParagraph): string => {
-  const payloadKey = hashString(JSON.stringify(req.payload));
-  const optionsKey = hashString(JSON.stringify(req.context ?? {}));
-  return `${CACHE_PREFIX}:${payloadKey}:${optionsKey}`;
+  return buildStableCacheKey(CACHE_PREFIX, CACHE_VERSION, {
+    payload: req.payload,
+    context: req.context ?? {},
+    prompt_version: PROMPT_VERSION,
+    model: config.useMockLLM ? `mock:${config.model}` : config.model,
+  });
 };
 
 let cachedParagraphPrompt: string | null = null;
@@ -78,9 +84,14 @@ const loadParagraphPrompt = async (): Promise<string> => {
 };
 
 const buildTasks = (req: RequestEnvelopeParagraph): ParagraphTask[] => {
-  return (req.payload.options?.tasks?.length
-    ? req.payload.options.tasks
-    : DEFAULT_TASKS) as ParagraphTask[];
+  const requested = req.payload.options?.tasks ?? TASK_ORDER;
+  const normalized = new Set<ParagraphTask>();
+  for (const rawTask of requested) {
+    if (!TASK_ORDER.includes(rawTask as ParagraphTask)) continue;
+    normalized.add(rawTask as ParagraphTask);
+  }
+  const ordered = TASK_ORDER.filter((task) => normalized.size === 0 || normalized.has(task));
+  return ordered.length ? ordered : [...TASK_ORDER];
 };
 
 const formatContext = (req: RequestEnvelopeParagraph): string | null => {
@@ -127,6 +138,7 @@ const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
     '',
     `Document ID: ${req.payload.doc_id}`,
     `Paragraph ID: ${req.payload.paragraph_id}`,
+    `Prompt Version: ${PROMPT_VERSION}`,
     `Requested tasks: ${tasks.join(', ')}`,
     '',
     'Paragraph text (0-based offsets):',
@@ -155,6 +167,8 @@ const buildParagraphData = async (
     handlerLog('paragraph', 'building mock payload', {
       requestId: req.request_id,
       paragraphId: req.payload.paragraph_id,
+      promptVersion: PROMPT_VERSION,
+      mock: true,
     });
     return { data: buildMockParagraphData(req) };
   }
@@ -162,6 +176,7 @@ const buildParagraphData = async (
   handlerLog('paragraph', 'building LLM prompt', {
     requestId: req.request_id,
     tasks: buildTasks(req),
+    promptVersion: PROMPT_VERSION,
   });
   const prompt = await buildPrompt(req);
   const { object, usage } = await llmJson(prompt, coerceParagraphResponse);
@@ -170,8 +185,22 @@ const buildParagraphData = async (
     model: usage?.modelId,
     tokensIn: usage?.inputTokens,
     tokensOut: usage?.outputTokens,
+    promptVersion: PROMPT_VERSION,
   });
   const data = mapParagraphResponse(object, req);
+  const hasContent =
+    Boolean(object.summary) ||
+    (object.roles?.length ?? 0) > 0 ||
+    (object.rhetoric?.length ?? 0) > 0 ||
+    (object.claims?.length ?? 0) > 0;
+  if (!hasContent) {
+    handlerLog(
+      'paragraph',
+      'LLM payload missing expected fields; using fallbacks',
+      { requestId: req.request_id, promptVersion: PROMPT_VERSION },
+      'warn',
+    );
+  }
   return { data, usage };
 };
 
@@ -182,12 +211,15 @@ export const handleParagraph = async (
     requestId: req.request_id,
     paragraphId: req.payload.paragraph_id,
     mock: config.useMockLLM,
+    promptVersion: PROMPT_VERSION,
   });
   const cacheKey = buildCacheKey(req);
   const cached = cache.get<ResponseEnvelopeParagraph>(cacheKey);
   if (cached) {
     handlerLog('paragraph', 'cache hit', {
       requestId: req.request_id,
+      cacheKey,
+      promptVersion: PROMPT_VERSION,
     });
     return { ...cached, served_from: 'cache' };
   }
@@ -197,6 +229,10 @@ export const handleParagraph = async (
   handlerLog('paragraph', 'data prepared', {
     requestId: req.request_id,
     source: config.useMockLLM ? 'mock' : 'llm',
+    promptVersion: PROMPT_VERSION,
+    summaryLength: data.summary?.length ?? 0,
+    roles: data.roles?.length ?? 0,
+    claims: data.claims?.length ?? 0,
   });
   const response: ResponseEnvelopeParagraph = {
     request_id: req.request_id,
@@ -215,6 +251,8 @@ export const handleParagraph = async (
   handlerLog('paragraph', 'response cached', {
     requestId: req.request_id,
     latencyMs: Date.now() - started,
+    cacheKey,
+    promptVersion: PROMPT_VERSION,
   });
   return response;
 };
@@ -382,7 +420,7 @@ const mapParagraphResponse = (
     ? payload.summary ?? summarize(text)
     : undefined;
 
-  const anchorList = anchorIndex.size ? Array.from(anchorIndex.values()) : undefined;
+  const anchorList = anchorIndex.size ? sortAnchors(Array.from(anchorIndex.values())) : undefined;
 
   return {
     summary,
@@ -419,8 +457,8 @@ const normalizeSpan = (
   maxLength: number,
 ) => {
   if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  let s = Math.round(start);
-  let e = Math.round(end);
+  let s = Math.floor(start);
+  let e = Math.floor(end);
   if (e < s) {
     const tmp = s;
     s = e;

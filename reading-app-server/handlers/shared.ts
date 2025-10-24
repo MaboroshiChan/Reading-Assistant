@@ -20,6 +20,37 @@ export const hashString = (value: string): string => {
   return createHash('sha1').update(value).digest('hex');
 };
 
+const stableSerialize = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, v]) => `${JSON.stringify(key)}:${stableSerialize(v)}`);
+  return `{${entries.join(',')}}`;
+};
+
+export const buildStableCacheKey = (prefix: string, version: string, value: unknown): string => {
+  return `${prefix}:${version}:${hashString(stableSerialize(value))}`;
+};
+
+export const sortAnchors = (anchors: Anchor[]): Anchor[] => {
+  return anchors
+    .slice()
+    .sort((a, b) => {
+      const aStart = a.span?.start ?? 0;
+      const bStart = b.span?.start ?? 0;
+      if (aStart !== bStart) return aStart - bStart;
+      const aEnd = a.span?.end ?? 0;
+      const bEnd = b.span?.end ?? 0;
+      return aEnd - bEnd;
+    });
+};
+
 export const summarize = (text: string, maxLength = 160): string => {
   const trimmed = text.trim();
   if (trimmed.length <= maxLength) return trimmed;
