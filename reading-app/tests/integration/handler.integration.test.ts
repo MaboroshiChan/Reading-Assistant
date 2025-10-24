@@ -47,6 +47,18 @@ if (!baseUrl) {
             throw new Error('Sample paragraph could not be extracted from paragraph_a.md');
         }
 
+        const firstSentence = (() => {
+            const sentenceMatch = paragraphText.match(/[^.!?]+[.!?]/);
+            if (sentenceMatch && sentenceMatch[0].trim().length > 0) {
+                return sentenceMatch[0].trim();
+            }
+            return paragraphText;
+        })();
+
+        if (!firstSentence) {
+            throw new Error('Unable to extract sample sentence from paragraph text');
+        }
+
         test('paragraph test 1', async () => {
             const payload = {
                 doc_id: 'doc-1',
@@ -69,6 +81,30 @@ if (!baseUrl) {
             expect((response.data?.claims?.length ?? 0)).toBeGreaterThan(0);
             expect((response.data?.anchors?.length ?? 0)).toBeGreaterThan(0);
             expect(response.served_from).toBeDefined();
-        })
+        });
+
+        test('sentence test 1', async () => {
+            const payload = {
+                doc_id: 'doc-1',
+                sentence_id: 'sentence_a',
+                sentence_text: firstSentence,
+            };
+
+            const ctx = {
+                doc: {
+                    doc_id: payload.doc_id,
+                    content_hash: 'hash-paragraph-a',
+                },
+            };
+
+            const response = await service.analyzeSentence(payload, ctx);
+
+            expect(response.status).toBe('ok');
+            expect(response.request_id).toBeDefined();
+            expect((response.data?.semantic_roles?.length ?? 0)).toBeGreaterThan(0);
+            expect((response.data?.anchors?.length ?? 0)).toBeGreaterThan(0);
+            expect((response.data?.discourse_function?.length ?? 0)).toBeGreaterThan(0);
+            expect(response.served_from).toBeDefined();
+        });
     });
 }
