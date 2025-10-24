@@ -62,12 +62,13 @@ if (!baseUrl) {
             };
 
             const response = await service.analyzeParagraph(payload, ctx);
-            expect(response.request_id).toBeDefined();
             expect(response.status).toBe('ok');
-            expect(response.data?.summary && response.data.summary.length).toBeGreaterThan(0);
-            expect(response.data?.roles?.length).toBeGreaterThan(0);
-            expect(response.data?.claims?.length).toBeGreaterThan(0);
-            expect(response.data?.anchors?.length).toBeGreaterThan(0);
+            expect(response.request_id).toBeDefined();
+            expect((response.data?.summary?.length ?? 0)).toBeGreaterThan(0);
+            expect((response.data?.roles?.length ?? 0)).toBeGreaterThan(0);
+            expect((response.data?.claims?.length ?? 0)).toBeGreaterThan(0);
+            expect((response.data?.anchors?.length ?? 0)).toBeGreaterThan(0);
+            expect(response.served_from).toBeDefined();
         })
     });
 }

@@ -1,121 +1,113 @@
-# The Description of the Project
+# Reading Assistant
 
-## Key Ideas
+A developer-focused playground for building a “semantic reading IDE”. The app
+breaks long-form text into structured layers (document → paragraph → sentence →
+subsentence) and overlays model-driven annotations to help readers inspect
+meaning, rhetoric, and claims.
 
-Thanks — from your previous messages, it seems you’re building a reading tool like an IDE, which does the following:
+## Key Features
 
-* Breaks down text into paragraphs, sentences, and tokens, each as semantic objects
-* Allows for hovering over sentences or tokens to reveal semantic metadata (e.g., function, purpose, mood)
-* Highlights semantic elements like subject-verb-object, conjunctions, and narrative relationships
-* Integrates with a React frontend, possibly with back-end analysis by an LLM
-* Is aimed at deep reading, comprehension, or analysis, not just casual reading
+- **React front-end (`reading-app`)** renders source documents with layered
+  highlights, hover cards, and semantic summaries.
+- **LLM-backed analysis server (`reading-app-server`)** turns envelopes into
+  structured JSON using prompt templates (`prompts/v1/*`). Mock generators are
+  available for offline development.
+- **Shared type system** (`reading-app/src/services/envelopes.ts`) keeps client
+  and server DTOs in sync.
+- **Caching + idempotent envelopes** allow fast replays and reproducible
+  results.
+- **Integration tests** exercise the message service against the HTTP router
+  with either the live LLM or the deterministic mock layer.
 
-⸻
+## Getting Started
 
-### Problem It Solves
+### Prerequisites
 
-📌 Problem:
+- Node.js 20.x (LTS) and npm 10.x
+- Optional: OpenAI-compatible API key for live LLM calls
 
-Most digital reading tools (e.g., Kindle, PDF viewers, browser readers) are passive and linear. They don’t support:
+### Installation
 
-* Actively engaging with sentence structure or purpose
-* Visualizing semantic roles or relationships between parts of a text
-* Understanding how parts of a narrative explain, rebut, contrast, or support each other
-* Training analytical reading skills needed in academic, legal, philosophical, or persuasive texts
-
-💡 Solution Your App Offers:
-
-A semantic reading environment that:
-
-* Acts like a semantic debugger for reading
-* Makes invisible structures visible (functions, logic, emphasis, hierarchy)
-* Helps readers parse complex arguments, spot manipulative rhetoric, or improve writing skills
-* Can be used in education, research, or critical reading training
-
-## Layers of A Sentence
-
-* Words
-* Punctuations
-* Semantic roles
-* Grammatical Structure
-  * SVO
-  * Attributes
-  * Connection words
-
-The LLM need to highlight the parts(Semantic roles and grammatical structure) that are important to a sentence. Extraction of words can be handled by hard coding. Probably in the early stage, we should focus more on semantic role. In the early development, the code logic should allow any block of text to be highlighted. We will be working on the rule of highlighting. 
-
-## Layers of A Paragraph
-
-* Sentence
-* Role of each sentence
-
-## Example of Functionality
-
-### Example 1
-
-"This is a test **sentence** *which* [would shows how things work]."
-
-When hovering above the word *which*, the corresponding subclause should be highlighted and the word (**sentence** in this case) it refers to.
-
-### Example 2
-
-"Because of the disaster, the town lost 100 million dollars overnight."
-
-The comma belongs to the set of tokens, but should not response to mouse hovering for the sake of convenience of sentence rerendering and clarification. But the period should be ignored when parsing the sentence into a token array. It also should highlight the conjunction word here (**Because** in this case)
-
-### Example 3
-
-“Wendy had just read Fifty Shades of Grey, the first book in the trilogy of erotica that was approaching, in America, twenty million copies sold, that was breaking records for weekly sales rates, that Wendy and so many others labeled and laughed about as “mommy porn.”
-
-This is a long sentence.
-
-# Process graph
-
-```mermaid
-flowchart TD
-  A[页面加载（React）] --> B[渲染原始句子（无高亮）]
-  B --> C[发起 LLM 请求（sentence + prompt）]
-  C --> D[LLM 返回结构化 JSON（关键词、焦点词等）]
-  D --> E[调用 Highlighter 组件，传入 JSON]
-  E --> F[处理逻辑：<br/>1. 收集短语<br/>2. 查找匹配位置<br/>3. 构建标签层<br/>4. 渲染嵌套高亮]
-  F --> G[高亮句子渲染完成<br/>原地替换原始句子]
+```bash
+npm install
 ```
 
-# Hovering Rules
+### Running in Mock Mode (default)
 
-1. verbs/predicates -> subject and object
-2. nouns <-> modifier 
-3. phrases: preposition/paticiples
-4. connective words <-> subsentence
+Mock mode uses deterministic data builders and requires no external API calls.
 
-| 类型    | 标签名（class）    | 描述                  | 可选属性                                    |
-| ----- | ------------- | ------------------- | --------------------------------------- |
-| 词元    | `.highlight`  | 所有可高亮的最小语言单位（如词、短语） | `data-role`, `data-group`, `data-links` |
-| 动词/谓词 | `.verb`       | 表达动作或状态的词           | `data-links="subj-1,obj-2"`             |
-| 名词    | `.noun`       | 实体或概念               | `data-links="mod-1,mod-2"`              |
-| 修饰语   | `.modifier`   | 修饰名词的定语/状语          | 可被名词 link                               |
-| 连接词   | `.connective` | 连词/从属连接词            | `data-links="clause-1"`                 |
-| 子句    | `.clause`     | 独立或从属句              | `id="clause-1"`                         |
-| 词组    | `.phrase`     | 介词短语/分词结构等整体        | `data-group="phrase-1"`                 |
-
-```html
-<!-- 对主语 -->
-<span class="highlight structure-noun semantic-agent" id="subj-1">
-  Natural language processing
-</span>
-
-<!-- 修饰语，无结构标签 -->
-<span class="highlight semantic-modifier" data-group="adv-1">
-  significantly
-</span>
-
-<!-- 谓词 + 结构联动 -->
-<span class="highlight structure-verb semantic-causative" data-links="subj-1,obj-1">
-  improves
-</span>
-
-<!-- 宾语 -->
-<span class="highlight structure-noun semantic-object" id="obj-1">
-  human-computer interaction
-</span>.
+```bash
+export MOCK_LLM=1
+npm run dev
 ```
+
+This spins up both the Vite dev server (`reading-app`) and the API server
+(`reading-app-server`) via `concurrently`. Open the printed URL to preview the
+reading interface.
+
+### Running with a Real LLM
+
+```bash
+export OPENAI_API_KEY=sk-...
+export MODEL_ID=gpt-4o-mini          # optional (defaults to gpt-4o-mini)
+unset MOCK_LLM                       # ensure the live client is used
+npm run dev
+```
+
+The paragraph and sentence handlers will now:
+
+1. Load the versioned prompt template from `reading-app-server/prompts/v1/`.
+2. Inject request context (document metadata, neighboring sentences, task list).
+3. Call `llmService.json()` against the OpenAI Responses API.
+4. Coerce the response into typed DTOs, normalizing spans, anchors, and
+   confidence scores.
+
+## Configuration
+
+Environment variables (`reading-app-server/services/config.ts`):
+
+| Variable          | Default         | Description                                  |
+| ----------------- | --------------- | -------------------------------------------- |
+| `PORT`            | `8787`          | API server listen port                       |
+| `MODEL_ID`        | `gpt-4o-mini`   | LLM model identifier                         |
+| `OPENAI_API_KEY`  | `""`            | API key (required for live mode)             |
+| `MOCK_LLM`        | `NODE_ENV=test` | When truthy, use mock generators             |
+| `CACHE_TTL_MS`    | `7 days`        | TTL for in-memory response cache             |
+
+## Running Tests
+
+- **Unit / integration**: `npm test`
+- **Type checking**: `npm run typecheck` (requires a project `tsconfig.json`)
+- **Coverage**: `npm run coverage`
+
+Tests default to mock mode (`MOCK_LLM=1`) so they run without external
+dependencies.
+
+## Prompt Development
+
+Prompt templates live in `reading-app-server/prompts/v1/`. Each handler loads
+its prompt at runtime, caches the template in-memory, and appends the request
+payload/context before calling the LLM. Updating a prompt automatically changes
+the server behaviour without touching TypeScript code; just bump
+`prompt_version` in the client context when you need cache invalidation.
+
+## Repository Layout
+
+```
+reading-app/               # React front-end (Vite)
+reading-app-server/        # Express-free HTTP server + handlers
+  handlers/
+    paragraph.ts           # LLM pipeline for paragraphs
+    sentence.ts            # LLM pipeline for sentences
+    mock/*                 # Deterministic mock builders
+  prompts/v1/              # Prompt templates (paragraph, sentence, etc.)
+  services/llmService.ts   # OpenAI-compatible Responses API adapter
+resource/examples/         # Markdown samples used in tests and demos
+```
+
+## Roadmap Highlights
+
+- Expand live handlers for skeleton and subsentence analysis.
+- Add richer evaluation tooling around prompt outputs.
+- Surface LLM usage metadata through the UI for observability.
+- Formalize downstream client components for hover/highlight UX.
