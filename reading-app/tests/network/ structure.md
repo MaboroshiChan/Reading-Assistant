@@ -1,8 +1,8 @@
-给你一个“只测该测的”的清单，按**必须测 / 建议测 / 可以先不测**三挡来分（前端 + 服务端一起看）。不写代码版，直接告诉你哪些文件要覆盖，为什么。
+# Structure
 
-# 必须测（优先做，性价比最高）
+## 必须测（优先做，性价比最高）
 
-**前端（reading-app）**
+### 前端（reading-app
 
 * `envelopes.ts`（类型契约）
 
@@ -22,7 +22,7 @@
   * 测什么：默认值是否补齐（priority/locale/cache_hint/prompt_version）、上下文拼装是否传下去、帧类型推断是否正确。
   * 价值：保证业务只写语义调用就能工作。
 
-**服务端（reading-app-server）**
+## 服务端（reading-app-server
 
 * `utils/cacheKey.ts`（缓存键生成）
 
@@ -43,15 +43,15 @@
 
   * 测什么：类型路由、基础错误（缺 type/payload → 400）、把 handler 结果包成统一 Envelope。
 
-# 建议测（第二梯队，覆盖易变边角）
+### 建议测（第二梯队，覆盖易变边角）
 
-**前端**
+#### 前端
 
 * （如果有）`adapters/*`（分析 DTO → 视图 VM 的映射）
 
   * 测什么：函数式映射——输入 X 得到期望字段与枚举映射。
 
-**服务端**
+#### 服务端
 
 * `services/llmService.ts`（在 mock 模式下）
 
@@ -64,7 +64,7 @@
 
   * 测什么：span 合法性、anchor_hash 稳定。
 
-# 可以先不测（或用集成/E2E覆盖即可）
+## 可以先不测（或用集成/E2E覆盖即可）
 
 * `index.ts`（启动/监听端口）
 
@@ -76,14 +76,14 @@
 
   * 说明：等 `sentence` handler 的测试稳定后，再复制一两份代表性用例即可；不必一开始全铺开。
 
-# 覆盖方式建议（怎么测最省力）
+## 覆盖方式建议（怎么测最省力）
 
 * **单测（unit）**：`cacheKey`、`cache`、`anchors`、`messageService`（用 fake NetworkClient）、`networkClient`（mock fetch）。
 * **集成（integration）**：`router + handler + mock llmService`，不监听端口，用 Supertest/内存 server。
 * **合同样本（contract）**：`envelopes.ts` 用 3～4 个 JSON 样本做结构校验（ok/partial/error）。
 * **E2E（可选，最后再做）**：前端 `MessageService` 直接打本地 `/msg`（server 内置 mock LLM）。
 
-# 先后顺序（落地路线图）
+## 先后顺序（落地路线图）
 
 1. 单测：`cacheKey`、`cache`、`networkClient`
 2. 单测：`messageService`（fake NetworkClient）
