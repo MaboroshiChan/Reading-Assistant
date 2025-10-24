@@ -15,6 +15,7 @@ import {
   summarize,
 } from './shared';
 import { buildMockParagraphData } from './mock/paragraphMock';
+import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'paragraph';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
@@ -151,11 +152,25 @@ const buildParagraphData = async (
   req: RequestEnvelopeParagraph,
 ): Promise<ParagraphBuildResult> => {
   if (config.useMockLLM) {
+    handlerLog('paragraph', 'building mock payload', {
+      requestId: req.request_id,
+      paragraphId: req.payload.paragraph_id,
+    });
     return { data: buildMockParagraphData(req) };
   }
 
+  handlerLog('paragraph', 'building LLM prompt', {
+    requestId: req.request_id,
+    tasks: buildTasks(req),
+  });
   const prompt = await buildPrompt(req);
   const { object, usage } = await llmJson(prompt, coerceParagraphResponse);
+  handlerLog('paragraph', 'LLM response received', {
+    requestId: req.request_id,
+    model: usage?.modelId,
+    tokensIn: usage?.inputTokens,
+    tokensOut: usage?.outputTokens,
+  });
   const data = mapParagraphResponse(object, req);
   return { data, usage };
 };
@@ -163,14 +178,26 @@ const buildParagraphData = async (
 export const handleParagraph = async (
   req: RequestEnvelopeParagraph,
 ): Promise<ResponseEnvelopeParagraph> => {
+  handlerLog('paragraph', 'request received', {
+    requestId: req.request_id,
+    paragraphId: req.payload.paragraph_id,
+    mock: config.useMockLLM,
+  });
   const cacheKey = buildCacheKey(req);
   const cached = cache.get<ResponseEnvelopeParagraph>(cacheKey);
   if (cached) {
+    handlerLog('paragraph', 'cache hit', {
+      requestId: req.request_id,
+    });
     return { ...cached, served_from: 'cache' };
   }
 
   const started = Date.now();
   const { data, usage } = await buildParagraphData(req);
+  handlerLog('paragraph', 'data prepared', {
+    requestId: req.request_id,
+    source: config.useMockLLM ? 'mock' : 'llm',
+  });
   const response: ResponseEnvelopeParagraph = {
     request_id: req.request_id,
     status: 'ok',
@@ -185,6 +212,10 @@ export const handleParagraph = async (
   };
 
   cache.set(cacheKey, response, config.cacheTtlMs);
+  handlerLog('paragraph', 'response cached', {
+    requestId: req.request_id,
+    latencyMs: Date.now() - started,
+  });
   return response;
 };
 

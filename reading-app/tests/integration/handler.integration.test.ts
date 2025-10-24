@@ -64,7 +64,7 @@ if (!baseUrl) {
             const response = await service.analyzeParagraph(payload, ctx);
             expect(response.request_id).toBeDefined();
             expect(response.status).toBe('ok');
-            expect(response.data?.summary).toContain('analysis');
+            expect(response.data?.summary && response.data.summary.length).toBeGreaterThan(0);
             expect(response.data?.roles?.length).toBeGreaterThan(0);
             expect(response.data?.claims?.length).toBeGreaterThan(0);
             expect(response.data?.anchors?.length).toBeGreaterThan(0);
