@@ -1,9 +1,9 @@
 // SentenceComponent.tsx
 import React, { useState, useCallback, type KeyboardEvent, type MouseEvent } from "react";
-import type { Sentence } from "../analysis/structure/Sentence";
+import type { Sentence } from "../model/structure/Sentence";
 import "./css/SentenceComponent.css";
 import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬浮卡片
-import type { SubSentenceAnalysis, SubUnit } from "../analysis/structure/SubSentence";
+import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
 import SubSentenceComponent from "./SubSentenceComponent";
 
 const FREEZE_EVENT = "hovercard:freeze";

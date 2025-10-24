@@ -1,5 +1,5 @@
 import React, { useCallback, useState, type MouseEvent } from "react";
-import type { Paragraph } from "../analysis/structure/Paragraph";
+import type { Paragraph } from "../model/structure/Paragraph";
 import "./css/SemanticParagraph.css";
 import SentenceComponent from "./SentenceComponent";
 
