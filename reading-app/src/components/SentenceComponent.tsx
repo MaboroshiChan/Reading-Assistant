@@ -5,8 +5,21 @@ import "./css/SentenceComponent.css";
 import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬浮卡片
 import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
 import SubSentenceComponent from "./SubSentenceComponent";
+import { SentenceCardComponent } from "./InfoComponent";
+// Network 
+import mapSentenceToVM, { type SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
+import messageService from "../services/messageService.instance";
+import type { StandardContext } from "../services/envelopes";
 
 const FREEZE_EVENT = "hovercard:freeze";
+const DEFAULT_DOC_CONTEXT: StandardContext["doc"] = {
+    doc_id: "example-article",
+    content_hash: "example-article#dev",
+};
+const isAbortError = (error: unknown): boolean =>
+    error instanceof DOMException
+        ? error.name === "AbortError"
+        : error instanceof Error && error.name === "AbortError";
 
 interface SentenceComponentProps {
     sentence: Sentence;
@@ -42,6 +55,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [isLoadingSubsentence, setIsLoadingSubsentence] = useState(false);
     const [subsentenceError, setSubsentenceError] = useState<string | null>(null);
     const [hoveredSubUnitId, setHoveredSubUnitId] = useState<string | null>(null);
+    const [sentenceVm, setSentenceVm] = useState<SentenceViewModel>(() => mapSentenceToVM(sentence));
+    const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+    const [analysisError, setAnalysisError] = useState<string | null>(null);
 
     // 新增：记录鼠标坐标（供 HoverCard 使用）
     const [anchor, setAnchor] = useState<Point | null>(null);
@@ -54,6 +70,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         window.addEventListener(FREEZE_EVENT, onFreeze as EventListener);
         return () => window.removeEventListener(FREEZE_EVENT, onFreeze as EventListener);
     }, []);
+
+    React.useEffect(() => {
+        setSentenceVm(mapSentenceToVM(sentence));
+        setAnalysisStatus("idle");
+        setAnalysisError(null);
+    }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood]);
 
 
     const handleClick = (e: MouseEvent<HTMLSpanElement>) => {
@@ -98,6 +120,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (globalFrozenId !== null && globalFrozenId !== sentence.id) return;
         setIsHovered(true);
         onHoverChange?.(sentence.id, true);
+        if (analysisStatus === "error") {
+            setAnalysisStatus("idle");
+        }
     };
 
     const handleMouseLeave = () => {
@@ -119,6 +144,66 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     };
 
+    React.useEffect(() => {
+        if (!interactionEnabled) return;
+        if (!isHovered && !isFrozen) return;
+        if (analysisStatus !== "idle") return;
+
+        const controller = new AbortController();
+        setAnalysisStatus("loading");
+        setAnalysisError(null);
+
+        const payload = {
+            doc_id: DEFAULT_DOC_CONTEXT.doc_id,
+            sentence_id: String(sentence.id),
+            sentence_text: sentence.text,
+        };
+        const ctx: Partial<StandardContext> & { doc: StandardContext["doc"] } = {
+            doc: DEFAULT_DOC_CONTEXT,
+        };
+
+        (async () => {
+            try {
+                const res = await messageService.analyzeSentence(payload, ctx, { signal: controller.signal });
+                if (controller.signal.aborted) {
+                    setAnalysisStatus("idle");
+                    return;
+                }
+                if (res.status === "error") {
+                    setSentenceVm(mapSentenceToVM(sentence));
+                    setAnalysisError(res.error?.message ?? "Sentence analysis failed.");
+                    setAnalysisStatus("error");
+                    return;
+                }
+                setSentenceVm(mapSentenceToVM(sentence, res.data ?? null));
+                setAnalysisError(null);
+                setAnalysisStatus("ready");
+            } catch (error) {
+                if (isAbortError(error)) {
+                    setAnalysisStatus("idle");
+                    return;
+                }
+                setSentenceVm(mapSentenceToVM(sentence));
+                setAnalysisError(error instanceof Error ? error.message : "Sentence analysis failed.");
+                setAnalysisStatus("error");
+            }
+        })();
+
+        return () => {
+            controller.abort();
+        };
+    }, [
+        interactionEnabled,
+        isHovered,
+        isFrozen,
+        analysisStatus,
+        sentence.id,
+        sentence.text,
+        sentence.function,
+        sentence.type,
+        sentence.mood,
+    ]);
+
     const blocked = globalFrozenId !== null && globalFrozenId !== sentence.id;
 
     React.useEffect(() => {
@@ -130,6 +215,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         setSubsentenceError(null);
         setIsLoadingSubsentence(false);
         setIsClicked(false);
+        setSentenceVm(mapSentenceToVM(sentence));
+        setAnalysisStatus("idle");
+        setAnalysisError(null);
         setIsFrozen(prev => {
             if (prev) {
                 window.dispatchEvent(new CustomEvent<number | null>(FREEZE_EVENT, { detail: null }));
@@ -309,28 +397,37 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             // 可以按需传额外参数：offset、maxWidth 等
             >
                 <div className="hovercard-content">
+                    <SentenceCardComponent info={sentenceVm} />
+                    {analysisStatus === "loading" && (
+                        <div className="subsentence-status">Analyzing sentence...</div>
+                    )}
+                    {analysisStatus === "error" && analysisError && (
+                        <div className="subsentence-status subsentence-status--error">{analysisError}</div>
+                    )}
                     <div className="tags">
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
                         {(() => {
-                            const v = fnVariant(sentence.function);
+                            const roleLabel = sentenceVm.roleLabel ?? sentence.function;
+                            const v = fnVariant(roleLabel);
                             return (
                                 <span className="tag" style={styleFor(v)}>
                                     {dotEl(v)}
-                                    {sentence.function}
+                                    {roleLabel}
                                 </span>
                             );
                         })()}
 
                         {/* Tag 2: type + (relation 可拼在同一个 tag 内) -> Declarative 用绿 */}
                         {(() => {
-                            const v = typeVariant(sentence.type);
+                            const structureLabel = sentenceVm.structureLabel ?? sentence.type;
+                            const v = typeVariant(structureLabel);
                             const relationPiece = sentence.relation
                                 ? ` · ${sentence.relation.type} → #${sentence.relation.targetSentenceId}`
                                 : "";
                             return (
                                 <span className="tag" style={styleFor(v)}>
                                     {dotEl(v)}
-                                    {sentence.type}
+                                    {structureLabel}
                                     {relationPiece}
                                 </span>
                             );
@@ -338,11 +435,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
                         {/* Tag 3: mood 独立成黄（如 Indicative） */}
                         {(() => {
-                            const v = moodVariant(sentence.mood);
+                            const moodLabel = sentenceVm.mood ?? sentence.mood;
+                            const v = moodVariant(moodLabel);
                             return (
                                 <span className="tag" style={styleFor(v)}>
                                     {dotEl(v)}
-                                    {sentence.mood}
+                                    {moodLabel}
                                 </span>
                             );
                         })()}

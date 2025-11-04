@@ -1,7 +1,8 @@
-import React, { useCallback, useState, type MouseEvent } from "react";
+import React, { useCallback, useMemo, useState, type MouseEvent } from "react";
 import type { Paragraph } from "../model/structure/Paragraph";
 import "./css/SemanticParagraph.css";
 import SentenceComponent from "./SentenceComponent";
+import mapParagraphToVM from "../model/viewModels/mapParagraphToVM";
 
 // There is no paragraph hover card
 
@@ -12,6 +13,7 @@ interface ParagraphComponentProps {
 export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isClicked, setIsClicked] = useState(false);
+  const paragraphVm = useMemo(() => mapParagraphToVM(paragraph), [paragraph]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMouseEnter = useCallback((_event: MouseEvent<HTMLDivElement>) => {
@@ -50,7 +52,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   return (
     <div
       className={className}
-      data-paragraph-id={paragraph.id}
+      data-paragraph-id={paragraphVm.id}
       onMouseEnter={handleMouseEnter}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
