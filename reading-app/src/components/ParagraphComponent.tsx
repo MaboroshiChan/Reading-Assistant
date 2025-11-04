@@ -3,6 +3,8 @@ import type { Paragraph } from "../model/structure/Paragraph";
 import "./css/SemanticParagraph.css";
 import SentenceComponent from "./SentenceComponent";
 
+// There is no paragraph hover card
+
 interface ParagraphComponentProps {
   paragraph: Paragraph;
 }
@@ -11,10 +13,12 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   const [isHovered, setIsHovered] = useState(false);
   const [isClicked, setIsClicked] = useState(false);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMouseEnter = useCallback((_event: MouseEvent<HTMLDivElement>) => {
     setIsHovered(true);
   }, []);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMouseMove = useCallback((_event: MouseEvent<HTMLDivElement>) => {
     // no-op for now; reserved for future pointer sync
   }, []);
