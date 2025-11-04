@@ -6,8 +6,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/generate-text": "http://localhost:3001"
+      "/generate-text": "http://localhost:3001",
+      "/msg": "http://localhost:8787",
+      "/ping": "http://localhost:8787"
     }
   }
 })
-

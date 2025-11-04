@@ -5,9 +5,10 @@ import "./css/SentenceComponent.css";
 import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬浮卡片
 import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
 import SubSentenceComponent from "./SubSentenceComponent";
-import { SentenceCardComponent } from "./InfoComponent";
 // Network 
+import { SentenceCardComponent } from "./InfoComponent";
 import mapSentenceToVM, { type SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
+import mapSubSentenceToAnalysis from "../model/viewModels/mapSubSentenceToVM";
 import messageService from "../services/messageService.instance";
 import type { StandardContext } from "../services/envelopes";
 
@@ -52,12 +53,14 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [showSubUI, setShowSubUI] = useState(false);
     const [closingSubUI, setClosingSubUI] = useState(false);
     const closeTimerRef = React.useRef<number | null>(null);
+    const subsentenceAbortRef = React.useRef<AbortController | null>(null);
     const [isLoadingSubsentence, setIsLoadingSubsentence] = useState(false);
     const [subsentenceError, setSubsentenceError] = useState<string | null>(null);
     const [hoveredSubUnitId, setHoveredSubUnitId] = useState<string | null>(null);
     const [sentenceVm, setSentenceVm] = useState<SentenceViewModel>(() => mapSentenceToVM(sentence));
     const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
     const [analysisError, setAnalysisError] = useState<string | null>(null);
+    const [analysisRequested, setAnalysisRequested] = useState(false);
 
     // 新增：记录鼠标坐标（供 HoverCard 使用）
     const [anchor, setAnchor] = useState<Point | null>(null);
@@ -71,10 +74,18 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         return () => window.removeEventListener(FREEZE_EVENT, onFreeze as EventListener);
     }, []);
 
+    React.useEffect(() => () => {
+        if (subsentenceAbortRef.current) {
+            subsentenceAbortRef.current.abort();
+            subsentenceAbortRef.current = null;
+        }
+    }, []);
+
     React.useEffect(() => {
         setSentenceVm(mapSentenceToVM(sentence));
         setAnalysisStatus("idle");
         setAnalysisError(null);
+        setAnalysisRequested(false);
     }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood]);
 
 
@@ -146,8 +157,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     React.useEffect(() => {
         if (!interactionEnabled) return;
-        if (!isHovered && !isFrozen) return;
-        if (analysisStatus !== "idle") return;
+        if (!analysisRequested) return;
 
         const controller = new AbortController();
         setAnalysisStatus("loading");
@@ -165,10 +175,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         (async () => {
             try {
                 const res = await messageService.analyzeSentence(payload, ctx, { signal: controller.signal });
-                if (controller.signal.aborted) {
-                    setAnalysisStatus("idle");
-                    return;
-                }
+                if (controller.signal.aborted) return;
+
                 if (res.status === "error") {
                     setSentenceVm(mapSentenceToVM(sentence));
                     setAnalysisError(res.error?.message ?? "Sentence analysis failed.");
@@ -179,10 +187,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 setAnalysisError(null);
                 setAnalysisStatus("ready");
             } catch (error) {
-                if (isAbortError(error)) {
-                    setAnalysisStatus("idle");
-                    return;
-                }
+                if (isAbortError(error)) return;
                 setSentenceVm(mapSentenceToVM(sentence));
                 setAnalysisError(error instanceof Error ? error.message : "Sentence analysis failed.");
                 setAnalysisStatus("error");
@@ -192,17 +197,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         return () => {
             controller.abort();
         };
-    }, [
-        interactionEnabled,
-        isHovered,
-        isFrozen,
-        analysisStatus,
-        sentence.id,
-        sentence.text,
-        sentence.function,
-        sentence.type,
-        sentence.mood,
-    ]);
+    }, [analysisRequested, interactionEnabled, sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood, sentence]);
 
     const blocked = globalFrozenId !== null && globalFrozenId !== sentence.id;
 
@@ -218,6 +213,11 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         setSentenceVm(mapSentenceToVM(sentence));
         setAnalysisStatus("idle");
         setAnalysisError(null);
+        setAnalysisRequested(false);
+        if (subsentenceAbortRef.current) {
+            subsentenceAbortRef.current.abort();
+            subsentenceAbortRef.current = null;
+        }
         setIsFrozen(prev => {
             if (prev) {
                 window.dispatchEvent(new CustomEvent<number | null>(FREEZE_EVENT, { detail: null }));
@@ -227,29 +227,78 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     }, [interactionEnabled]);
 
     // use for test
-    const handleStartSubsentence = useCallback(async (analysisPath?: string) => {
+    const handleStartSubsentence = useCallback((): void => {
         if (subSentenceAnalysis) {
+            if (subsentenceAbortRef.current) {
+                subsentenceAbortRef.current.abort();
+                subsentenceAbortRef.current = null;
+            }
             setSubSentenceAnalysis(null);
             setSubsentenceError(null);
             setHoveredSubUnitId(null);
+            setAnalysisRequested(false);
+            setSentenceVm(mapSentenceToVM(sentence));
+            setAnalysisStatus("idle");
+            setAnalysisError(null);
             return;
         }
         if (isLoadingSubsentence) return;
+
+        if (subsentenceAbortRef.current) {
+            subsentenceAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        subsentenceAbortRef.current = controller;
+
+        setAnalysisRequested(true);
+        setAnalysisStatus("idle");
+        setAnalysisError(null);
         setIsLoadingSubsentence(true);
         setSubsentenceError(null);
         setHoveredSubUnitId(null);
-        try {
-            const targetPath = analysisPath ?? "../../examples/subsentence-example.json";
-            const module = await import(/* @vite-ignore */ targetPath);
-            const analysis = (module.default ?? module) as SubSentenceAnalysis;
-            setSubSentenceAnalysis(analysis);
-        } catch (error) {
-            setSubsentenceError("Failed to load subsentence analysis.");
-            console.error(error);
-        } finally {
-            setIsLoadingSubsentence(false);
-        }
-    }, [isLoadingSubsentence, subSentenceAnalysis]);
+
+        const tasks: Array<'micro_roles' | 'cue_interaction' | 'contrast_resolution'> = [
+            "micro_roles",
+            "cue_interaction",
+            "contrast_resolution",
+        ];
+        const payload = {
+            doc_id: DEFAULT_DOC_CONTEXT.doc_id,
+            sentence_id: String(sentence.id),
+            span: { start: 0, end: sentence.text.length },
+            options: { tasks },
+        };
+        const ctx: Partial<StandardContext> & { doc: StandardContext["doc"] } = {
+            doc: DEFAULT_DOC_CONTEXT,
+        };
+
+        const run = async () => {
+            try {
+                const res = await messageService.analyzeSubSentence(payload, ctx, { signal: controller.signal });
+                if (controller.signal.aborted) return;
+
+                if (res.status === "error") {
+                    setSubsentenceError(res.error?.message ?? "Failed to load subsentence analysis.");
+                    setSubSentenceAnalysis(null);
+                    return;
+                }
+                const mapped = mapSubSentenceToAnalysis(sentence, res.data ?? null);
+                setSubSentenceAnalysis(mapped);
+                setSubsentenceError(null);
+            } catch (error) {
+                if (isAbortError(error)) return;
+                setSubsentenceError(error instanceof Error ? error.message : "Failed to load subsentence analysis.");
+                setSubSentenceAnalysis(null);
+            } finally {
+                if (subsentenceAbortRef.current === controller) {
+                    subsentenceAbortRef.current = null;
+                }
+                setIsLoadingSubsentence(false);
+            }
+        };
+
+        void run();
+    }, [isLoadingSubsentence, sentence, subSentenceAnalysis]);
 
     // ---- [A] Tag 颜色与映射（内联样式，免改 CSS） ----
     type Variant = "blue" | "green" | "yellow" | "gray";
@@ -336,8 +385,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         .filter(Boolean)
         .join(" ");
 
-    const sentenceAnalysisPath = `../../examples/sentences/${sentence.id}.json`;
-
     // Animate mount/unmount of SubSentenceComponent inside hover card
     React.useEffect(() => {
         // Clear any pending timer when state changes
@@ -385,7 +432,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             </span>
 
             <SentenceHoverCard
-                onStartSubSentence={() => handleStartSubsentence(sentenceAnalysisPath)}
+                onStartSubSentence={handleStartSubsentence}
                 subSentenceActive={Boolean(subSentenceAnalysis)}
                 open={
                     interactionEnabled &&
@@ -397,13 +444,31 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             // 可以按需传额外参数：offset、maxWidth 等
             >
                 <div className="hovercard-content">
-                    <SentenceCardComponent info={sentenceVm} />
-                    {analysisStatus === "loading" && (
-                        <div className="subsentence-status">Analyzing sentence...</div>
-                    )}
-                    {analysisStatus === "error" && analysisError && (
-                        <div className="subsentence-status subsentence-status--error">{analysisError}</div>
-                    )}
+                    {analysisRequested ? (
+                        <>
+                            {analysisStatus === "loading" && (
+                                <div className="subsentence-status">Analyzing sentence...</div>
+                            )}
+                            {analysisStatus === "error" && analysisError && (
+                                <div className="subsentence-status subsentence-status--error">{analysisError}</div>
+                            )}
+                            {analysisStatus === "ready" && (
+                                <SentenceCardComponent info={sentenceVm} />
+                            )}
+                            {showSubUI ? (
+                                <div className={`subsentence-wrapper${closingSubUI ? " is-closing" : ""}`}>
+                                    {(subSentenceAnalysis ?? lastSubSentenceAnalysis) ? (
+                                        <SubSentenceComponent
+                                            analysis={(subSentenceAnalysis ?? lastSubSentenceAnalysis)!}
+                                            focusUnitId={hoveredSubUnitId ?? undefined}
+                                            onHoverUnit={setHoveredSubUnitId}
+                                        />
+                                    ) : null}
+                                </div>
+                            ) : null}
+                        </>
+                    ) : null}
+
                     <div className="tags">
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
                         {(() => {
@@ -447,17 +512,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     </div>
 
                     <div className="purpose">{sentence.purpose}</div>
-                    {showSubUI ? (
-                        <div className={`subsentence-wrapper${closingSubUI ? " is-closing" : ""}`}>
-                            {(subSentenceAnalysis ?? lastSubSentenceAnalysis) ? (
-                                <SubSentenceComponent
-                                    analysis={(subSentenceAnalysis ?? lastSubSentenceAnalysis)!}
-                                    focusUnitId={hoveredSubUnitId ?? undefined}
-                                    onHoverUnit={setHoveredSubUnitId}
-                                />
-                            ) : null}
-                        </div>
-                    ) : null}
                     {isLoadingSubsentence && (
                         <div className="subsentence-status">Loading subsentence analysis...</div>
                     )}

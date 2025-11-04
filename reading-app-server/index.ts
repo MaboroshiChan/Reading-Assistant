@@ -1,8 +1,19 @@
 // index.ts
 import http from 'node:http';
 import { handleMsg } from './http/router';
+import { config } from './services/config';
 
 const server = http.createServer(async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-request-id, Idempotency-Key');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   if (req.method === 'GET' && req.url === '/ping') {
     const remote = req.socket.remoteAddress ?? 'unknown';
     console.log(`[server] ping received from ${remote} @ ${new Date().toISOString()}`);
@@ -28,6 +39,9 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404); res.end('Not Found');
 });
 
-server.listen(process.env.PORT ?? 8787, () => {
-  console.log(`server on :${process.env.PORT ?? 8787}`);
+const port = process.env.PORT ?? 8787;
+const mode = config.useMockLLM ? 'MOCK_LLM' : 'LIVE_LLM';
+
+server.listen(port, () => {
+  console.log(`server on :${port} (${mode})`);
 });

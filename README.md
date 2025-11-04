@@ -62,6 +62,16 @@ The paragraph and sentence handlers will now:
 4. Coerce the response into typed DTOs, normalizing spans, anchors, and
    confidence scores.
 
+### Running Only the API Server
+
+If you prefer to run the backend independently (for example while using a separate front-end session), execute:
+
+```bash
+npm run dev --prefix reading-app-server
+```
+
+This starts `tsx index.ts` inside `reading-app-server/` and listens on `PORT` (default `8787`).
+
 ## Configuration
 
 Environment variables (`reading-app-server/services/config.ts`):
