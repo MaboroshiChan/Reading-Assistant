@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SubSentenceAnalysis } from "../../src/analysis/structure/SubSentence";
+import type { SubSentenceAnalysis } from "../../src/model/structure/SubSentence";
 
 describe("SubSentenceAnalysis data structure", () => {
   it("should correctly parse example subsentence analysis data", () => {
