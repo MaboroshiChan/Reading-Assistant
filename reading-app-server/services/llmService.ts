@@ -16,7 +16,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config';
-import OpenAI, { APIError } from 'openai';
 
 // -----------------------------
 // Public types
@@ -119,23 +118,23 @@ interface CallArgs {
 
 interface CallReturn<T> { data: T; usage: LLMUsage }
 
+const RESPONSES_URL = 'https://api.openai.com/v1/responses';
+
+class LLMHttpError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = 'LLMHttpError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 const LOG_DIR = path.join(__dirname, '..', 'log');
 const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
-
-let cachedClient: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (config.useMockLLM) {
-    throw new Error('Mock LLM mode does not create a live OpenAI client');
-  }
-  if (!config.apiKey) {
-    throw new Error('Missing OPENAI_API_KEY environment variable for OpenAI client');
-  }
-  if (!cachedClient) {
-    cachedClient = new OpenAI({ apiKey: config.apiKey });
-  }
-  return cachedClient;
-}
+const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
 
 async function callLLM<T extends string | unknown>(args: CallArgs): Promise<CallReturn<T>> {
   await logPromptIfDebug(args);
@@ -149,7 +148,10 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
   const timeout = setTimeout(() => controller.abort(), args.timeoutMs);
 
   try {
-    const client = getClient();
+    if (!config.apiKey) {
+      throw new Error('Missing OPENAI_API_KEY environment variable for OpenAI client');
+    }
+
     const body = buildRequestBody(
       args.prompt,
       args.responseAs,
@@ -157,7 +159,33 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
       args.temperature,
       args.maxOutputTokens,
     );
-    const json = (await client.responses.create(body, { signal })) as ResponseShape;
+    const res = await fetch(RESPONSES_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+
+    let payload: unknown;
+    try {
+      payload = await res.json();
+    } catch (err) {
+      throw new LLMHttpError(`Non-JSON response from LLM (status ${res.status})`, res.status, null);
+    }
+
+    if (!res.ok) {
+      const message =
+        (typeof payload === 'object' && payload && 'error' in payload && typeof (payload as { error?: { message?: string } }).error?.message === 'string')
+          ? String((payload as { error?: { message?: string } }).error?.message)
+          : `OpenAI request failed with status ${res.status}`;
+      throw new LLMHttpError(message, res.status, payload);
+    }
+
+    const json = payload as ResponseShape;
+    void persistLLMResponse(args, json);
 
     const usage: LLMUsage = {
       inputTokens: json.usage?.input_tokens,
@@ -228,6 +256,41 @@ async function callMockLLM<T extends string | unknown>(args: CallArgs): Promise<
   return { data: json as T, usage };
 }
 
+async function persistLLMResponse(args: CallArgs, payload: ResponseShape): Promise<void> {
+  try {
+    await fs.mkdir(RESPONSE_DIR, { recursive: true });
+    const timestamp = new Date().toISOString();
+    const safeStamp = timestamp.replace(/[:.]/g, '-');
+    const textBlock = extractText(payload);
+    const parsed = (() => {
+      if (!textBlock) return null;
+      try {
+        return JSON.parse(textBlock);
+      } catch {
+        const unwrapped = unwrapCodeFence(textBlock);
+        if (!unwrapped) return null;
+        try {
+          return JSON.parse(unwrapped);
+        } catch {
+          return null;
+        }
+      }
+    })();
+    const record = {
+      timestamp,
+      model: args.model,
+      responseAs: args.responseAs,
+      text: textBlock || null,
+      parsed: parsed ?? undefined,
+      prompt: config.debugMode ? args.prompt : undefined,
+    };
+    const filePath = path.join(RESPONSE_DIR, `${safeStamp}_${args.model}.json`);
+    await fs.writeFile(filePath, JSON.stringify(record, null, 2), 'utf8');
+  } catch (error) {
+    console.warn('[llm-response] failed to persist response', error);
+  }
+}
+
 function buildRequestBody(
   prompt: string,
   responseAs: 'text' | 'json',
@@ -237,40 +300,38 @@ function buildRequestBody(
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
     model,
-    // OpenAI Responses API expects `input` array or string; we use string for simplicity
     input: prompt,
   };
 
-  if (typeof temperature === 'number') {
-    base.temperature = temperature;
-  }
-
-  if (typeof maxOutputTokens === 'number') {
-    base.max_output_tokens = maxOutputTokens;
-  }
+  if (temperature !== undefined) base.temperature = temperature;
+  if (maxOutputTokens !== undefined) base.max_output_tokens = maxOutputTokens;
 
   if (responseAs === 'json') {
     base.text = {
-      ...(typeof base.text === 'object' && base.text !== null
-        ? (base.text as Record<string, unknown>)
-        : {}),
-        name: "f",
       format: {
         type: 'json_schema',
-        json_schema: {
-          name: 'response',
-          schema: {
-            type: 'object',
-            additionalProperties: true,
-          },
-          strict: false,
+        name: 'response',
+        schema: {
+          type: 'object',
+          properties: {},
+          additionalProperties: true,
         },
+        strict: false,
+      },
+    };
+  } else {
+    base.text = {
+      format: {
+        type: 'text',
+        name: 'default',
       },
     };
   }
 
   return base;
 }
+
+
 
 // Extract text from either Responses API or Chat Completions fallbacks
 function extractText(resp: ResponseShape): string {
@@ -339,16 +400,16 @@ function linkSignals(inner: AbortController, outer?: AbortSignal): AbortSignal {
 }
 
 function normalizeError(error: unknown): Error {
-  if (error instanceof APIError) {
-    const apiMessage =
-      typeof error.error === 'object' && error.error && 'message' in error.error
-        ? String((error.error as { message?: unknown }).message ?? '')
-        : '';
-    const message = apiMessage || error.message || 'OpenAI API error';
+  if (error instanceof LLMHttpError) {
+    const details =
+      typeof error.body === 'object' && error.body !== null
+        ? JSON.stringify(error.body)
+        : String(error.body ?? '');
+    const message = details ? `${error.message} (status ${error.status}) :: ${details}` : `${error.message} (status ${error.status})`;
     return new Error(message);
   }
   if (error instanceof Error) return error;
-  return new Error('Unknown OpenAI client error');
+  return new Error('Unknown LLM client error');
 }
 
 function truncate(text: string, maxLen: number): string {
