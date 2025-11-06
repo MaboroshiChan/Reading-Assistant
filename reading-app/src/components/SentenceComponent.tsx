@@ -3,12 +3,9 @@ import React, { useState, useCallback, type KeyboardEvent, type MouseEvent } fro
 import type { Sentence } from "../model/structure/Sentence";
 import "./css/SentenceComponent.css";
 import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬浮卡片
-import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
-import SubSentenceComponent from "./SubSentenceComponent";
 // Network 
 import { SentenceCardComponent } from "./InfoComponent";
 import mapSentenceToVM, { type SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
-import mapSubSentenceToAnalysis from "../model/viewModels/mapSubSentenceToVM";
 import messageService from "../services/messageService.instance";
 import type { StandardContext } from "../services/envelopes";
 
@@ -48,15 +45,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [isHovered, setIsHovered] = useState(false);
     const [isFrozen, setIsFrozen] = useState(false);
     const [globalFrozenId, setGlobalFrozenId] = useState<number | null>(null);
-    const [subSentenceAnalysis, setSubSentenceAnalysis] = useState<SubSentenceAnalysis | null>(null);
-    const [lastSubSentenceAnalysis, setLastSubSentenceAnalysis] = useState<SubSentenceAnalysis | null>(null);
-    const [showSubUI, setShowSubUI] = useState(false);
-    const [closingSubUI, setClosingSubUI] = useState(false);
-    const closeTimerRef = React.useRef<number | null>(null);
     const subsentenceAbortRef = React.useRef<AbortController | null>(null);
     const [isLoadingSubsentence, setIsLoadingSubsentence] = useState(false);
     const [subsentenceError, setSubsentenceError] = useState<string | null>(null);
-    const [hoveredSubUnitId, setHoveredSubUnitId] = useState<string | null>(null);
     const [sentenceVm, setSentenceVm] = useState<SentenceViewModel>(() => mapSentenceToVM(sentence));
     const [analysisStatus, setAnalysisStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
     const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -142,7 +133,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (globalFrozenId !== null && globalFrozenId !== sentence.id) return;
         setIsHovered(false);
         onHoverChange?.(sentence.id, false);
-        setHoveredSubUnitId(null);
         if (!isFrozen) setAnchor(null);
     };
 
@@ -205,8 +195,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (interactionEnabled) return;
         setIsHovered(false);
         setAnchor(null);
-        setHoveredSubUnitId(null);
-        setSubSentenceAnalysis(null);
         setSubsentenceError(null);
         setIsLoadingSubsentence(false);
         setIsClicked(false);
@@ -226,36 +214,31 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         });
     }, [interactionEnabled]);
 
-    // use for test
     const handleStartSubsentence = useCallback((): void => {
-        if (subSentenceAnalysis) {
+        if (analysisRequested) {
             if (subsentenceAbortRef.current) {
                 subsentenceAbortRef.current.abort();
                 subsentenceAbortRef.current = null;
             }
-            setSubSentenceAnalysis(null);
             setSubsentenceError(null);
-            setHoveredSubUnitId(null);
+            setIsLoadingSubsentence(false);
             setAnalysisRequested(false);
-            setSentenceVm(mapSentenceToVM(sentence));
             setAnalysisStatus("idle");
             setAnalysisError(null);
             return;
         }
-        if (isLoadingSubsentence) return;
 
         if (subsentenceAbortRef.current) {
             subsentenceAbortRef.current.abort();
+            subsentenceAbortRef.current = null;
         }
         const controller = new AbortController();
         subsentenceAbortRef.current = controller;
 
         setAnalysisRequested(true);
-        setAnalysisStatus("idle");
         setAnalysisError(null);
         setIsLoadingSubsentence(true);
         setSubsentenceError(null);
-        setHoveredSubUnitId(null);
 
         const tasks: Array<'micro_roles' | 'cue_interaction' | 'contrast_resolution'> = [
             "micro_roles",
@@ -279,16 +262,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
                 if (res.status === "error") {
                     setSubsentenceError(res.error?.message ?? "Failed to load subsentence analysis.");
-                    setSubSentenceAnalysis(null);
                     return;
                 }
-                const mapped = mapSubSentenceToAnalysis(sentence, res.data ?? null);
-                setSubSentenceAnalysis(mapped);
                 setSubsentenceError(null);
             } catch (error) {
                 if (isAbortError(error)) return;
                 setSubsentenceError(error instanceof Error ? error.message : "Failed to load subsentence analysis.");
-                setSubSentenceAnalysis(null);
             } finally {
                 if (subsentenceAbortRef.current === controller) {
                     subsentenceAbortRef.current = null;
@@ -298,7 +277,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         };
 
         void run();
-    }, [isLoadingSubsentence, sentence, subSentenceAnalysis]);
+    }, [analysisRequested, sentence]);
 
     // ---- [A] Tag 颜色与映射（内联样式，免改 CSS） ----
     type Variant = "blue" | "green" | "yellow" | "gray";
@@ -354,28 +333,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const typeVariant = (t: string): Variant => (t.toLowerCase().includes("declarative") ? "green" : "gray");
     const moodVariant = (m: string): Variant => (m.toLowerCase().includes("indicative") ? "yellow" : "gray");
 
-    const hoveredSubUnit = React.useMemo<SubUnit | null>(() => {
-        if (!subSentenceAnalysis || !hoveredSubUnitId) return null;
-
-        const walk = (units: SubUnit[]): SubUnit | null => {
-            for (const unit of units) {
-                if (unit.id === hoveredSubUnitId) return unit;
-                if (unit.children) {
-                    const childHit = walk(unit.children);
-                    if (childHit) return childHit;
-                }
-                if (unit.clause?.units) {
-                    const clauseHit = walk(unit.clause.units);
-                    if (clauseHit) return clauseHit;
-                }
-            }
-            return null;
-        };
-
-        return walk(subSentenceAnalysis.units);
-    }, [hoveredSubUnitId, subSentenceAnalysis]);
-
-
     const className = [
         "sentence",
         "component",
@@ -384,35 +341,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     ]
         .filter(Boolean)
         .join(" ");
-
-    // Animate mount/unmount of SubSentenceComponent inside hover card
-    React.useEffect(() => {
-        // Clear any pending timer when state changes
-        if (closeTimerRef.current) {
-            window.clearTimeout(closeTimerRef.current);
-            closeTimerRef.current = null;
-        }
-        if (subSentenceAnalysis) {
-            setLastSubSentenceAnalysis(subSentenceAnalysis);
-            setShowSubUI(true);
-            setClosingSubUI(false);
-        } else if (showSubUI) {
-            setClosingSubUI(true);
-            closeTimerRef.current = window.setTimeout(() => {
-                setShowSubUI(false);
-                setClosingSubUI(false);
-                setLastSubSentenceAnalysis(null);
-                closeTimerRef.current = null;
-            }, 260); // keep in sync with CSS transition duration
-        }
-        // Cleanup on unmount
-        return () => {
-            if (closeTimerRef.current) {
-                window.clearTimeout(closeTimerRef.current);
-                closeTimerRef.current = null;
-            }
-        };
-    }, [subSentenceAnalysis, showSubUI]);
 
     return (
         <>
@@ -433,18 +361,18 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
             <SentenceHoverCard
                 onStartSubSentence={handleStartSubsentence}
-                subSentenceActive={Boolean(subSentenceAnalysis)}
+                subSentenceActive={analysisRequested}
                 open={
                     interactionEnabled &&
                     (isHovered || isFrozen) &&
                     !(globalFrozenId !== null && globalFrozenId !== sentence.id)
                 }
                 anchor={interactionEnabled ? anchor ?? undefined : undefined}
-                maxWidth={showSubUI ? 820 : 520}
+                maxWidth={520}
             // 可以按需传额外参数：offset、maxWidth 等
             >
                 <div className="hovercard-content">
-                    {analysisRequested ? (
+                    {analysisRequested && (
                         <>
                             {analysisStatus === "loading" && (
                                 <div className="subsentence-status">Analyzing sentence...</div>
@@ -455,19 +383,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                             {analysisStatus === "ready" && (
                                 <SentenceCardComponent info={sentenceVm} />
                             )}
-                            {showSubUI ? (
-                                <div className={`subsentence-wrapper${closingSubUI ? " is-closing" : ""}`}>
-                                    {(subSentenceAnalysis ?? lastSubSentenceAnalysis) ? (
-                                        <SubSentenceComponent
-                                            analysis={(subSentenceAnalysis ?? lastSubSentenceAnalysis)!}
-                                            focusUnitId={hoveredSubUnitId ?? undefined}
-                                            onHoverUnit={setHoveredSubUnitId}
-                                        />
-                                    ) : null}
-                                </div>
-                            ) : null}
                         </>
-                    ) : null}
+                    )}
 
                     <div className="tags">
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
@@ -517,52 +434,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     )}
                     {subsentenceError && (
                         <div className="subsentence-status subsentence-status--error">{subsentenceError}</div>
-                    )}
-                    {subSentenceAnalysis && !hoveredSubUnit && !isLoadingSubsentence && !subsentenceError && (
-                        <div className="subsentence-status">Hover highlighted segments to inspect units.</div>
-                    )}
-                    {hoveredSubUnit && (
-                        <div className="subsentence-unit-info">
-                            <div className="subsentence-unit-info-title">{hoveredSubUnit.text}</div>
-                            <div className="subsentence-unit-info-grid">
-                                {hoveredSubUnit.role ? (
-                                    <>
-                                        <span className="label">Role</span>
-                                        <span>{hoveredSubUnit.role}</span>
-                                    </>
-                                ) : null}
-                                {hoveredSubUnit.semantics && hoveredSubUnit.semantics !== "none" ? (
-                                    <>
-                                        <span className="label">Semantics</span>
-                                        <span>{hoveredSubUnit.semantics}</span>
-                                    </>
-                                ) : null}
-                                {hoveredSubUnit.semRole && hoveredSubUnit.semRole !== "None" ? (
-                                    <>
-                                        <span className="label">Semantic Role</span>
-                                        <span>{hoveredSubUnit.semRole}</span>
-                                    </>
-                                ) : null}
-                                {hoveredSubUnit.viewHint?.label ? (
-                                    <>
-                                        <span className="label">Label</span>
-                                        <span>{hoveredSubUnit.viewHint.label}</span>
-                                    </>
-                                ) : null}
-                                {hoveredSubUnit.source ? (
-                                    <>
-                                        <span className="label">Source</span>
-                                        <span>{hoveredSubUnit.source}</span>
-                                    </>
-                                ) : null}
-                                {typeof hoveredSubUnit.confidence === "number" ? (
-                                    <>
-                                        <span className="label">Confidence</span>
-                                        <span>{hoveredSubUnit.confidence.toFixed(2)}</span>
-                                    </>
-                                ) : null}
-                            </div>
-                        </div>
                     )}
                 </div>
             </SentenceHoverCard>

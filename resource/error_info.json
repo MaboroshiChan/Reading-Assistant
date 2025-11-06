@@ -1,0 +1,18 @@
+{
+  "level": "info",
+  "scope": "sentence",
+  "message": "LLM prompt prepared",
+  "requestId": "d4db63a7-8bd9-4ac4-9bf5-fdf84c447ec9",
+  "sentenceId": "1",
+  "promptVersion": "sentence.v1",
+  "tasks": [
+    "semantic_roles",
+    "discourse_function",
+    "dependency_light",
+    "modal_markers"
+  ],
+  "promptLength": 2099,
+  "prompt": "# Sentence Analysis Prompt (v1)\n\nYou are a linguistics-focused assistant tasked with analysing a single English sentence. Produce a concise JSON object that captures semantic roles, discourse function, lightweight dependency arcs, and modal markers when requested.\n\nAlways respond with JSON following this shape (omit keys not requested in the task list):\n\n{\n  \"semantic_roles\": [\n    {\n      \"role\": \"string\",\n      \"span\": { \"start\": 0, \"end\": 0 },\n      \"anchors\": [{ \"start\": 0, \"end\": 0 }],\n      \"confidence\": 0.0\n    }\n  ],\n  \"discourse_function\": \"string\",\n  \"dependency_light\": {\n    \"head_indexed\": true,\n    \"arcs\": [\n      { \"head\": 0, \"dep\": 0, \"label\": \"string\" }\n    ]\n  },\n  \"modal_markers\": [\n    {\n      \"type\": \"necessity|possibility|certainty|volition|string\",\n      \"span\": { \"start\": 0, \"end\": 0 },\n      \"cue\": \"string\"\n    }\n  ],\n  \"anchors\": [{ \"start\": 0, \"end\": 0 }],\n  \"confidence\": 0.0\n}\n\nGuidelines:\n- Use 0-based inclusive start / exclusive end offsets relative to the raw sentence text.\n- Clamp every span to the sentence length and drop spans shorter than one character.\n- Populate `anchors` with the minimal supporting text; include the overall sentence span at least once.\n- `semantic_roles` describe participant or predicate functions; add `confidence` between 0 and 1 when known.\n- `discourse_function` is a single lowercase label (e.g., \"statement\", \"question\", \"support\", \"contrast\").\n- `dependency_light` should be a shallow tree description; omit when unsure.\n- `modal_markers` list hedges or modal cues with their spans and cue text.\n- When a section is not requested, omit the key entirely.\n- Output plain JSON only—no explanations or markdown fences.\n\nDocument ID: example-article\nSentence ID: 1\nPrompt Version: sentence.v1\nRequested tasks: semantic_roles, discourse_function, dependency_light, modal_markers\n\nSentence text (0-based offsets):\nWe started with a series of observations with fruit and flower vendors in a giant market outside Chennai, India.\n\nRespond with JSON only. Do not wrap the JSON in markdown fences.",
+  "mock": false,
+  "timestamp": "2025-11-04T12:41:24.293Z"
+}

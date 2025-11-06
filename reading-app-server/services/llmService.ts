@@ -245,13 +245,30 @@ function buildRequestBody(
     base.temperature = temperature;
   }
 
+  if (typeof maxOutputTokens === 'number') {
+    base.max_output_tokens = maxOutputTokens;
+  }
+
   if (responseAs === 'json') {
-    base.response_format = { type: 'json_object' };
-    if (typeof maxOutputTokens === 'number') base.max_output_tokens = maxOutputTokens;
+    base.text = {
+      ...(typeof base.text === 'object' && base.text !== null
+        ? (base.text as Record<string, unknown>)
+        : {}),
+        name: "f",
+      format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'response',
+          schema: {
+            type: 'object',
+            additionalProperties: true,
+          },
+          strict: false,
+        },
+      },
+    };
   }
-  if (responseAs === 'text') {
-    if (typeof maxOutputTokens === 'number') base.max_output_tokens = maxOutputTokens;
-  }
+
   return base;
 }
 
