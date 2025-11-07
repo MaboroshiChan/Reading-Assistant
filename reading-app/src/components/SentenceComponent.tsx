@@ -4,7 +4,7 @@ import type { Sentence } from "../model/structure/Sentence";
 import "./css/SentenceComponent.css";
 import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬浮卡片
 // Network 
-import { SentenceCardComponent } from "./InfoComponent";
+// import { SentenceCardComponent } from "./InfoComponent";
 import mapSentenceToVM, { type SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
 import mapSubSentenceToVM, { type SubsentenceVM } from "../model/viewModels/mapSubSentenceToVM";
 import SubSentenceComponent from "./SubSentenceComponent";
@@ -213,8 +213,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             doc: DEFAULT_DOC_CONTEXT,
         };
 
-        console.log("handle StartSubSentence")
-
         const run = async () => {
             try {
                 const meta = {
@@ -351,11 +349,26 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             // 可以按需传额外参数：offset、maxWidth 等
             >
                 <div className="hovercard-content">
-                    {isSubsentenceActive && (
-                        <SentenceCardComponent info={sentenceVm} />
-                    )}
+                    
 
                     <div className="tags">
+                        {subsentenceVm && !isLoadingSubsentence && !subsentenceError && (
+                        <div className="subsentence-wrapper">
+                            <SubSentenceComponent
+                                analysis={subsentenceVm.analysis}
+                                focusUnitId={focusedUnitId ?? undefined}
+                                onFocusChange={(unitId) => setFocusedUnitId(unitId)}
+                            />
+                            {typeof subsentenceVm.confidence === "number" && (
+                                <div className="subsentence-status">
+                                    Confidence: {(subsentenceVm.confidence * 100).toFixed(0)}%
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {subsentenceError && (
+                        <div className="subsentence-status subsentence-status--error">{subsentenceError}</div>
+                    )}
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
                         {(() => {
                             const roleLabel = sentenceVm.roleLabel ?? sentence.function;
@@ -401,23 +414,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     {isLoadingSubsentence && (
                         <div className="subsentence-status">Loading subsentence analysis...</div>
                     )}
-                    {subsentenceVm && !isLoadingSubsentence && !subsentenceError && (
-                        <div className="subsentence-wrapper">
-                            <SubSentenceComponent
-                                analysis={subsentenceVm.analysis}
-                                focusUnitId={focusedUnitId ?? undefined}
-                                onFocusChange={(unitId) => setFocusedUnitId(unitId)}
-                            />
-                            {typeof subsentenceVm.confidence === "number" && (
-                                <div className="subsentence-status">
-                                    Confidence: {(subsentenceVm.confidence * 100).toFixed(0)}%
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    {subsentenceError && (
-                        <div className="subsentence-status subsentence-status--error">{subsentenceError}</div>
-                    )}
+                    
                 </div>
             </SentenceHoverCard>
         </>
