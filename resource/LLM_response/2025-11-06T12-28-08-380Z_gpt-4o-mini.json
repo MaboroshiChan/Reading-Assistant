@@ -1,0 +1,79 @@
+{
+  "timestamp": "2025-11-06T12:28:08.380Z",
+  "model": "gpt-4o-mini",
+  "responseAs": "json",
+  "text": "{\n  \"semantic_roles\": [\n    {\n      \"role\": \"Agent\",\n      \"span\": { \"start\": 0, \"end\": 2 },\n      \"anchors\": [{ \"start\": 0, \"end\": 2 }],\n      \"confidence\": 1.0\n    },\n    {\n      \"role\": \"Theme\",\n      \"span\": { \"start\": 18, \"end\": 44 },\n      \"anchors\": [{ \"start\": 18, \"end\": 44 }],\n      \"confidence\": 0.8\n    },\n    {\n      \"role\": \"Location\",\n      \"span\": { \"start\": 62, \"end\": 67 },\n      \"anchors\": [{ \"start\": 62, \"end\": 67 }],\n      \"confidence\": 0.7\n    }\n  ],\n  \"discourse_function\": \"statement\",\n  \"dependency_light\": {\n    \"head_indexed\": true,\n    \"arcs\": [\n      { \"head\": 1, \"dep\": 0, \"label\": \"subject\" },\n      { \"head\": 1, \"dep\": 3, \"label\": \"compliment\" },\n      { \"head\": 3, \"dep\": 2, \"label\": \"object\" },\n      { \"head\": 3, \"dep\": 5, \"label\": \"location\" }\n    ]\n  },\n  \"modal_markers\": []\n}",
+  "parsed": {
+    "semantic_roles": [
+      {
+        "role": "Agent",
+        "span": {
+          "start": 0,
+          "end": 2
+        },
+        "anchors": [
+          {
+            "start": 0,
+            "end": 2
+          }
+        ],
+        "confidence": 1
+      },
+      {
+        "role": "Theme",
+        "span": {
+          "start": 18,
+          "end": 44
+        },
+        "anchors": [
+          {
+            "start": 18,
+            "end": 44
+          }
+        ],
+        "confidence": 0.8
+      },
+      {
+        "role": "Location",
+        "span": {
+          "start": 62,
+          "end": 67
+        },
+        "anchors": [
+          {
+            "start": 62,
+            "end": 67
+          }
+        ],
+        "confidence": 0.7
+      }
+    ],
+    "discourse_function": "statement",
+    "dependency_light": {
+      "head_indexed": true,
+      "arcs": [
+        {
+          "head": 1,
+          "dep": 0,
+          "label": "subject"
+        },
+        {
+          "head": 1,
+          "dep": 3,
+          "label": "compliment"
+        },
+        {
+          "head": 3,
+          "dep": 2,
+          "label": "object"
+        },
+        {
+          "head": 3,
+          "dep": 5,
+          "label": "location"
+        }
+      ]
+    },
+    "modal_markers": []
+  }
+}

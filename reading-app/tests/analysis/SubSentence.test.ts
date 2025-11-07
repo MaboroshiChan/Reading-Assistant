@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SubSentenceAnalysis } from "../../src/model/structure/SubSentence";
+import { mapSubSentenceToVM } from "../../src/model/viewModels/mapSubSentenceToVM";
+import type { AnalyzeSubSentenceData } from "../../src/services/envelopes";
 
 describe("SubSentenceAnalysis data structure", () => {
   it("should correctly parse example subsentence analysis data", () => {
@@ -100,5 +102,51 @@ describe("SubSentenceAnalysis data structure", () => {
     });
 
     expect(analysis.meta).toHaveProperty("note");
+  });
+
+  it("maps analyzeSubSentence data into a view model structure", () => {
+    const payload: AnalyzeSubSentenceData = {
+      analysis: {
+        sentenceId: "s-legacy-1",
+        text: "Although tired, he kept reading the dense article.",
+        units: [
+          {
+            id: "u1",
+            text: "Although tired",
+            role: "modifier",
+            source: "model",
+            confidence: 0.6,
+          },
+          {
+            id: "u2",
+            text: "he kept reading",
+            role: "predicate",
+            source: "model",
+            confidence: 0.72,
+          },
+          {
+            id: "u3",
+            text: "the dense article",
+            role: "object",
+            source: "model",
+            confidence: 0.7,
+          },
+        ],
+        backbone: {
+          predicateId: "u2",
+          objectId: "u3",
+        },
+        meta: { generator: "test" },
+      },
+      confidence: 0.74,
+    };
+
+    const vm = mapSubSentenceToVM(payload);
+    expect(vm).not.toBeNull();
+    expect(vm?.analysis.units).toHaveLength(3);
+    expect(vm?.analysis.units[0]?.role).toBe("modifier");
+    expect(vm?.unitsById.get("u3")?.text).toBe("the dense article");
+    expect(vm?.confidence).toBeCloseTo(0.74);
+    expect(vm?.analysis.meta?.generator).toBe("test");
   });
 });

@@ -1,0 +1,8 @@
+ server on :8787 (LIVE_LLM)
+[1] [server] ping received from ::1 @ 2025-11-06T12:57:20.690Z
+[1] [server] ping received from ::1 @ 2025-11-06T12:57:20.693Z
+[1] {"level":"info","scope":"subsentence","message":"request received","requestId":"fb4f087b-cefb-4c63-8e97-7022150e259c","mock":false,"promptVersion":"subsentence.v1","timestamp":"2025-11-06T12:57:26.268Z"}
+[1] {"level":"info","scope":"subsentence","message":"building LLM payload","requestId":"fb4f087b-cefb-4c63-8e97-7022150e259c","sentenceId":"1","promptVersion":"subsentence.v1","tasks":["micro_roles","cue_interaction","contrast_resolution"],"timestamp":"2025-11-06T12:57:26.269Z"}
+[1] {"level":"info","scope":"subsentence","message":"LLM prompt prepared","requestId":"fb4f087b-cefb-4c63-8e97-7022150e259c","sentenceId":"1","promptVersion":"subsentence.v1","tasks":["micro_roles","cue_interaction","contrast_resolution"],"promptLength":3735,"timestamp":"2025-11-06T12:57:26.270Z"}
+[1] Handler error DOMException [AbortError]: This operation was aborted
+

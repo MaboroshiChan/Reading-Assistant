@@ -48,6 +48,7 @@ const dispatch = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> =>
     return handleSentence(envelope);
   }
   if (envelope.type === 'analyze.subsentence.v1') {
+    console.log('handle subsentence');
     return handleSubSentence(envelope);
   }
   const _exhaustive: never = envelope;

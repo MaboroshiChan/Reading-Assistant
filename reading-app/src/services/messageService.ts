@@ -167,6 +167,7 @@ export class MessageService {
   async analyzeSubSentence(
     payload: AnalyzeSubSentencePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
+    meta?: Record<string, unknown>,
     sendOptions?: SendOptions<Partial<AnalyzeSubSentenceData>>
   ): Promise<ResponseEnvelopeSubSentence> {
     const env: RequestEnvelope = {
@@ -178,8 +179,10 @@ export class MessageService {
       cache_hint: this.defaults.defaultCacheHint ?? 'prefer',
       context: buildContext(ctx, this.defaults),
       payload,
+      meta,
     } as RequestEnvelope;
 
+    console.log("analyzeSubSentence");
     return this.send<ResponseEnvelopeSubSentence, Partial<AnalyzeSubSentenceData>>(env, sendOptions);
   }
 

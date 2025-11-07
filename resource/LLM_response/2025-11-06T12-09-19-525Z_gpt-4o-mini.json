@@ -1,0 +1,85 @@
+{
+  "timestamp": "2025-11-06T12:09:19.525Z",
+  "model": "gpt-4o-mini",
+  "responseAs": "json",
+  "text": "{\n  \"semantic_roles\": [\n    {\n      \"role\": \"subject\",\n      \"span\": { \"start\": 0, \"end\": 2 },\n      \"anchors\": [{ \"start\": 0, \"end\": 2 }],\n      \"confidence\": 0.8\n    },\n    {\n      \"role\": \"predicate\",\n      \"span\": { \"start\": 2, \"end\": 8 },\n      \"anchors\": [{ \"start\": 2, \"end\": 8 }],\n      \"confidence\": 0.7\n    },\n    {\n      \"role\": \"object\",\n      \"span\": { \"start\": 12, \"end\": 39 },\n      \"anchors\": [{ \"start\": 12, \"end\": 39 }],\n      \"confidence\": 0.6\n    }\n  ],\n  \"discourse_function\": \"statement\",\n  \"dependency_light\": {\n    \"head_indexed\": true,\n    \"arcs\": [\n      { \"head\": 0, \"dep\": 1, \"label\": \"subject\" },\n      { \"head\": 1, \"dep\": 2, \"label\": \"predicate\" }\n    ]\n  },\n  \"modal_markers\": [\n    {\n      \"type\": \"possibility\",\n      \"span\": { \"start\": 0, \"end\": 2 },\n      \"cue\": \"seemed\"\n    }\n  ],\n  \"anchors\": [{ \"start\": 0, \"end\": 87 }],\n  \"confidence\": 0.7\n}",
+  "parsed": {
+    "semantic_roles": [
+      {
+        "role": "subject",
+        "span": {
+          "start": 0,
+          "end": 2
+        },
+        "anchors": [
+          {
+            "start": 0,
+            "end": 2
+          }
+        ],
+        "confidence": 0.8
+      },
+      {
+        "role": "predicate",
+        "span": {
+          "start": 2,
+          "end": 8
+        },
+        "anchors": [
+          {
+            "start": 2,
+            "end": 8
+          }
+        ],
+        "confidence": 0.7
+      },
+      {
+        "role": "object",
+        "span": {
+          "start": 12,
+          "end": 39
+        },
+        "anchors": [
+          {
+            "start": 12,
+            "end": 39
+          }
+        ],
+        "confidence": 0.6
+      }
+    ],
+    "discourse_function": "statement",
+    "dependency_light": {
+      "head_indexed": true,
+      "arcs": [
+        {
+          "head": 0,
+          "dep": 1,
+          "label": "subject"
+        },
+        {
+          "head": 1,
+          "dep": 2,
+          "label": "predicate"
+        }
+      ]
+    },
+    "modal_markers": [
+      {
+        "type": "possibility",
+        "span": {
+          "start": 0,
+          "end": 2
+        },
+        "cue": "seemed"
+      }
+    ],
+    "anchors": [
+      {
+        "start": 0,
+        "end": 87
+      }
+    ],
+    "confidence": 0.7
+  }
+}

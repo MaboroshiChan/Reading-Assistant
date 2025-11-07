@@ -236,15 +236,66 @@ export interface AnalyzeSubSentencePayload {
   options?: { tasks?: Array<'micro_roles' | 'cue_interaction' | 'contrast_resolution'> };
 }
 
-export interface MicroRole { label: string; anchors: Anchor[]; confidence?: number }
-export interface CueInteraction { cues: string[]; relation?: string; scope?: AnchorSpan }
-export interface ContrastResolution { a_span: AnchorSpan; b_span: AnchorSpan; relation: string }
+export interface SubSentenceUnitData {
+  id: string;
+  text: string;
+  role?: string;
+  semantics?: string;
+  semRole?: string;
+  confidence?: number;
+  source?: 'manual' | 'model' | 'hybrid';
+  children?: SubSentenceUnitData[];
+  clause?: SubSentenceAnalysisData;
+  meta?: Record<string, unknown>;
+  viewHint?: {
+    variant?: string;
+    collapsed?: boolean;
+    label?: string;
+    order?: number;
+  };
+}
+
+export interface SubSentenceAnalysisData {
+  sentenceId: string;
+  text: string;
+  units: SubSentenceUnitData[];
+  backbone?: {
+    subjectId?: string;
+    predicateId?: string;
+    objectId?: string;
+  };
+  legend?: {
+    semanticsToVariant?: Record<string, string>;
+    roleToVariant?: Record<string, string>;
+    semRoleToVariant?: Record<string, string>;
+    variantPalette?: Record<string, { bg: string; fg: string; dot: string }>;
+  };
+  layoutHint?: {
+    density?: 'normal' | 'dense';
+    highlightStrategy?: 'semantics-first' | 'role-first' | 'semantic-role' | 'mixed';
+    showLabels?: boolean;
+    showCaret?: boolean;
+    cardMaxWidth?: number;
+  };
+  analyzedAt?: string;
+  version?: number;
+  confidence?: number;
+  issues?: Array<{
+    type: string;
+    message: string;
+    unitIds?: string[];
+  }>;
+  annotations?: Array<{
+    userId: string;
+    note: string;
+    createdAt: string;
+    targetUnitId?: string;
+  }>;
+  meta?: Record<string, unknown>;
+}
 
 export interface AnalyzeSubSentenceData {
-  micro_roles?: MicroRole[];
-  cue_interaction?: CueInteraction;
-  contrast_resolution?: ContrastResolution;
-  anchors?: Anchor[];
+  analysis: SubSentenceAnalysisData;
   confidence?: number;
 }
 
