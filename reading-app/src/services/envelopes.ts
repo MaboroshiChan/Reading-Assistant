@@ -14,7 +14,7 @@ export type ISO8601 = string & { __brand?: 'ISO8601' };
 export type UUID = string & { __brand?: 'UUID' };
 export type ULID = string & { __brand?: 'ULID' };
 
-export type Priority = 'high' | 'normal' | 'low';
+export type Priority = 'high' | 'normal' | 'low'; // QUESTION: What is this for?
 export type CacheHint = 'prefer' | 'only' | 'bypass';
 export type ApiVersion = 'v1';
 
@@ -66,6 +66,9 @@ export interface StandardContext {
   quality_policy?: QualityPolicy;
 }
 
+/**
+ * What purpose is this? is this even necessary? Or Should let the local machine calculate AnchorSpan?
+ */
 export interface AnchorSpan { start: number; end: number } // indices in sentence/paragraph text
 
 export interface Anchor {
@@ -352,7 +355,7 @@ export interface ResponseEnvelopeBase {
   status: EnvelopeStatus;
   served_from?: 'fresh' | 'cache';
   error?: EnvelopeError;
-  usage?: UsageMeta;
+  usage?: UsageMeta;        
   etag?: string;            // for client-side caching of results
   cursor?: string;          // reserved for future incremental sync
 }

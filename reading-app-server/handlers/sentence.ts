@@ -117,6 +117,12 @@ const normalizeRoleLabel = (value: string): string => {
   return candidate || 'unknown';
 };
 
+/**
+ * TODO: Write description 
+ * The purpose of this function is to ...
+ * @param value 
+ * @returns TODO
+ */
 const normalizeModalType = (value: string): ModalMarker['type'] => {
   const key = value.trim().toLowerCase();
   return MODAL_TYPE_CANONICAL[key] ?? (key || 'unknown');
