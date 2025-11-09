@@ -69,6 +69,29 @@
   color: #f87171;
 }
 
+.subsentence-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 0;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-4px);
+  transition:
+    max-height 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin-top 220ms ease;
+}
+
+.subsentence-section.is-open {
+  margin-top: 12px;
+  max-height: 1200px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .subsentence-unit-info {
   margin-top: 12px;
   padding-top: 8px;

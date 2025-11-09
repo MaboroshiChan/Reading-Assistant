@@ -318,6 +318,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     ]
         .filter(Boolean)
         .join(" ");
+    const shouldShowSubsentence =
+        isSubsentenceActive || isLoadingSubsentence || subsentenceError !== null || subsentenceVm !== null;
 
     return (
         <>
@@ -349,26 +351,44 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             // 可以按需传额外参数：offset、maxWidth 等
             >
                 <div className="hovercard-content">
-                    
+                    <div
+                        className={[
+                            "subsentence-section",
+                            shouldShowSubsentence ? "is-open" : "",
+                        ]
+                            .filter(Boolean)
+                            .join(" ")}
+                    >
+                        {shouldShowSubsentence && (
+                            <>
+                                <div className="subsentence-title">Subsentence analysis</div>
+                                {isLoadingSubsentence && (
+                                    <div className="subsentence-status">Loading subsentence analysis...</div>
+                                )}
+                                {subsentenceError && (
+                                    <div className="subsentence-status subsentence-status--error">
+                                        {subsentenceError}
+                                    </div>
+                                )}
+                                {subsentenceVm && !isLoadingSubsentence && !subsentenceError && (
+                                    <div className="subsentence-wrapper">
+                                        <SubSentenceComponent
+                                            analysis={subsentenceVm.analysis}
+                                            focusUnitId={focusedUnitId ?? undefined}
+                                            onFocusChange={(unitId) => setFocusedUnitId(unitId)}
+                                        />
+                                        {typeof subsentenceVm.confidence === "number" && (
+                                            <div className="subsentence-status">
+                                                Confidence: {(subsentenceVm.confidence * 100).toFixed(0)}%
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
 
                     <div className="tags">
-                        {subsentenceVm && !isLoadingSubsentence && !subsentenceError && (
-                        <div className="subsentence-wrapper">
-                            <SubSentenceComponent
-                                analysis={subsentenceVm.analysis}
-                                focusUnitId={focusedUnitId ?? undefined}
-                                onFocusChange={(unitId) => setFocusedUnitId(unitId)}
-                            />
-                            {typeof subsentenceVm.confidence === "number" && (
-                                <div className="subsentence-status">
-                                    Confidence: {(subsentenceVm.confidence * 100).toFixed(0)}%
-                                </div>
-                            )}
-                        </div>
-                    )}
-                    {subsentenceError && (
-                        <div className="subsentence-status subsentence-status--error">{subsentenceError}</div>
-                    )}
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
                         {(() => {
                             const roleLabel = sentenceVm.roleLabel ?? sentence.function;
@@ -411,10 +431,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     </div>
 
                     <div className="purpose">{sentence.purpose}</div>
-                    {isLoadingSubsentence && (
-                        <div className="subsentence-status">Loading subsentence analysis...</div>
-                    )}
-                    
                 </div>
             </SentenceHoverCard>
         </>

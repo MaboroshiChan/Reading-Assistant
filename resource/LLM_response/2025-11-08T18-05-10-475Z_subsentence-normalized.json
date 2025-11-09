@@ -1,0 +1,126 @@
+{
+  "timestamp": "2025-11-08T18:05:10.475Z",
+  "requestId": "f27a9e58-1d92-4ca0-bb33-36f2d3bc3aef",
+  "sentenceId": "12",
+  "span": {
+    "start": 0,
+    "end": 192
+  },
+  "analysis": {
+    "sentenceId": "12",
+    "text": "Obviously, in that experiment, we controlled for everything we could, but at the end of the day, these are rich vs. poor and you could say that they differ in things like health and education.",
+    "units": [
+      {
+        "id": "mock-1",
+        "text": "Obviously",
+        "role": "subject",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-2",
+        "text": ",",
+        "role": "predicate",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-3",
+        "text": "in that experiment",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-4",
+        "text": ",",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-5",
+        "text": "we controlled for everything we could",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-6",
+        "text": ",",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-7",
+        "text": "but",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-8",
+        "text": "at the end of the day",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-9",
+        "text": ",",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-a",
+        "text": "these are rich vs. poor",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-b",
+        "text": "and",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-c",
+        "text": "you could say that they differ in things like health",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-d",
+        "text": "and",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-e",
+        "text": "education.",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      }
+    ],
+    "backbone": {
+      "subjectId": "mock-1",
+      "predicateId": "mock-2",
+      "objectId": "mock-3"
+    },
+    "layoutHint": {
+      "highlightStrategy": "semantic-role",
+      "showLabels": true
+    },
+    "meta": {
+      "generator": "mock"
+    }
+  },
+  "confidence": 0.5
+}

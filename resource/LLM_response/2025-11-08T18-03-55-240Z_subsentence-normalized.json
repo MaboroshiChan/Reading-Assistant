@@ -1,0 +1,133 @@
+{
+  "timestamp": "2025-11-08T18:03:55.240Z",
+  "requestId": "64a12028-4280-4748-a2e3-19e3c081e56e",
+  "sentenceId": "2",
+  "span": {
+    "start": 0,
+    "end": 272
+  },
+  "analysis": {
+    "sentenceId": "2",
+    "text": "No one can call these women lazy or myopic — they work extremely hard and plan their days very carefully, spending from early morning until evening buying flowers or mangoes for 1,000 rupees, selling them for 1,100 rupees and then giving back to the supplier 1,050 rupees.",
+    "units": [
+      {
+        "id": "mock-1",
+        "text": "No one can call these women lazy or myopic — they work extremely hard",
+        "role": "subject",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-2",
+        "text": "and",
+        "role": "predicate",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-3",
+        "text": "plan their days very carefully",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-4",
+        "text": ",",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-5",
+        "text": "spending from early morning until evening buying flowers or mangoes for 1",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-6",
+        "text": ",",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-7",
+        "text": "000 rupees",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-8",
+        "text": ",",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-9",
+        "text": "selling them for 1",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-a",
+        "text": ",",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-b",
+        "text": "100 rupees",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-c",
+        "text": "and",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-d",
+        "text": "then giving back to the supplier 1",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-e",
+        "text": ",",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      },
+      {
+        "id": "mock-f",
+        "text": "050 rupees.",
+        "role": "modifier",
+        "confidence": 0.5,
+        "source": "model"
+      }
+    ],
+    "backbone": {
+      "subjectId": "mock-1",
+      "predicateId": "mock-2",
+      "objectId": "mock-3"
+    },
+    "layoutHint": {
+      "highlightStrategy": "semantic-role",
+      "showLabels": true
+    },
+    "meta": {
+      "generator": "mock"
+    }
+  },
+  "confidence": 0.5
+}
