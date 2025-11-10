@@ -119,6 +119,7 @@ interface CallArgs {
 interface CallReturn<T> { data: T; usage: LLMUsage }
 
 const RESPONSES_URL = 'https://api.openai.com/v1/responses';
+const KIMI_URL = '"https://api.moonshot.cn/v1"';
 
 class LLMHttpError extends Error {
   readonly status: number;
@@ -159,6 +160,7 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
       args.temperature,
       args.maxOutputTokens,
     );
+    console.log('right before sending request')
     const res = await fetch(RESPONSES_URL, {
       method: 'POST',
       headers: {
@@ -168,6 +170,8 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
       body: JSON.stringify(body),
       signal,
     });
+
+    console.log(`res = ${res}`)
 
     let payload: unknown;
     try {
