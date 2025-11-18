@@ -49,6 +49,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [globalFrozenId, setGlobalFrozenId] = useState<number | null>(null);
     const subsentenceAbortRef = React.useRef<AbortController | null>(null);
     const [isLoadingSubsentence, setIsLoadingSubsentence] = useState(false);
+    const [isStreamingSubsentence, setIsStreamingSubsentence] = useState(false);
     const [subsentenceError, setSubsentenceError] = useState<string | null>(null);
     const [subsentenceVm, setSubsentenceVm] = useState<SubsentenceVM | null>(null);
     const [focusedUnitId, setFocusedUnitId] = useState<string | null>(null);
@@ -81,6 +82,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         setFocusedUnitId(null);
         setSubsentenceError(null);
         setIsLoadingSubsentence(false);
+        setIsStreamingSubsentence(false);
     }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood]);
 
 
@@ -159,6 +161,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         setIsClicked(false);
         setSentenceVm(mapSentenceToVM(sentence));
         setIsSubsentenceActive(false);
+        setIsStreamingSubsentence(false);
         if (subsentenceAbortRef.current) {
             subsentenceAbortRef.current.abort();
             subsentenceAbortRef.current = null;
@@ -182,6 +185,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             setIsSubsentenceActive(false);
             setSubsentenceVm(null);
             setFocusedUnitId(null);
+            setIsStreamingSubsentence(false);
             return;
         }
 
@@ -194,6 +198,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
         setIsSubsentenceActive(true);
         setIsLoadingSubsentence(true);
+        setIsStreamingSubsentence(true);
         setSubsentenceError(null);
         setSubsentenceVm(null);
         setFocusedUnitId(null);
@@ -223,8 +228,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     payload,
                     ctx,
                     meta,
-                    { signal: controller.signal },
+                    {
+                        signal: controller.signal,
+                        timeoutMs: 60_000,
+                    },
                 );
+                console.log("received from LLM")
                 if (controller.signal.aborted) return;
 
                 if (res.status === "error") {
@@ -242,7 +251,11 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 setFocusedUnitId(vm.analysis.backbone?.subjectId ?? vm.analysis.units[0]?.id ?? null);
                 setSubsentenceError(null);
             } catch (error) {
-                if (isAbortError(error)) return;
+                if (isAbortError(error)) {
+                    setSubsentenceError("Subsentence analysis was cancelled or timed out.");
+                    setSubsentenceVm(null);
+                    return;
+                }
                 setSubsentenceError(error instanceof Error ? error.message : "Failed to load subsentence analysis.");
                 setSubsentenceVm(null);
             } finally {
@@ -250,6 +263,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     subsentenceAbortRef.current = null;
                 }
                 setIsLoadingSubsentence(false);
+                setIsStreamingSubsentence(false);
             }
         };
 
@@ -363,7 +377,18 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                             <>
                                 <div className="subsentence-title">Subsentence analysis</div>
                                 {isLoadingSubsentence && (
-                                    <div className="subsentence-status">Loading subsentence analysis...</div>
+                                    <div
+                                        className={[
+                                            "subsentence-status",
+                                            isStreamingSubsentence ? "subsentence-status--progress" : "",
+                                        ]
+                                            .filter(Boolean)
+                                            .join(" ")}
+                                    >
+                                        {isStreamingSubsentence
+                                            ? "Preparing subsentence analysis..."
+                                            : "Loading subsentence analysis..."}
+                                    </div>
                                 )}
                                 {subsentenceError && (
                                     <div className="subsentence-status subsentence-status--error">

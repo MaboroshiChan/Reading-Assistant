@@ -15,7 +15,8 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { config } from './config';
+import { config, getOpenAIApiKey } from './config';
+import OpenAI, { APIError } from 'openai';
 
 // -----------------------------
 // Public types
@@ -118,9 +119,6 @@ interface CallArgs {
 
 interface CallReturn<T> { data: T; usage: LLMUsage }
 
-const RESPONSES_URL = 'https://api.openai.com/v1/responses';
-const KIMI_URL = '"https://api.moonshot.cn/v1"';
-
 class LLMHttpError extends Error {
   readonly status: number;
   readonly body: unknown;
@@ -149,46 +147,64 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
   const timeout = setTimeout(() => controller.abort(), args.timeoutMs);
 
   try {
-    if (!config.apiKey) {
+    const apiKey = getOpenAIApiKey();
+    if (!apiKey) {
       throw new Error('Missing OPENAI_API_KEY environment variable for OpenAI client');
     }
+    const client = new OpenAI({ apiKey });
 
-    const body = buildRequestBody(
-      args.prompt,
-      args.responseAs,
-      args.model,
-      args.temperature,
-      args.maxOutputTokens,
-    );
-    console.log('right before sending request')
-    const res = await fetch(RESPONSES_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
+    const responseFormat =
+      args.responseAs === 'json'
+        ? {
+            type: 'json_schema',
+            json_schema: {
+              name: 'response',
+              schema: { type: 'object', properties: {}, additionalProperties: true },
+              strict: false,
+            },
+          }
+        : undefined;
+
+    const stream = client.responses.stream(
+      {
+        model: args.model,
+        input: args.prompt,
+        temperature: args.temperature,
+        max_output_tokens: args.maxOutputTokens,
+        ...(responseFormat
+          ? {
+              text: {
+                format: {
+                  name: 'semantic-response',
+                  schema: { type: 'object', properties: {}, additionalProperties: true },
+                  type: 'json_schema',
+                  strict: false,
+                },
+              },
+            }
+          : {}),
       },
-      body: JSON.stringify(body),
-      signal,
-    });
-
-    console.log(`res = ${res}`)
-
-    let payload: unknown;
-    try {
-      payload = await res.json();
-    } catch (err) {
-      throw new LLMHttpError(`Non-JSON response from LLM (status ${res.status})`, res.status, null);
-    }
-
-    if (!res.ok) {
-      const message =
-        (typeof payload === 'object' && payload && 'error' in payload && typeof (payload as { error?: { message?: string } }).error?.message === 'string')
-          ? String((payload as { error?: { message?: string } }).error?.message)
-          : `OpenAI request failed with status ${res.status}`;
-      throw new LLMHttpError(message, res.status, payload);
-    }
+      { signal },
+    );
+    const payload = await stream.finalResponse();
 
     const json = payload as ResponseShape;
+    if (config.debugMode) {
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          scope: 'llm-service',
+          message: 'LLM response received',
+          id: json.id,
+          model: json.model ?? args.model,
+          responseAs: args.responseAs,
+          inputTokens: json.usage?.input_tokens,
+          outputTokens: json.usage?.output_tokens,
+          timestamp: new Date().toISOString(),
+          content: json.output
+        }),
+      );
+    }
     void persistLLMResponse(args, json);
 
     const usage: LLMUsage = {
@@ -295,48 +311,6 @@ async function persistLLMResponse(args: CallArgs, payload: ResponseShape): Promi
   }
 }
 
-function buildRequestBody(
-  prompt: string,
-  responseAs: 'text' | 'json',
-  model: string,
-  temperature?: number,
-  maxOutputTokens?: number,
-): Record<string, unknown> {
-  const base: Record<string, unknown> = {
-    model,
-    input: prompt,
-  };
-
-  if (temperature !== undefined) base.temperature = temperature;
-  if (maxOutputTokens !== undefined) base.max_output_tokens = maxOutputTokens;
-
-  if (responseAs === 'json') {
-    base.text = {
-      format: {
-        type: 'json_schema',
-        name: 'response',
-        schema: {
-          type: 'object',
-          properties: {},
-          additionalProperties: true,
-        },
-        strict: false,
-      },
-    };
-  } else {
-    base.text = {
-      format: {
-        type: 'text',
-        name: 'default',
-      },
-    };
-  }
-
-  return base;
-}
-
-
-
 // Extract text from either Responses API or Chat Completions fallbacks
 function extractText(resp: ResponseShape): string {
   if (typeof resp.output_text === 'string' && resp.output_text.length > 0) {
@@ -410,6 +384,15 @@ function normalizeError(error: unknown): Error {
         ? JSON.stringify(error.body)
         : String(error.body ?? '');
     const message = details ? `${error.message} (status ${error.status}) :: ${details}` : `${error.message} (status ${error.status})`;
+    return new Error(message);
+  }
+  if (error instanceof APIError) {
+    const status = error.status;
+    const details =
+      typeof error.error === 'object' && error.error !== null
+        ? JSON.stringify(error.error)
+        : undefined;
+    const message = details ? `${error.message}${status ? ` (status ${status})` : ''} :: ${details}` : `${error.message}${status ? ` (status ${status})` : ''}`;
     return new Error(message);
   }
   if (error instanceof Error) return error;

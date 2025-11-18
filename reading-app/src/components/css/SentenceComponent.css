@@ -65,6 +65,46 @@
   opacity: 0.85;
 }
 
+.subsentence-status--progress {
+  position: relative;
+}
+
+.subsentence-status--progress::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 8px;
+  border-radius: 9999px;
+  background: currentColor;
+  box-shadow:
+    10px 0 0 currentColor,
+    20px 0 0 currentColor;
+  animation: subsentence-dots 1s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+@keyframes subsentence-dots {
+  0% {
+    box-shadow:
+      10px 0 0 currentColor,
+      20px 0 0 currentColor;
+    opacity: 0.4;
+  }
+  50% {
+    box-shadow:
+      0 0 0 currentColor,
+      10px 0 0 currentColor;
+    opacity: 1;
+  }
+  100% {
+    box-shadow:
+      10px 0 0 currentColor,
+      20px 0 0 currentColor;
+    opacity: 0.4;
+  }
+}
+
 .subsentence-status--error {
   color: #f87171;
 }
