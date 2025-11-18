@@ -1,12 +1,25 @@
 // SentenceComponent.tsx
 import React, { useState, useCallback, type KeyboardEvent, type MouseEvent } from "react";
-import type { Sentence } from "../analysis/structure/Sentence";
+import type { Sentence } from "../model/structure/Sentence";
 import "./css/SentenceComponent.css";
 import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬浮卡片
-import type { SubSentenceAnalysis, SubUnit } from "../analysis/structure/SubSentence";
+// Network 
+// import { SentenceCardComponent } from "./InfoComponent";
+import mapSentenceToVM, { type SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
+import mapSubSentenceToVM, { type SubsentenceVM } from "../model/viewModels/mapSubSentenceToVM";
 import SubSentenceComponent from "./SubSentenceComponent";
+import messageService from "../services/messageService.instance";
+import type { StandardContext } from "../services/envelopes";
 
 const FREEZE_EVENT = "hovercard:freeze";
+const DEFAULT_DOC_CONTEXT: StandardContext["doc"] = {
+    doc_id: "example-article",
+    content_hash: "example-article#dev",
+};
+const isAbortError = (error: unknown): boolean =>
+    error instanceof DOMException
+        ? error.name === "AbortError"
+        : error instanceof Error && error.name === "AbortError";
 
 interface SentenceComponentProps {
     sentence: Sentence;
@@ -34,14 +47,14 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [isHovered, setIsHovered] = useState(false);
     const [isFrozen, setIsFrozen] = useState(false);
     const [globalFrozenId, setGlobalFrozenId] = useState<number | null>(null);
-    const [subSentenceAnalysis, setSubSentenceAnalysis] = useState<SubSentenceAnalysis | null>(null);
-    const [lastSubSentenceAnalysis, setLastSubSentenceAnalysis] = useState<SubSentenceAnalysis | null>(null);
-    const [showSubUI, setShowSubUI] = useState(false);
-    const [closingSubUI, setClosingSubUI] = useState(false);
-    const closeTimerRef = React.useRef<number | null>(null);
+    const subsentenceAbortRef = React.useRef<AbortController | null>(null);
     const [isLoadingSubsentence, setIsLoadingSubsentence] = useState(false);
+    const [isStreamingSubsentence, setIsStreamingSubsentence] = useState(false);
     const [subsentenceError, setSubsentenceError] = useState<string | null>(null);
-    const [hoveredSubUnitId, setHoveredSubUnitId] = useState<string | null>(null);
+    const [subsentenceVm, setSubsentenceVm] = useState<SubsentenceVM | null>(null);
+    const [focusedUnitId, setFocusedUnitId] = useState<string | null>(null);
+    const [sentenceVm, setSentenceVm] = useState<SentenceViewModel>(() => mapSentenceToVM(sentence));
+    const [isSubsentenceActive, setIsSubsentenceActive] = useState(false);
 
     // 新增：记录鼠标坐标（供 HoverCard 使用）
     const [anchor, setAnchor] = useState<Point | null>(null);
@@ -54,6 +67,23 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         window.addEventListener(FREEZE_EVENT, onFreeze as EventListener);
         return () => window.removeEventListener(FREEZE_EVENT, onFreeze as EventListener);
     }, []);
+
+    React.useEffect(() => () => {
+        if (subsentenceAbortRef.current) {
+            subsentenceAbortRef.current.abort();
+            subsentenceAbortRef.current = null;
+        }
+    }, []);
+
+    React.useEffect(() => {
+        setSentenceVm(mapSentenceToVM(sentence));
+        setIsSubsentenceActive(false);
+        setSubsentenceVm(null);
+        setFocusedUnitId(null);
+        setSubsentenceError(null);
+        setIsLoadingSubsentence(false);
+        setIsStreamingSubsentence(false);
+    }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood]);
 
 
     const handleClick = (e: MouseEvent<HTMLSpanElement>) => {
@@ -106,7 +136,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (globalFrozenId !== null && globalFrozenId !== sentence.id) return;
         setIsHovered(false);
         onHoverChange?.(sentence.id, false);
-        setHoveredSubUnitId(null);
         if (!isFrozen) setAnchor(null);
     };
 
@@ -125,11 +154,18 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (interactionEnabled) return;
         setIsHovered(false);
         setAnchor(null);
-        setHoveredSubUnitId(null);
-        setSubSentenceAnalysis(null);
         setSubsentenceError(null);
         setIsLoadingSubsentence(false);
+        setSubsentenceVm(null);
+        setFocusedUnitId(null);
         setIsClicked(false);
+        setSentenceVm(mapSentenceToVM(sentence));
+        setIsSubsentenceActive(false);
+        setIsStreamingSubsentence(false);
+        if (subsentenceAbortRef.current) {
+            subsentenceAbortRef.current.abort();
+            subsentenceAbortRef.current = null;
+        }
         setIsFrozen(prev => {
             if (prev) {
                 window.dispatchEvent(new CustomEvent<number | null>(FREEZE_EVENT, { detail: null }));
@@ -138,30 +174,101 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         });
     }, [interactionEnabled]);
 
-    // use for test
-    const handleStartSubsentence = useCallback(async (analysisPath?: string) => {
-        if (subSentenceAnalysis) {
-            setSubSentenceAnalysis(null);
+    const handleStartSubsentence = useCallback((): void => {
+        if (isSubsentenceActive) {
+            if (subsentenceAbortRef.current) {
+                subsentenceAbortRef.current.abort();
+                subsentenceAbortRef.current = null;
+            }
             setSubsentenceError(null);
-            setHoveredSubUnitId(null);
+            setIsLoadingSubsentence(false);
+            setIsSubsentenceActive(false);
+            setSubsentenceVm(null);
+            setFocusedUnitId(null);
+            setIsStreamingSubsentence(false);
             return;
         }
-        if (isLoadingSubsentence) return;
-        setIsLoadingSubsentence(true);
-        setSubsentenceError(null);
-        setHoveredSubUnitId(null);
-        try {
-            const targetPath = analysisPath ?? "../../examples/subsentence-example.json";
-            const module = await import(/* @vite-ignore */ targetPath);
-            const analysis = (module.default ?? module) as SubSentenceAnalysis;
-            setSubSentenceAnalysis(analysis);
-        } catch (error) {
-            setSubsentenceError("Failed to load subsentence analysis.");
-            console.error(error);
-        } finally {
-            setIsLoadingSubsentence(false);
+
+        if (subsentenceAbortRef.current) {
+            subsentenceAbortRef.current.abort();
+            subsentenceAbortRef.current = null;
         }
-    }, [isLoadingSubsentence, subSentenceAnalysis]);
+        const controller = new AbortController();
+        subsentenceAbortRef.current = controller;
+
+        setIsSubsentenceActive(true);
+        setIsLoadingSubsentence(true);
+        setIsStreamingSubsentence(true);
+        setSubsentenceError(null);
+        setSubsentenceVm(null);
+        setFocusedUnitId(null);
+
+        const tasks: Array<'micro_roles' | 'cue_interaction' | 'contrast_resolution'> = [
+            "micro_roles",
+            "cue_interaction",
+            "contrast_resolution",
+        ];
+        const payload = {
+            doc_id: DEFAULT_DOC_CONTEXT.doc_id,
+            sentence_id: String(sentence.id),
+            span: { start: 0, end: sentence.text.length },
+            options: { tasks },
+        };
+        const ctx: Partial<StandardContext> & { doc: StandardContext["doc"] } = {
+            doc: DEFAULT_DOC_CONTEXT,
+        };
+
+        const run = async () => {
+            try {
+                const meta = {
+                    sentence_text: sentence.text,
+                    fragment_text: sentence.text.slice(payload.span.start, payload.span.end),
+                };
+                const res = await messageService.analyzeSubSentence(
+                    payload,
+                    ctx,
+                    meta,
+                    {
+                        signal: controller.signal,
+                        timeoutMs: 60_000,
+                    },
+                );
+                console.log("received from LLM")
+                if (controller.signal.aborted) return;
+
+                if (res.status === "error") {
+                    setSubsentenceError(res.error?.message ?? "Failed to load subsentence analysis.");
+                    setSubsentenceVm(null);
+                    return;
+                }
+                const vm = mapSubSentenceToVM(res.data ?? null);
+                if (!vm) {
+                    setSubsentenceError("Subsentence analysis response was empty.");
+                    setSubsentenceVm(null);
+                    return;
+                }
+                setSubsentenceVm(vm);
+                setFocusedUnitId(vm.analysis.backbone?.subjectId ?? vm.analysis.units[0]?.id ?? null);
+                setSubsentenceError(null);
+            } catch (error) {
+                if (isAbortError(error)) {
+                    setSubsentenceError("Subsentence analysis was cancelled or timed out.");
+                    setSubsentenceVm(null);
+                    return;
+                }
+                setSubsentenceError(error instanceof Error ? error.message : "Failed to load subsentence analysis.");
+                setSubsentenceVm(null);
+            } finally {
+                if (subsentenceAbortRef.current === controller) {
+                    subsentenceAbortRef.current = null;
+                }
+                setIsLoadingSubsentence(false);
+                setIsStreamingSubsentence(false);
+            }
+        };
+
+        void run();
+    }, [isSubsentenceActive, sentence]);
 
     // ---- [A] Tag 颜色与映射（内联样式，免改 CSS） ----
     type Variant = "blue" | "green" | "yellow" | "gray";
@@ -217,28 +324,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const typeVariant = (t: string): Variant => (t.toLowerCase().includes("declarative") ? "green" : "gray");
     const moodVariant = (m: string): Variant => (m.toLowerCase().includes("indicative") ? "yellow" : "gray");
 
-    const hoveredSubUnit = React.useMemo<SubUnit | null>(() => {
-        if (!subSentenceAnalysis || !hoveredSubUnitId) return null;
-
-        const walk = (units: SubUnit[]): SubUnit | null => {
-            for (const unit of units) {
-                if (unit.id === hoveredSubUnitId) return unit;
-                if (unit.children) {
-                    const childHit = walk(unit.children);
-                    if (childHit) return childHit;
-                }
-                if (unit.clause?.units) {
-                    const clauseHit = walk(unit.clause.units);
-                    if (clauseHit) return clauseHit;
-                }
-            }
-            return null;
-        };
-
-        return walk(subSentenceAnalysis.units);
-    }, [hoveredSubUnitId, subSentenceAnalysis]);
-
-
     const className = [
         "sentence",
         "component",
@@ -247,37 +332,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     ]
         .filter(Boolean)
         .join(" ");
-
-    const sentenceAnalysisPath = `../../examples/sentences/${sentence.id}.json`;
-
-    // Animate mount/unmount of SubSentenceComponent inside hover card
-    React.useEffect(() => {
-        // Clear any pending timer when state changes
-        if (closeTimerRef.current) {
-            window.clearTimeout(closeTimerRef.current);
-            closeTimerRef.current = null;
-        }
-        if (subSentenceAnalysis) {
-            setLastSubSentenceAnalysis(subSentenceAnalysis);
-            setShowSubUI(true);
-            setClosingSubUI(false);
-        } else if (showSubUI) {
-            setClosingSubUI(true);
-            closeTimerRef.current = window.setTimeout(() => {
-                setShowSubUI(false);
-                setClosingSubUI(false);
-                setLastSubSentenceAnalysis(null);
-                closeTimerRef.current = null;
-            }, 260); // keep in sync with CSS transition duration
-        }
-        // Cleanup on unmount
-        return () => {
-            if (closeTimerRef.current) {
-                window.clearTimeout(closeTimerRef.current);
-                closeTimerRef.current = null;
-            }
-        };
-    }, [subSentenceAnalysis, showSubUI]);
+    const shouldShowSubsentence =
+        isSubsentenceActive || isLoadingSubsentence || subsentenceError !== null || subsentenceVm !== null;
 
     return (
         <>
@@ -297,40 +353,90 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             </span>
 
             <SentenceHoverCard
-                onStartSubsentence={() => handleStartSubsentence(sentenceAnalysisPath)}
-                subsentenceActive={Boolean(subSentenceAnalysis)}
+                onStartSubSentence={handleStartSubsentence}
+                subSentenceActive={isSubsentenceActive}
                 open={
                     interactionEnabled &&
                     (isHovered || isFrozen) &&
                     !(globalFrozenId !== null && globalFrozenId !== sentence.id)
                 }
                 anchor={interactionEnabled ? anchor ?? undefined : undefined}
-                maxWidth={showSubUI ? 820 : 520}
+                maxWidth={520}
             // 可以按需传额外参数：offset、maxWidth 等
             >
                 <div className="hovercard-content">
+                    <div
+                        className={[
+                            "subsentence-section",
+                            shouldShowSubsentence ? "is-open" : "",
+                        ]
+                            .filter(Boolean)
+                            .join(" ")}
+                    >
+                        {shouldShowSubsentence && (
+                            <>
+                                <div className="subsentence-title">Subsentence analysis</div>
+                                {isLoadingSubsentence && (
+                                    <div
+                                        className={[
+                                            "subsentence-status",
+                                            isStreamingSubsentence ? "subsentence-status--progress" : "",
+                                        ]
+                                            .filter(Boolean)
+                                            .join(" ")}
+                                    >
+                                        {isStreamingSubsentence
+                                            ? "Preparing subsentence analysis..."
+                                            : "Loading subsentence analysis..."}
+                                    </div>
+                                )}
+                                {subsentenceError && (
+                                    <div className="subsentence-status subsentence-status--error">
+                                        {subsentenceError}
+                                    </div>
+                                )}
+                                {subsentenceVm && !isLoadingSubsentence && !subsentenceError && (
+                                    <div className="subsentence-wrapper">
+                                        <SubSentenceComponent
+                                            analysis={subsentenceVm.analysis}
+                                            focusUnitId={focusedUnitId ?? undefined}
+                                            onFocusChange={(unitId) => setFocusedUnitId(unitId)}
+                                        />
+                                        {typeof subsentenceVm.confidence === "number" && (
+                                            <div className="subsentence-status">
+                                                Confidence: {(subsentenceVm.confidence * 100).toFixed(0)}%
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+
                     <div className="tags">
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
                         {(() => {
-                            const v = fnVariant(sentence.function);
+                            const roleLabel = sentenceVm.roleLabel ?? sentence.function;
+                            const v = fnVariant(roleLabel);
                             return (
                                 <span className="tag" style={styleFor(v)}>
                                     {dotEl(v)}
-                                    {sentence.function}
+                                    {roleLabel}
                                 </span>
                             );
                         })()}
 
                         {/* Tag 2: type + (relation 可拼在同一个 tag 内) -> Declarative 用绿 */}
                         {(() => {
-                            const v = typeVariant(sentence.type);
+                            const structureLabel = sentenceVm.structureLabel ?? sentence.type;
+                            const v = typeVariant(structureLabel);
                             const relationPiece = sentence.relation
                                 ? ` · ${sentence.relation.type} → #${sentence.relation.targetSentenceId}`
                                 : "";
                             return (
                                 <span className="tag" style={styleFor(v)}>
                                     {dotEl(v)}
-                                    {sentence.type}
+                                    {structureLabel}
                                     {relationPiece}
                                 </span>
                             );
@@ -338,80 +444,18 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
                         {/* Tag 3: mood 独立成黄（如 Indicative） */}
                         {(() => {
-                            const v = moodVariant(sentence.mood);
+                            const moodLabel = sentenceVm.mood ?? sentence.mood;
+                            const v = moodVariant(moodLabel);
                             return (
                                 <span className="tag" style={styleFor(v)}>
                                     {dotEl(v)}
-                                    {sentence.mood}
+                                    {moodLabel}
                                 </span>
                             );
                         })()}
                     </div>
 
                     <div className="purpose">{sentence.purpose}</div>
-                    {showSubUI ? (
-                        <div className={`subsentence-wrapper${closingSubUI ? " is-closing" : ""}`}>
-                            {(subSentenceAnalysis ?? lastSubSentenceAnalysis) ? (
-                                <SubSentenceComponent
-                                    analysis={(subSentenceAnalysis ?? lastSubSentenceAnalysis)!}
-                                    focusUnitId={hoveredSubUnitId ?? undefined}
-                                    onHoverUnit={setHoveredSubUnitId}
-                                />
-                            ) : null}
-                        </div>
-                    ) : null}
-                    {isLoadingSubsentence && (
-                        <div className="subsentence-status">Loading subsentence analysis...</div>
-                    )}
-                    {subsentenceError && (
-                        <div className="subsentence-status subsentence-status--error">{subsentenceError}</div>
-                    )}
-                    {subSentenceAnalysis && !hoveredSubUnit && !isLoadingSubsentence && !subsentenceError && (
-                        <div className="subsentence-status">Hover highlighted segments to inspect units.</div>
-                    )}
-                    {hoveredSubUnit && (
-                        <div className="subsentence-unit-info">
-                            <div className="subsentence-unit-info-title">{hoveredSubUnit.text}</div>
-                            <div className="subsentence-unit-info-grid">
-                                {hoveredSubUnit.role ? (
-                                    <>
-                                        <span className="label">Role</span>
-                                        <span>{hoveredSubUnit.role}</span>
-                                    </>
-                                ) : null}
-                                {hoveredSubUnit.semantics && hoveredSubUnit.semantics !== "none" ? (
-                                    <>
-                                        <span className="label">Semantics</span>
-                                        <span>{hoveredSubUnit.semantics}</span>
-                                    </>
-                                ) : null}
-                                {hoveredSubUnit.semRole && hoveredSubUnit.semRole !== "None" ? (
-                                    <>
-                                        <span className="label">Semantic Role</span>
-                                        <span>{hoveredSubUnit.semRole}</span>
-                                    </>
-                                ) : null}
-                                {hoveredSubUnit.viewHint?.label ? (
-                                    <>
-                                        <span className="label">Label</span>
-                                        <span>{hoveredSubUnit.viewHint.label}</span>
-                                    </>
-                                ) : null}
-                                {hoveredSubUnit.source ? (
-                                    <>
-                                        <span className="label">Source</span>
-                                        <span>{hoveredSubUnit.source}</span>
-                                    </>
-                                ) : null}
-                                {typeof hoveredSubUnit.confidence === "number" ? (
-                                    <>
-                                        <span className="label">Confidence</span>
-                                        <span>{hoveredSubUnit.confidence.toFixed(2)}</span>
-                                    </>
-                                ) : null}
-                            </div>
-                        </div>
-                    )}
                 </div>
             </SentenceHoverCard>
         </>

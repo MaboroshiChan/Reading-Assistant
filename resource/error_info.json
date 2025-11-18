@@ -1,0 +1,15 @@
+{
+  "level": "info",
+  "scope": "subsentence",
+  "message": "LLM prompt prepared",
+  "requestId": "469cf8fa-f2c9-496f-a4d4-35353a0e38f7",
+  "sentenceId": "2",
+  "promptVersion": "subsentence.v1",
+  "tasks": [
+    "micro_roles",
+    "cue_interaction",
+    "contrast_resolution"
+  ],
+  "promptLength": 4055,
+  "timestamp": "2025-11-06T13:00:43.844Z"
+}

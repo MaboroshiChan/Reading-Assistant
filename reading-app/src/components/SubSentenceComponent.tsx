@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback, Fragment, type CSSProperties } from "react";
-import type { SubSentenceAnalysis } from "../analysis/structure/SubSentence";
-import { chooseVariant, DefaultVariantPalette } from "../analysis/structure/SubSentence";
+import type { SubSentenceAnalysis } from "../model/structure/SubSentence";
+import { chooseVariant, DefaultVariantPalette } from "../model/structure/SubSentence";
 import "./css/SubSentence.css";
 
 interface SubSentenceComponentProps {

@@ -1,5 +1,7 @@
-import type { ParagraphViewModel } from "../analysis/viewModels/mapParagraphToVM";
-import type { SentenceViewModel } from "../analysis/viewModels/mapSentenceToVM";
+// Deprecated 
+
+import type { ParagraphViewModel } from "../model/viewModels/mapParagraphToVM";
+import type { SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
 import './css/Info.css';
 
 interface InfoProps<T> {

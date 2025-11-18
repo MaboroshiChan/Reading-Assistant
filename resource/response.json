@@ -1,0 +1,11 @@
+{
+    "level": "info",
+    "scope": "sentence",
+    "message": "data prepared",
+    "requestId": "4b704413-5785-459b-8b93-522b9158e533",
+    "source": "llm",
+    "promptVersion": "sentence.v1",
+    "roles": 3,
+    "modalMarkers": 0,
+    "timestamp": "2025-11-06T09:49:41.154Z"
+}
