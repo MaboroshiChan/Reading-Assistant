@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback, Fragment, type CSSProperties } from "react";
-import type { SubSentenceAnalysis } from "../model/structure/SubSentence";
+import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
 import { chooseVariant, DefaultVariantPalette } from "../model/structure/SubSentence";
 import "./css/SubSentence.css";
 
@@ -32,9 +32,16 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
         return !",.;:!?".includes(lastChar);
     }, []);
 
-    return (
-        <span data-subsentence-id={analysis.sentenceId} className="subsentence-container">
-            {analysis.units.map((unit, index) => {
+    const getLastText = (unit: SubUnit): string => {
+        if (unit.children && unit.children.length > 0) {
+            return getLastText(unit.children[unit.children.length - 1]);
+        }
+        return unit.text ?? "";
+    };
+
+    const renderUnits = useCallback(
+        (units: SubUnit[]): React.ReactNode =>
+            units.map((unit, index) => {
                 const variant = chooseVariant(unit, analysis.legend);
                 const colors = palette[variant] ?? DefaultVariantPalette.gray;
                 const isInteractive = Boolean(onFocusChange);
@@ -49,11 +56,15 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                     "subsentence-chip",
                     isInteractive ? "subsentence-chip--interactive" : "",
                     isFocused ? "subsentence-chip--active" : "",
+                    unit.children && unit.children.length ? "subsentence-chip--has-children" : "",
                 ]
                     .filter(Boolean)
                     .join(" ");
 
-                const addSpace = index < analysis.units.length - 1 && shouldAddSpace(unit.text);
+                const addSpace =
+                    index < units.length - 1 && shouldAddSpace(getLastText(unit));
+
+                const hasChildren = !!(unit.children && unit.children.length > 0);
 
                 return (
                     <Fragment key={unit.id}>
@@ -68,12 +79,31 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                             onFocus={() => handleHover(unit.id)}
                             onBlur={() => handleHover(null)}
                         >
-                            {unit.text}
+                            {hasChildren ? (
+                                <>
+                                    {unit.viewHint?.label && (
+                                        <span className="subsentence-chip-label">
+                                            {unit.viewHint.label}
+                                        </span>
+                                    )}
+                                    <span className="subsentence-children">
+                                        {renderUnits(unit.children!)}
+                                    </span>
+                                </>
+                            ) : (
+                                unit.text
+                            )}
                         </span>
                         {addSpace ? <span className="subsentence-space"> </span> : null}
                     </Fragment>
                 );
-            })}
+            }),
+        [analysis.legend, focusUnitId, handleHover, onFocusChange, palette, shouldAddSpace],
+    );
+
+    return (
+        <span data-subsentence-id={analysis.sentenceId} className="subsentence-container">
+            {renderUnits(analysis.units)}
         </span>
     );
 };

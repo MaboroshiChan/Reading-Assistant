@@ -4,8 +4,9 @@
 }
 
 .subsentence-chip {
-  display: inline;
-  padding: 1px 3px;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 4px;
   border-radius: 6px;
   border: 1px solid transparent;
   transition:
@@ -33,4 +34,25 @@
 .subsentence-space {
   display: inline;
   white-space: pre;
+}
+
+.subsentence-chip--has-children {
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 3px 5px;
+  box-shadow: 0 0 0 1px var(--chip-border, rgba(148, 163, 184, 0.4));
+}
+
+.subsentence-children {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.subsentence-chip-label {
+  font-size: 0.68rem;
+  line-height: 1;
+  opacity: 0.8;
+  text-transform: uppercase;
+  margin-bottom: 2px;
 }
