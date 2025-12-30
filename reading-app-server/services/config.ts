@@ -19,5 +19,5 @@ export const config: Config = {
 };
 
 export function getOpenAIApiKey(): string {
-  return process.env.OPENAI_API_KEY ?? "";
+  return process.env.GEMINI_API_KEY ?? "";
 }

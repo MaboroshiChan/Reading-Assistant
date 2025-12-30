@@ -10,6 +10,20 @@ interface SubSentenceComponentProps {
     onHoverUnit?: (unitId: string | null) => void;
 }
 
+const getLastText = (unit: SubUnit): string => {
+    if (unit.children && unit.children.length > 0) {
+        return getLastText(unit.children[unit.children.length - 1]);
+    }
+    return unit.text ?? "";
+};
+
+const shouldAddSpace = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    const lastChar = trimmed.slice(-1);
+    return !",.;:!?".includes(lastChar);
+};
+
 const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
     analysis,
     focusUnitId,
@@ -25,19 +39,13 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
         onHoverUnit?.(unitId);
     }, [onHoverUnit]);
 
-    const shouldAddSpace = useCallback((text: string) => {
-        const trimmed = text.trim();
-        if (!trimmed) return false;
-        const lastChar = trimmed.slice(-1);
-        return !",.;:!?".includes(lastChar);
-    }, []);
-
-    const getLastText = (unit: SubUnit): string => {
-        if (unit.children && unit.children.length > 0) {
-            return getLastText(unit.children[unit.children.length - 1]);
+    const handleKeyDown = useCallback((e: React.KeyboardEvent, unitId: string) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            e.stopPropagation();
+            onFocusChange?.(unitId);
         }
-        return unit.text ?? "";
-    };
+    }, [onFocusChange]);
 
     const renderUnits = useCallback(
         (units: SubUnit[]): React.ReactNode =>
@@ -73,10 +81,17 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                             tabIndex={isInteractive ? 0 : undefined}
                             className={className}
                             style={style}
-                            onClick={() => onFocusChange?.(unit.id)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onFocusChange?.(unit.id);
+                            }}
+                            onKeyDown={(e) => handleKeyDown(e, unit.id)}
                             onMouseEnter={() => handleHover(unit.id)}
                             onMouseLeave={() => handleHover(null)}
-                            onFocus={() => handleHover(unit.id)}
+                            onFocus={(e) => {
+                                e.stopPropagation();
+                                handleHover(unit.id);
+                            }}
                             onBlur={() => handleHover(null)}
                         >
                             {hasChildren ? (
@@ -98,7 +113,7 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                     </Fragment>
                 );
             }),
-        [analysis.legend, focusUnitId, handleHover, onFocusChange, palette, shouldAddSpace],
+        [analysis.legend, focusUnitId, handleHover, onFocusChange, palette, handleKeyDown],
     );
 
     return (

@@ -149,7 +149,7 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
   try {
     const apiKey = getOpenAIApiKey();
     if (!apiKey) {
-      throw new Error('Missing OPENAI_API_KEY environment variable for OpenAI client');
+      throw new Error('Missing OPENAI_ environment variable for OpenAI client');
     }
     const client = new OpenAI({ apiKey });
 
