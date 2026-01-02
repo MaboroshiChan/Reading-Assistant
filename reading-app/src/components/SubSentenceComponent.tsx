@@ -1,6 +1,5 @@
-import React, { useMemo, useCallback, Fragment, type CSSProperties } from "react";
+import React, { useCallback, Fragment, type CSSProperties } from "react";
 import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
-import { chooseVariant, DefaultVariantPalette } from "../model/structure/SubSentence";
 import "./css/SubSentence.css";
 
 interface SubSentenceComponentProps {
@@ -30,11 +29,6 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
     onFocusChange,
     onHoverUnit,
 }) => {
-    const palette = useMemo(() => ({
-        ...DefaultVariantPalette,
-        ...(analysis.legend?.variantPalette ?? {}),
-    }), [analysis.legend]);
-
     const handleHover = useCallback((unitId: string | null) => {
         onHoverUnit?.(unitId);
     }, [onHoverUnit]);
@@ -47,19 +41,31 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
         }
     }, [onFocusChange]);
 
+    const getRoleStyle = useCallback((unit: SubUnit): CSSProperties => {
+        // Determine role from backbone (preferred) or unit property
+        let role: string | undefined = (unit)?.role;
+        
+        if (!role && analysis.backbone) {
+            if (analysis.backbone.subjectId === unit.id) role = "subject";
+            else if (analysis.backbone.predicateId === unit.id) role = "predicate";
+            else if (analysis.backbone.objectId === unit.id) role = "object";
+        }
+
+        switch (role) {
+            case "subject": return { backgroundColor: "rgba(147, 197, 253, 0.3)", borderRadius: "4px" }; // Blue
+            case "predicate": return { backgroundColor: "rgba(252, 211, 77, 0.3)", borderRadius: "4px" }; // Yellow
+            case "object": return { backgroundColor: "rgba(110, 231, 183, 0.3)", borderRadius: "4px" }; // Green
+            case "subclause": return { backgroundColor: "rgba(167, 139, 250, 0.2)", borderRadius: "4px", border: "1px dashed rgba(167, 139, 250, 0.5)" };
+            default: return {};
+        }
+    }, [analysis.backbone]);
+
     const renderUnits = useCallback(
         (units: SubUnit[]): React.ReactNode =>
-            units.map((unit, index) => {
-                const variant = chooseVariant(unit, analysis.legend);
-                const colors = palette[variant] ?? DefaultVariantPalette.gray;
+            units.map((unit: SubUnit, index: number) => {
                 const isInteractive = Boolean(onFocusChange);
                 const isFocused = focusUnitId === unit.id;
-                const style = {
-                    "--chip-bg": colors.bg,
-                    "--chip-fg": colors.fg,
-                    "--chip-dot": colors.dot,
-                    "--chip-border": colors.dot,
-                } as CSSProperties;
+                const style = getRoleStyle(unit);
                 const className = [
                     "subsentence-chip",
                     isInteractive ? "subsentence-chip--interactive" : "",
@@ -86,8 +92,14 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                                 onFocusChange?.(unit.id);
                             }}
                             onKeyDown={(e) => handleKeyDown(e, unit.id)}
-                            onMouseEnter={() => handleHover(unit.id)}
-                            onMouseLeave={() => handleHover(null)}
+                            onMouseEnter={(e) => {
+                                e.stopPropagation();
+                                handleHover(unit.id);
+                            }}
+                            onMouseLeave={(e) => {
+                                e.stopPropagation();
+                                handleHover(null);
+                            }}
                             onFocus={(e) => {
                                 e.stopPropagation();
                                 handleHover(unit.id);
@@ -113,8 +125,8 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                     </Fragment>
                 );
             }),
-        [analysis.legend, focusUnitId, handleHover, onFocusChange, palette, handleKeyDown],
-    );
+        [focusUnitId, handleHover, onFocusChange, handleKeyDown, getRoleStyle],
+    )
 
     return (
         <span data-subsentence-id={analysis.sentenceId} className="subsentence-container">

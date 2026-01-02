@@ -21,7 +21,7 @@ Always respond with **plain JSON** and no commentary. The shape must be:
       {
         "id": "unit-1",
         "text": "string",
-        "role": "subject|predicate|object|complement|modifier|connector|clause|phrase|token",
+        "role": "subject|predicate|object|subclause|complement|modifier|connector|clause|phrase|token",
         "semantics": "cause|result|condition|concession|purpose|contrast|transition|example|definition|emphasis|topic|comment|time|location|manner|evaluation|attribution|reporting|modality|none",
         "semRole": "Agent|Patient|Theme|Experiencer|Instrument|Goal|Source|Location|Time|Manner|Cause|Condition|None",
         "confidence": 0.0,
@@ -99,6 +99,8 @@ Guidelines:
   punctuation).
 - Populate `role`, `semantics`, and `semRole` with the canon values listed
   above. When unknown, omit the property (do **not** invent alternatives).
+- **Recursive Roles**: Specifically identify `subject`, `predicate`, `object`,
+  and `subclause` roles at all levels of the hierarchy.
 - Set `source` to `"model"` for generated units and supply a `confidence`
   between 0 and 1.
 - Provide `backbone.subjectId` / `predicateId` / `objectId` when the roles are
