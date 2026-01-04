@@ -350,6 +350,14 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 className={className}
                 data-sentence-id={sentence.id}
             >
+                <span style={{
+                    fontSize: "0.75em",
+                    color: interactionEnabled && isHovered && !blocked ? "#e2e8f0" : "#9ca3af",
+                    marginRight: "0.3em",
+                    userSelect: "none"
+                }}>
+                    {sentence.id}
+                </span>
                 {sentence.text}
             </span>
 
