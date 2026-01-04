@@ -1,4 +1,4 @@
-import React, { useCallback, Fragment, type CSSProperties } from "react";
+import React, { useCallback, Fragment, useMemo, useState } from "react";
 import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
 import "./css/SubSentence.css";
 
@@ -23,15 +23,35 @@ const shouldAddSpace = (text: string) => {
     return !",.;:!?".includes(lastChar);
 };
 
+const findUnitChain = (units: SubUnit[], id: string): SubUnit[] => {
+    for (const unit of units) {
+        if (unit.id === id) return [unit];
+        if (unit.children) {
+            const chain = findUnitChain(unit.children, id);
+            if (chain.length > 0) return [unit, ...chain];
+        }
+    }
+    return [];
+};
+
 const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
     analysis,
     focusUnitId,
     onFocusChange,
     onHoverUnit,
 }) => {
+    const [hoveredUnitId, setHoveredUnitId] = useState<string | null>(null);
+
     const handleHover = useCallback((unitId: string | null) => {
+        setHoveredUnitId(unitId);
         onHoverUnit?.(unitId);
     }, [onHoverUnit]);
+
+    const displayChain = useMemo(() => {
+        const targetId = hoveredUnitId ?? focusUnitId;
+        if (!targetId) return [];
+        return findUnitChain(analysis.units, targetId);
+    }, [analysis.units, focusUnitId, hoveredUnitId]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent, unitId: string) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -41,23 +61,15 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
         }
     }, [onFocusChange]);
 
-    const getRoleStyle = useCallback((unit: SubUnit): CSSProperties => {
-        // Determine role from backbone (preferred) or unit property
-        let role: string | undefined = (unit)?.role;
+    const getUnitRole = useCallback((unit: SubUnit): string | undefined => {
+        let role: string | undefined = unit?.role;
         
         if (!role && analysis.backbone) {
             if (analysis.backbone.subjectId === unit.id) role = "subject";
             else if (analysis.backbone.predicateId === unit.id) role = "predicate";
             else if (analysis.backbone.objectId === unit.id) role = "object";
         }
-
-        switch (role) {
-            case "subject": return { backgroundColor: "rgba(147, 197, 253, 0.3)", borderRadius: "4px" }; // Blue
-            case "predicate": return { backgroundColor: "rgba(252, 211, 77, 0.3)", borderRadius: "4px" }; // Yellow
-            case "object": return { backgroundColor: "rgba(110, 231, 183, 0.3)", borderRadius: "4px" }; // Green
-            case "subclause": return { backgroundColor: "rgba(167, 139, 250, 0.2)", borderRadius: "4px", border: "1px dashed rgba(167, 139, 250, 0.5)" };
-            default: return {};
-        }
+        return role;
     }, [analysis.backbone]);
 
     const renderUnits = useCallback(
@@ -65,12 +77,13 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
             units.map((unit: SubUnit, index: number) => {
                 const isInteractive = Boolean(onFocusChange);
                 const isFocused = focusUnitId === unit.id;
-                const style = getRoleStyle(unit);
+                const role = getUnitRole(unit);
                 const className = [
                     "subsentence-chip",
                     isInteractive ? "subsentence-chip--interactive" : "",
                     isFocused ? "subsentence-chip--active" : "",
                     unit.children && unit.children.length ? "subsentence-chip--has-children" : "",
+                    role ? `subsentence-chip--role-${role}` : "",
                 ]
                     .filter(Boolean)
                     .join(" ");
@@ -86,19 +99,14 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                             role={isInteractive ? "button" : undefined}
                             tabIndex={isInteractive ? 0 : undefined}
                             className={className}
-                            style={style}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onFocusChange?.(unit.id);
                             }}
                             onKeyDown={(e) => handleKeyDown(e, unit.id)}
-                            onMouseEnter={(e) => {
+                            onMouseOver={(e) => {
                                 e.stopPropagation();
                                 handleHover(unit.id);
-                            }}
-                            onMouseLeave={(e) => {
-                                e.stopPropagation();
-                                handleHover(null);
                             }}
                             onFocus={(e) => {
                                 e.stopPropagation();
@@ -125,13 +133,41 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                     </Fragment>
                 );
             }),
-        [focusUnitId, handleHover, onFocusChange, handleKeyDown, getRoleStyle],
+        [focusUnitId, handleHover, onFocusChange, handleKeyDown, getUnitRole],
     )
 
     return (
-        <span data-subsentence-id={analysis.sentenceId} className="subsentence-container">
-            {renderUnits(analysis.units)}
-        </span>
+        <div className="subsentence-analysis">
+            <span
+                data-subsentence-id={analysis.sentenceId}
+                className="subsentence-container"
+                onMouseLeave={() => handleHover(null)}
+            >
+                {renderUnits(analysis.units)}
+            </span>
+            <div className="semantic role">
+                {displayChain.map((unit, index) => (
+                    <div
+                        key={unit.id}
+                        className="subsentence-chain-item"
+                        style={{ "--depth": index } as React.CSSProperties}
+                    >
+                        <div className="subsentence-info-panel">
+                            <div className="subsentence-info-row">
+                                <span className="subsentence-info-key">Role</span>
+                                <span className="subsentence-info-value role-value">{unit.role}</span>
+                            </div>
+                            {(unit as any).semantics && (
+                                <div className="subsentence-info-row">
+                                    <span className="subsentence-info-key">Semantics</span>
+                                    <span className="subsentence-info-value">{(unit as any).semantics}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 };
 
