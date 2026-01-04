@@ -157,10 +157,10 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                                 <span className="subsentence-info-key">Role</span>
                                 <span className="subsentence-info-value role-value">{unit.role}</span>
                             </div>
-                            {(unit as any).semantics && (
+                            {(unit).semantics && (
                                 <div className="subsentence-info-row">
                                     <span className="subsentence-info-key">Semantics</span>
-                                    <span className="subsentence-info-value">{(unit as any).semantics}</span>
+                                    <span className="subsentence-info-value">{(unit).semantics}</span>
                                 </div>
                             )}
                         </div>
