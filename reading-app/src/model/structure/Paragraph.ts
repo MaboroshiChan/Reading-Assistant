@@ -1,7 +1,7 @@
 import type { Sentence } from "./Sentence";
 
 export interface Paragraph {
-  id: string;
+  id: number;
   sentences: Sentence[];
 
   /** 段落的中心思想，可由 LLM 提炼或用户指定 */

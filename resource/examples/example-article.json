@@ -1,6 +1,6 @@
 [
   {
-    "id": "p1",
+    "id": 1,
     "centralIdea": "Field observation of Chennai market vendors reveals a persistent short-term debt cycle driven by daily high-interest loans and narrow profit margins.",
     "structureType": "Descriptive",
     "function": "Observation",
@@ -43,7 +43,7 @@
     ]
   },
   {
-    "id": "p2",
+    "id": 2,
     "centralIdea": "Scarcity itself impairs cognitive capacity; the researchers formalize this observation into controlled studies.",
     "structureType": "Causal",
     "function": "Hypothesis",
@@ -59,7 +59,7 @@
     ]
   },
   {
-    "id": "p3",
+    "id": 3,
     "centralIdea": "A U.S. mall experiment shows poorer participants' cognitive performance drops under financial strain, unlike richer participants.",
     "structureType": "Experimental",
     "function": "Evidence",
@@ -120,7 +120,7 @@
     ]
   },
   {
-    "id": "p4",
+    "id": 4,
     "centralIdea": "A follow-up field study with Indian sugarcane farmers confirms the causal link within the same individuals across income cycles.",
     "structureType": "Experimental",
     "function": "Evidence",

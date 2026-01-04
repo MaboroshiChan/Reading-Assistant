@@ -22,6 +22,7 @@ const isAbortError = (error: unknown): boolean =>
         : error instanceof Error && error.name === "AbortError";
 
 interface SentenceComponentProps {
+    id: number;
     sentence: Sentence;
     onToggleFocus?: (id: number, isFocused: boolean) => void;
     onHoverChange?: (id: number, isHovered: boolean) => void;
