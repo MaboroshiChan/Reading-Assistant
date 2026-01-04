@@ -10,6 +10,7 @@ import mapSubSentenceToVM, { type SubsentenceVM } from "../model/viewModels/mapS
 import SubSentenceComponent from "./SubSentenceComponent";
 import messageService from "../services/messageService.instance";
 import type { StandardContext } from "../services/envelopes";
+import SentenceRelationship from "./SentenceRelationship";
 
 const FREEZE_EVENT = "hovercard:freeze";
 const DEFAULT_DOC_CONTEXT: StandardContext["doc"] = {
@@ -469,6 +470,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                         <br />
                             {sentence.purpose}
                     </div>
+                    <SentenceRelationship
+                        prev_id={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId < sentence.id ? sentence.relation.targetSentenceId : sentence.id - 1}
+                        next_id={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId > sentence.id ? sentence.relation.targetSentenceId : sentence.id + 1}
+                        prev={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId < sentence.id ? sentence.relation.type : ""}
+                        next={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId > sentence.id ? sentence.relation.type : ""}
+                    />
                 </div>
             </SentenceHoverCard>
         </>
