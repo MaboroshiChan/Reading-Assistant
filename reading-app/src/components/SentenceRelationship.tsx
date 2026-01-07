@@ -5,8 +5,10 @@ import './SentenceRelationship.css';
 interface SentenceRelationshipProps {
     prev_id: number; // id of previous sentence
     next_id: number; // id of next sentence
+    current_id: number; // id of current sentence
     prev: string; // relationship to previous sentence
     next: string; // relationship to next sentence
+    onHoverSentence?: (id: number | null) => void;
 }
 
 /** 
@@ -16,22 +18,43 @@ interface SentenceRelationshipProps {
 const SentenceRelationship: React.FC<SentenceRelationshipProps> = ({
     prev_id,
     next_id,
+    current_id,
     prev,
-    next
+    next,
+    onHoverSentence
 }) => {
     return (
         <div className='sentence-relationship'>
             {prev && (
-                <div className='relationship-connection prev'>
-                    <span className='arrow'>&uarr;</span>
-                    <span className='label'>{prev} <small>(from #{prev_id})</small></span>
-                </div>
+                <>
+                    <div 
+                        className='node other'
+                        onMouseEnter={() => onHoverSentence?.(prev_id)}
+                        onMouseLeave={() => onHoverSentence?.(null)}
+                    >#{prev_id}</div>
+                    <div className='connector'>
+                        <span className='connector-label'>{prev}</span>
+                    </div>
+                </>
             )}
+            
+            <div 
+                className='node current'
+                onMouseEnter={() => onHoverSentence?.(current_id)}
+                onMouseLeave={() => onHoverSentence?.(null)}
+            >#{current_id}</div>
+
             {next && (
-                <div className='relationship-connection next'>
-                    <span className='label'>{next} <small>(to #{next_id})</small></span>
-                    <span className='arrow'>&darr;</span>
-                </div>
+                <>
+                    <div className='connector'>
+                        <span className='connector-label'>{next}</span>
+                    </div>
+                    <div 
+                        className='node other'
+                        onMouseEnter={() => onHoverSentence?.(next_id)}
+                        onMouseLeave={() => onHoverSentence?.(null)}
+                    >#{next_id}</div>
+                </>
             )}
         </div>
     )

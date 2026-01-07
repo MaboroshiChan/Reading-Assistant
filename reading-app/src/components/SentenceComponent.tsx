@@ -13,6 +13,7 @@ import type { StandardContext } from "../services/envelopes";
 import SentenceRelationship from "./SentenceRelationship";
 
 const FREEZE_EVENT = "hovercard:freeze";
+const HIGHLIGHT_EVENT = "sentence:highlight";
 const DEFAULT_DOC_CONTEXT: StandardContext["doc"] = {
     doc_id: "example-article",
     content_hash: "example-article#dev",
@@ -57,6 +58,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [focusedUnitId, setFocusedUnitId] = useState<string | null>(null);
     const [sentenceVm, setSentenceVm] = useState<SentenceViewModel>(() => mapSentenceToVM(sentence));
     const [isSubsentenceActive, setIsSubsentenceActive] = useState(false);
+    const [isRemoteHovered, setIsRemoteHovered] = useState(false);
 
     // 新增：记录鼠标坐标（供 HoverCard 使用）
     const [anchor, setAnchor] = useState<Point | null>(null);
@@ -68,6 +70,15 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         };
         window.addEventListener(FREEZE_EVENT, onFreeze as EventListener);
         return () => window.removeEventListener(FREEZE_EVENT, onFreeze as EventListener);
+    }, []);
+
+    React.useEffect(() => {
+        const onHighlight = (e: Event) => {
+            const detail = (e as CustomEvent<number | null>).detail ?? null;
+            setIsRemoteHovered(detail === sentence.id);
+        };
+        window.addEventListener(HIGHLIGHT_EVENT, onHighlight as EventListener);
+        return () => window.removeEventListener(HIGHLIGHT_EVENT, onHighlight as EventListener);
     }, []);
 
     React.useEffect(() => () => {
@@ -147,7 +158,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (!interactionEnabled) return;
         if (isFrozen || (globalFrozenId !== null && globalFrozenId !== sentence.id)) return;
         setAnchor({ x: e.clientX, y: e.clientY });
-
     };
 
     const blocked = globalFrozenId !== null && globalFrozenId !== sentence.id;
@@ -175,6 +185,10 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             return false;
         });
     }, [interactionEnabled]);
+
+    const handleRelationshipHover = useCallback((id: number | null) => {
+        window.dispatchEvent(new CustomEvent(HIGHLIGHT_EVENT, { detail: id }));
+    }, []);
 
     const handleStartSubsentence = useCallback((): void => {
         if (isSubsentenceActive) {
@@ -329,7 +343,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const className = [
         "sentence",
         "component",
-        interactionEnabled && isHovered && !blocked ? "hovered" : "",
+        interactionEnabled && (isRemoteHovered || (isHovered && !blocked)) ? "hovered" : "",
         interactionEnabled && isClicked ? "clicked" : "",
     ]
         .filter(Boolean)
@@ -471,10 +485,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                             {sentence.purpose}
                     </div>
                     <SentenceRelationship
+                        current_id={sentence.id}
                         prev_id={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId < sentence.id ? sentence.relation.targetSentenceId : sentence.id - 1}
                         next_id={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId > sentence.id ? sentence.relation.targetSentenceId : sentence.id + 1}
                         prev={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId < sentence.id ? sentence.relation.type : ""}
                         next={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId > sentence.id ? sentence.relation.type : ""}
+                        onHoverSentence={handleRelationshipHover}
                     />
                 </div>
             </SentenceHoverCard>
