@@ -455,7 +455,11 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                         })()}
                     </div>
 
-                    <div className="purpose">{sentence.purpose}</div>
+                    <div className="purpose">
+                        Explanation:
+                        <br />
+                            {sentence.purpose}
+                    </div>
                 </div>
             </SentenceHoverCard>
         </>

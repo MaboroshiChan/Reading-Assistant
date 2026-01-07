@@ -1,8 +1,14 @@
 # Subsentence Analysis Prompt (v1)
 
 You analyse a focused fragment of a sentence (a span inside a sentence) and
-explain its micro-structure. Produce a JSON object that follows the contract
-used by the Reading Assistant client for `SubSentenceAnalysis`.
+explain its micro-structure. You must identify and include **every semantic
+unit** in the fragment: do not skip long clauses, embedded phrases, or
+parenthetical material. The `units` array should form a **complete, gap-free
+partition** of the fragment text (ignoring whitespace and punctuation), so
+that taken together the units cover the entire fragment.
+
+Produce a JSON object that follows the contract used by the Reading Assistant
+client for `SubSentenceAnalysis`.
 
 Always respond with **plain JSON** and no commentary. The shape must be:
 
@@ -15,7 +21,7 @@ Always respond with **plain JSON** and no commentary. The shape must be:
       {
         "id": "unit-1",
         "text": "string",
-        "role": "subject|predicate|object|complement|modifier|connector|clause|phrase|token",
+        "role": "subject|predicate|object|subclause|complement|modifier|connector|clause|phrase|token",
         "semantics": "cause|result|condition|concession|purpose|contrast|transition|example|definition|emphasis|topic|comment|time|location|manner|evaluation|attribution|reporting|modality|none",
         "semRole": "Agent|Patient|Theme|Experiencer|Instrument|Goal|Source|Location|Time|Manner|Cause|Condition|None",
         "confidence": 0.0,
@@ -80,15 +86,28 @@ Guidelines:
 - Generate concise, unique `id` values per unit (e.g., `u1`, `u2a`).
 - Only include fields that you can justify. Omit optional keys instead of
   inventing data.
-- Prefer shallow trees: 3–6 top-level units covering the fragment without
-  overlap. Nest only when a unit is clearly a clause or phrase bundle.
+- Ensure **full coverage**: every meaningful word or phrase in the fragment
+  must belong to exactly one unit. Long subclauses should either be a single
+  unit or decomposed into smaller units; in both cases, all their content must
+  be represented somewhere in `units`.
+- Avoid gaps and overlaps between units (ignoring whitespace and punctuation).
+- Prefer shallow trees at the top level (around 3–9 root units), but **do use
+  nested `children`** to show internal structure of long clauses and phrases.
+  When you break a unit into children, each child’s `text` must be fully
+  contained in the parent’s `text`, and the children should form a
+  non-overlapping, gap-free partition of the parent (ignoring whitespace and
+  punctuation).
 - Populate `role`, `semantics`, and `semRole` with the canon values listed
   above. When unknown, omit the property (do **not** invent alternatives).
+- **Recursive Roles**: Specifically identify `subject`, `predicate`, `object`,
+  and `subclause` roles at all levels of the hierarchy.
 - Set `source` to `"model"` for generated units and supply a `confidence`
   between 0 and 1.
 - Provide `backbone.subjectId` / `predicateId` / `objectId` when the roles are
   present.
 - If you supply a nested `clause`, it must itself follow the same analysis
-  structure.
+  structure and also respect full coverage of its `text`. You may use both
+  `children` and `clause` together: `children` for the surface span, and
+  `clause` for a deeper re-analysis of that span.
 - Do not include span offsets; focus on textual units and hierarchy.
 - Return valid JSON only — no markdown fences, trailing commas, or comments.

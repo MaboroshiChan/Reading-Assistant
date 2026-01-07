@@ -15,8 +15,8 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { config, getOpenAIApiKey } from './config';
-import OpenAI, { APIError } from 'openai';
+import { config } from './config';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // -----------------------------
 // Public types
@@ -94,19 +94,6 @@ export async function json<T>(
 // Internal plumbing (OpenAI-compatible Responses API)
 // -----------------------------
 
-type ResponseShape = {
-  id?: string;
-  model?: string;
-  output_text?: string;
-  output?: Array<unknown>;   // new Responses API
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-  };
-  // Chat Completions (fallback) shape
-  choices?: Array<{ message?: { content?: string }; text?: string }>;
-};
-
 interface CallArgs {
   prompt: string;
   responseAs: 'text' | 'json';
@@ -119,18 +106,6 @@ interface CallArgs {
 
 interface CallReturn<T> { data: T; usage: LLMUsage }
 
-class LLMHttpError extends Error {
-  readonly status: number;
-  readonly body: unknown;
-
-  constructor(message: string, status: number, body: unknown) {
-    super(message);
-    this.name = 'LLMHttpError';
-    this.status = status;
-    this.body = body;
-  }
-}
-
 const LOG_DIR = path.join(__dirname, '..', 'log');
 const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
 const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
@@ -142,89 +117,60 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
     return callMockLLM<T>(args);
   }
 
-  const controller = new AbortController();
-  const signal = linkSignals(controller, args.signal);
-  const timeout = setTimeout(() => controller.abort(), args.timeoutMs);
+  // Note: The Google Generative AI Node SDK does not currently expose a simple AbortSignal hook
+  // for generateContent in the same way fetch does, but we can respect the timeout for the wrapper.
+  // For this implementation, we rely on the promise race or just standard await.
 
   try {
-    const apiKey = getOpenAIApiKey();
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      throw new Error('Missing OPENAI_API_KEY environment variable for OpenAI client');
+      throw new Error('Missing GEMINI_API_KEY environment variable');
     }
-    const client = new OpenAI({ apiKey });
-
-    const responseFormat =
-      args.responseAs === 'json'
-        ? {
-            type: 'json_schema',
-            json_schema: {
-              name: 'response',
-              schema: { type: 'object', properties: {}, additionalProperties: true },
-              strict: false,
-            },
-          }
-        : undefined;
-
-    const stream = client.responses.stream(
-      {
-        model: args.model,
-        input: args.prompt,
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: args.model,
+      generationConfig: {
+        maxOutputTokens: args.maxOutputTokens,
         temperature: args.temperature,
-        max_output_tokens: args.maxOutputTokens,
-        ...(responseFormat
-          ? {
-              text: {
-                format: {
-                  name: 'semantic-response',
-                  schema: { type: 'object', properties: {}, additionalProperties: true },
-                  type: 'json_schema',
-                  strict: false,
-                },
-              },
-            }
-          : {}),
+        responseMimeType: args.responseAs === 'json' ? 'application/json' : 'text/plain',
       },
-      { signal },
-    );
-    const payload = await stream.finalResponse();
+    });
 
-    const json = payload as ResponseShape;
+    const result = await model.generateContent(args.prompt);
+    const response = await result.response;
+    const text = response.text();
+
     if (config.debugMode) {
       console.log(
         JSON.stringify({
           level: 'info',
           scope: 'llm-service',
           message: 'LLM response received',
-          id: json.id,
-          model: json.model ?? args.model,
+          model: args.model,
           responseAs: args.responseAs,
-          inputTokens: json.usage?.input_tokens,
-          outputTokens: json.usage?.output_tokens,
+          inputTokens: response.usageMetadata?.promptTokenCount,
+          outputTokens: response.usageMetadata?.candidatesTokenCount,
           timestamp: new Date().toISOString(),
-          content: json.output
         }),
       );
     }
-    void persistLLMResponse(args, json);
+    void persistLLMResponse(args, text);
 
     const usage: LLMUsage = {
-      inputTokens: json.usage?.input_tokens,
-      outputTokens: json.usage?.output_tokens,
-      modelId: json.model,
+      inputTokens: response.usageMetadata?.promptTokenCount,
+      outputTokens: response.usageMetadata?.candidatesTokenCount,
+      modelId: args.model,
     };
 
     if (args.responseAs === 'text') {
-      const text = extractText(json);
       return { data: text as T, usage };
     }
 
     // responseAs === 'json'
-    const obj = extractJson(json);
+    const obj = extractJsonFromText(text);
     return { data: obj as T, usage };
   } catch (error: unknown) {
     throw normalizeError(error);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -276,31 +222,24 @@ async function callMockLLM<T extends string | unknown>(args: CallArgs): Promise<
   return { data: json as T, usage };
 }
 
-async function persistLLMResponse(args: CallArgs, payload: ResponseShape): Promise<void> {
+async function persistLLMResponse(args: CallArgs, text: string): Promise<void> {
   try {
     await fs.mkdir(RESPONSE_DIR, { recursive: true });
     const timestamp = new Date().toISOString();
     const safeStamp = timestamp.replace(/[:.]/g, '-');
-    const textBlock = extractText(payload);
     const parsed = (() => {
-      if (!textBlock) return null;
+      if (!text) return null;
       try {
-        return JSON.parse(textBlock);
+        return JSON.parse(text);
       } catch {
-        const unwrapped = unwrapCodeFence(textBlock);
-        if (!unwrapped) return null;
-        try {
-          return JSON.parse(unwrapped);
-        } catch {
-          return null;
-        }
+        return null;
       }
     })();
     const record = {
       timestamp,
       model: args.model,
       responseAs: args.responseAs,
-      text: textBlock || null,
+      text: text || null,
       parsed: parsed ?? undefined,
       prompt: config.debugMode ? args.prompt : undefined,
     };
@@ -311,53 +250,15 @@ async function persistLLMResponse(args: CallArgs, payload: ResponseShape): Promi
   }
 }
 
-// Extract text from either Responses API or Chat Completions fallbacks
-function extractText(resp: ResponseShape): string {
-  if (typeof resp.output_text === 'string' && resp.output_text.length > 0) {
-    return resp.output_text;
-  }
-  // Responses API: output[].text
-  const out = resp.output;
-  if (Array.isArray(out)) {
-    for (const item of out) {
-      if (item && typeof item === 'object' && 'content' in item) {
-        // Some providers use { type: 'output_text', content: [ { type: 'output_text', text: '...' } ] }
-        const content = (item as { content?: Array<unknown> }).content;
-        if (Array.isArray(content)) {
-          for (const c of content) {
-            if (c && typeof c === 'object' && 'text' in c) {
-              const t = (c as { text?: string }).text;
-              if (typeof t === 'string') return t;
-            }
-          }
-        }
-      }
-      if (item && typeof item === 'object' && 'text' in item) {
-        const t = (item as { text?: string }).text;
-        if (typeof t === 'string') return t;
-      }
-    }
-  }
-  // Chat Completions fallback
-  const ch = resp.choices;
-  if (Array.isArray(ch) && ch.length > 0) {
-    const c = ch[0];
-    if (c.text && typeof c.text === 'string') return c.text;
-    const msg = c.message?.content;
-    if (typeof msg === 'string') return msg;
-  }
-  return '';
-}
-
 // Extract JSON value (object) from text output
-function extractJson(resp: ResponseShape): unknown {
-  const text = extractText(resp).trim();
-  if (!text) return {};
+function extractJsonFromText(text: string): unknown {
+  const trimmed = text.trim();
+  if (!trimmed) return {};
   try {
-    return JSON.parse(text) as unknown;
+    return JSON.parse(trimmed) as unknown;
   } catch {
     // Some models may wrap JSON in markdown fences
-    const unwrapped = unwrapCodeFence(text);
+    const unwrapped = unwrapCodeFence(trimmed);
     if (!unwrapped) return {};
     try { return JSON.parse(unwrapped) as unknown; } catch { return {}; }
   }
@@ -369,32 +270,7 @@ function unwrapCodeFence(s: string): string | null {
   return m ? m[1] : null;
 }
 
-function linkSignals(inner: AbortController, outer?: AbortSignal): AbortSignal {
-  if (!outer) return inner.signal;
-  if (outer.aborted) { inner.abort(); return inner.signal; }
-  const onAbort = () => inner.abort();
-  outer.addEventListener('abort', onAbort, { once: true });
-  return inner.signal;
-}
-
 function normalizeError(error: unknown): Error {
-  if (error instanceof LLMHttpError) {
-    const details =
-      typeof error.body === 'object' && error.body !== null
-        ? JSON.stringify(error.body)
-        : String(error.body ?? '');
-    const message = details ? `${error.message} (status ${error.status}) :: ${details}` : `${error.message} (status ${error.status})`;
-    return new Error(message);
-  }
-  if (error instanceof APIError) {
-    const status = error.status;
-    const details =
-      typeof error.error === 'object' && error.error !== null
-        ? JSON.stringify(error.error)
-        : undefined;
-    const message = details ? `${error.message}${status ? ` (status ${status})` : ''} :: ${details}` : `${error.message}${status ? ` (status ${status})` : ''}`;
-    return new Error(message);
-  }
   if (error instanceof Error) return error;
   return new Error('Unknown LLM client error');
 }

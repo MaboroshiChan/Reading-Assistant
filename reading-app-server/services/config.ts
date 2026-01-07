@@ -10,7 +10,7 @@ export interface Config {
 
 export const config: Config = {
   port: Number(process.env.PORT ?? 8787),
-  model: process.env.MODEL_ID ?? "gpt-4o-mini",
+  model: process.env.MODEL_ID ?? "gemini-2.5-flash",
   timeoutMs: 50_000,
   cacheMax: 500,
   cacheTtlMs: 7 * 24 * 3600_000,
@@ -19,5 +19,5 @@ export const config: Config = {
 };
 
 export function getOpenAIApiKey(): string {
-  return process.env.OPENAI_API_KEY ?? "";
+  return process.env.GEMINI_API_KEY ?? "";
 }
