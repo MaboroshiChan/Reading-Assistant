@@ -1,6 +1,7 @@
 // SentenceRelationship.tsx
 import React from 'react';
-import './SentenceRelationship.css';
+import './css/SentenceRelationship.css';
+
 
 interface SentenceRelationshipProps {
     prev_id: number; // id of previous sentence
