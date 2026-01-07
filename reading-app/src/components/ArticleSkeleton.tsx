@@ -1,9 +1,10 @@
-import React, { useState, type ReactNode, type CSSProperties } from 'react';
+import React, { useState, type ReactNode, type CSSProperties, useEffect } from 'react';
 import './css/ArticleSkeleton.css';
 import './css/Highlighted.css';
 import type { Paragraph } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './ParagraphComponent';
 import exampleArticle from '../../../resource/examples/example-article.json';
+import config from '../services/config';
 
 const ExampleParagraph: React.FC = () => {
 
@@ -18,6 +19,35 @@ const ExampleParagraph: React.FC = () => {
   );
 };
 
+const ExampleParagraphText: React.FC = () => {
+  // TODO
+  const [content, setContent] = useState('');
+
+  useEffect(() => {
+    const loadContent = async () => {
+      try {
+        const response = await fetch('../../../resource/examples/TestArticles/example-article.txt');
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        const text = await response.text();
+        setContent(text);
+      } catch (error) {
+        console.error('Error loading content:', error);
+      }
+    }
+    loadContent();
+  }, []);
+  return (
+    <div>
+      {content}
+    </div>
+  )
+}
+
+if(config.renderMode) {
+  console.log('render mode on');
+}
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -301,7 +331,7 @@ const ExampleArticle: React.FC = () => {
       readTime="5 min read"
       image="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=400&fit=crop"
       imageAlt="Article header image"
-      content={<ExampleParagraph />}
+      content={(config.renderMode)? <ExampleParagraphText/>: <ExampleParagraph />}
       layout="default"
       theme="light"
       accentColor="#007acc"
