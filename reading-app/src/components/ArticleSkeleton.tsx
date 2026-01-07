@@ -6,6 +6,7 @@ import { ParagraphComponent } from './ParagraphComponent';
 import exampleArticle from '../../../resource/examples/example-article.json';
 import config from '../services/config';
 
+
 const ExampleParagraph: React.FC = () => {
 
   const article: Paragraph[] = exampleArticle as Paragraph[];
@@ -20,26 +21,21 @@ const ExampleParagraph: React.FC = () => {
 };
 
 const ExampleParagraphText: React.FC = () => {
-  // TODO
   const [content, setContent] = useState('');
 
   useEffect(() => {
     const loadContent = async () => {
       try {
-        const response = await fetch('../../../resource/examples/TestArticles/example-article.txt');
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const text = await response.text();
-        setContent(text);
+        const module = await import('../../../resource/examples/TestArticles/example-article.txt?raw');
+        setContent(module.default);
       } catch (error) {
-        console.error('Error loading content:', error);
+        console.error("Failed to load example article text:", error);
       }
     }
     loadContent();
   }, []);
   return (
-    <div>
+    <div style={{ whiteSpace: 'pre-wrap', textAlign: 'left' }}>
       {content}
     </div>
   )
@@ -47,6 +43,9 @@ const ExampleParagraphText: React.FC = () => {
 
 if(config.renderMode) {
   console.log('render mode on');
+}
+else {
+  console.log('render mode off');
 }
 
 // Type definitions
