@@ -97,6 +97,11 @@ export class MessageService {
       envelope.context = buildContext(envelope.context, this.defaults);
     }
 
+    // Automatically enable streaming mode if a frame callback is provided
+    if (sendOptions && (sendOptions).onFrame) {
+      envelope.stream = true;
+    }
+
     const res = await this.client.send<TRes, RequestEnvelope, TFrame>(envelope, sendOptions);
     return res;
   }

@@ -21,13 +21,18 @@ const ExampleParagraph: React.FC = () => {
 };
 
 const ExampleParagraphText: React.FC = () => {
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState<string[]>([]);
 
   useEffect(() => {
     const loadContent = async () => {
       try {
         const module = await import('../../../resource/examples/TestArticles/example-article.txt?raw');
-        setContent(module.default);
+        const text = module.default;
+        // dissect text into paragraphs
+        const paragraphs = text.split('\n\n');
+        
+        setContent(paragraphs);
+
       } catch (error) {
         console.error("Failed to load example article text:", error);
       }
@@ -36,7 +41,11 @@ const ExampleParagraphText: React.FC = () => {
   }, []);
   return (
     <div style={{ whiteSpace: 'pre-wrap', textAlign: 'left' }}>
-      {content}
+      {
+        content.map((p, i) => (
+          <p key={i}>{p}</p>
+        ))
+      }
     </div>
   )
 }
@@ -78,6 +87,7 @@ export interface ArticleFrameworkProps {
   onShare?: () => void;
   onSave?: () => void;
   onLike?: (liked: boolean) => void;
+  onAnalyze?: () => void;
 
   // Custom components
   HeaderComponent?: React.ComponentType;
@@ -129,6 +139,7 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
   onShare,
   onSave,
   onLike,
+  onAnalyze,
 
   // Custom components
   HeaderComponent,
@@ -269,6 +280,13 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
                 <span>Save</span>
               </button>
             )}
+
+            {onAnalyze && (
+              <button className="action-btn" onClick={onAnalyze} type="button">
+                <span>✨</span>
+                <span>AI Analysis</span>
+              </button>
+            )}
           </div>
 
           {/* Custom Footer Component */}
@@ -319,6 +337,11 @@ const ExampleArticle: React.FC = () => {
     console.log('Like:', liked);
   };
 
+  const handleAnalyze = (): void => {
+
+    console.log('Analyze clicked');
+  };
+
   return (
     <ArticleFramework
       title="Your Article Title Here"
@@ -342,6 +365,7 @@ const ExampleArticle: React.FC = () => {
       onShare={handleShare}
       onSave={handleSave}
       onLike={handleLike}
+      onAnalyze={handleAnalyze}
     />
   );
 };

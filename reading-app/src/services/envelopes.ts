@@ -316,6 +316,7 @@ export interface StandardEnvelopeBase {
   // auth is usually added by transport, not included here
   locale?: string;              // e.g., "zh-CN"
   cache_hint?: CacheHint;       // default: "prefer"
+  stream?: boolean;             // signal to server to stream partial results
   context?: StandardContext;    // standardized context block
   meta?: Record<string, unknown>;
   timestamp?: ISO8601;          // client-side timestamp for audit

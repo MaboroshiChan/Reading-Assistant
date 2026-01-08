@@ -1,4 +1,5 @@
 import NetworkClient from './networkClient';
+import StreamingNetworkClient from './streamingNetworkClient';
 import MessageService, { type MessageServiceDefaults } from './messageService';
 import { config } from './config';
 
@@ -24,5 +25,15 @@ const defaults: MessageServiceDefaults = {
 };
 
 export const messageService = new MessageService(client, defaults);
+
+const streamingClient = new StreamingNetworkClient({
+  baseUrl: config.apiBaseUrl,
+  apiPath: '/stream',
+  defaultHeaders: {
+    'X-App-Client': 'reading-app',
+  },
+});
+
+export const streamingMessageService = new MessageService(streamingClient, defaults);
 
 export default messageService;

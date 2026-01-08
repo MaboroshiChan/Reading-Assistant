@@ -4,6 +4,7 @@ import type { RequestEnvelopeSkeleton, ResponseEnvelopeSkeleton } from '../../sr
 import NetworkClient from '../../src/services/networkClient';
 import type { NetworkClient as NetworkClientType } from '../../src/services/networkClient';
 
+
 describe('MessageService', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
