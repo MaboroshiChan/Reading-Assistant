@@ -1,17 +1,17 @@
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
-import NetworkClient from '../../src/services/networkClient';
-import StreamingNetworkClient from '../../src/services/streamingNetworkClient';
+import NetworkClient from './networkClient';
+import StreamingNetworkClient from './streamingNetworkClient';
 
 // 1. Mock dependencies before importing the module under test
-jest.mock('../../src/services/networkClient');
-jest.mock('../../src/services/streamingNetworkClient');
-jest.mock('../../src/services/config', () => ({
-  config: { apiBaseUrl: 'http://localhost:8787' },
+jest.mock('./networkClient');
+jest.mock('./streamingNetworkClient');
+jest.mock('./config', () => ({
+  config: { apiBaseUrl: 'https://api.example.com' },
 }));
 
 // 2. Import the module under test
 // Note: Because jest.mock is hoisted, clients are already mocked when this runs.
-import { messageService, streamingMessageService } from '../../src/services/messageService.instance';
+import { messageService, streamingMessageService } from './messageService.instance';
 
 describe('MessageService Instances', () => {
   // Access the mocked class to inspect constructor calls
@@ -22,11 +22,9 @@ describe('MessageService Instances', () => {
     jest.clearAllMocks();
     
     // Clear specific spies on the singleton instances' clients if they exist
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stdClient = (messageService as any).client;
     if (stdClient?.send) stdClient.send.mockClear();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamClient = (streamingMessageService as any).client;
     if (streamClient?.send) streamClient.send.mockClear();
   });
@@ -39,14 +37,13 @@ describe('MessageService Instances', () => {
 
       expect(initArgs).toBeDefined();
       expect(initArgs?.[0]).toMatchObject({
-        baseUrl: 'http://localhost:8787',
+        baseUrl: 'https://api.example.com',
         apiPath: '/msg',
         defaultHeaders: { 'X-App-Client': 'reading-app' },
       });
     });
 
     it('should use the standard client for requests', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client = (messageService as any).client;
       client.send.mockResolvedValue({ status: 'ok', request_id: 'req-std' });
 
@@ -69,14 +66,13 @@ describe('MessageService Instances', () => {
 
       expect(initArgs).toBeDefined();
       expect(initArgs?.[0]).toMatchObject({
-        baseUrl: 'http://localhost:8787',
+        baseUrl: 'https://api.example.com',
         apiPath: '/stream',
         defaultHeaders: { 'X-App-Client': 'reading-app' },
       });
     });
 
     it('should set stream=true in the envelope when onFrame is provided', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client = (streamingMessageService as any).client;
       client.send.mockResolvedValue({ status: 'ok', request_id: 'req-stream-1' });
 
@@ -94,7 +90,6 @@ describe('MessageService Instances', () => {
     });
 
     it('should NOT set stream=true when onFrame is missing', async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client = (streamingMessageService as any).client;
       client.send.mockResolvedValue({ status: 'ok', request_id: 'req-2' });
 

@@ -524,6 +524,7 @@ const anchorFromSpan = (
   });
 };
 
+// What does this function do?
 const normalizeSpan = (start: number, end: number, maxLength: number) => {
   if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
   let s = Math.floor(start);

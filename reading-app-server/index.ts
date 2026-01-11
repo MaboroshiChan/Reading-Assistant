@@ -36,6 +36,12 @@ const server = http.createServer(async (req, res) => {
     });
     return;
   }
+  if (req.method === 'POST' && req.url === '/stream') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    
+  }
+
   res.writeHead(404); res.end('Not Found');
 });
 

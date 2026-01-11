@@ -135,7 +135,7 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
         responseMimeType: args.responseAs === 'json' ? 'application/json' : 'text/plain',
       },
     });
-
+    // TODO: We need to change it to streaming mode
     const result = await model.generateContent(args.prompt);
     const response = await result.response;
     const text = response.text();
