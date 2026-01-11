@@ -219,14 +219,15 @@ export const handleParagraph = async (
       promptVersion: PROMPT_VERSION,
     });
     const text = JSON.stringify({ ...cached, served_from: 'cache' });
+    const usage = await Promise.resolve(cached.usage);
     return {
       data: (async function* () {
         yield text;
       })(),
       usage: Promise.resolve({
-        modelId: cached.usage?.model_id,
-        inputTokens: cached.usage?.tokens_in,
-        outputTokens: cached.usage?.tokens_out,
+        modelId: usage?.model_id,
+        inputTokens: usage?.tokens_in,
+        outputTokens: usage?.tokens_out,
       }),
     };
   }
