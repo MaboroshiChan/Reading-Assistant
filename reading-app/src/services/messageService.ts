@@ -186,7 +186,7 @@ export class MessageService {
       payload,
       meta,
     } as RequestEnvelope;
-    
+
     console.log("analyzeSubSentence");
     return this.send<ResponseEnvelopeSubSentence, Partial<AnalyzeSubSentenceData>, Partial<AnalyzeSubSentenceData>>(env, sendOptions);
   }

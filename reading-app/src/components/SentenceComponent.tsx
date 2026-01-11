@@ -448,7 +448,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
                         {(() => {
                             const roleLabel = sentenceVm.roleLabel ?? sentence.function;
-                            const v = fnVariant(roleLabel);
+                            const v = fnVariant (roleLabel);
                             return (
                                 <span className="tag" style={styleFor(v)}>
                                     {dotEl(v)}
