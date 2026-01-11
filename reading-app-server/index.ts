@@ -1,6 +1,6 @@
 // index.ts
 import http from 'node:http';
-import { handleMsg } from './http/router';
+import { handleMsg, handleStream } from './http/router';
 import { config } from './services/config';
 
 const server = http.createServer(async (req, res) => {
@@ -39,7 +39,26 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/stream') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
-    
+    req.on('end', async () => {
+      const result = await handleStream(body);
+
+      if ('status' in result && result.status === 'error') {
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(result.error?.http ?? 500);
+        res.end(JSON.stringify(result));
+        return;
+      }
+
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(200);
+      if (result.stream) {
+        for await (const chunk of result.stream) {
+          res.write(chunk);
+        }
+      }
+      res.end();
+    });
+    return;
   }
 
   res.writeHead(404); res.end('Not Found');

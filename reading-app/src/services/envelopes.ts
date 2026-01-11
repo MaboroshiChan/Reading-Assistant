@@ -356,9 +356,10 @@ export interface ResponseEnvelopeBase {
   status: EnvelopeStatus;
   served_from?: 'fresh' | 'cache';
   error?: EnvelopeError;
-  usage?: UsageMeta;        
+  usage?: UsageMeta | Promise<UsageMeta>;
   etag?: string;            // for client-side caching of results
   cursor?: string;          // reserved for future incremental sync
+  stream?: AsyncIterable<string>;
 }
 
 export interface ResponseEnvelopeSkeleton extends ResponseEnvelopeBase {

@@ -12,7 +12,7 @@ import type {
 } from '../../reading-app/src/services/envelopes';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
-import { json as llmJson, type LLMUsage } from '../services/llmService';
+import { json as llmJson, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
 import { buildStableCacheKey, makeAnchor, sortAnchors } from './shared';
 import { buildMockSentenceData } from './mock/sentenceMock';
 import { handlerLog } from './logger';
@@ -66,11 +66,6 @@ interface LLMSentenceResponse {
   modal_markers?: LLMSentenceModalMarker[];
   anchors?: LLMSentenceAnchor[];
   confidence?: number;
-}
-
-interface SentenceBuildResult {
-  data: AnalyzeSentenceData;
-  usage?: LLMUsage;
 }
 
 const ROLE_ALIAS: Record<string, string> = {
@@ -225,7 +220,7 @@ const buildPrompt = async (req: RequestEnvelopeSentence): Promise<string> => {
 
 const buildSentenceData = async (
   req: RequestEnvelopeSentence,
-): Promise<SentenceBuildResult> => {
+): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
   if (config.useMockLLM) {
@@ -235,7 +230,19 @@ const buildSentenceData = async (
       promptVersion: PROMPT_VERSION,
       mock: true,
     });
-    return { data: await buildMockSentenceData(req) };
+    const mockData = await buildMockSentenceData(req);
+    const text = JSON.stringify(mockData);
+    const stream = (async function* () {
+      yield text;
+    })();
+    return {
+      data: stream,
+      usage: Promise.resolve({
+        modelId: `mock:${config.model}`,
+        inputTokens: 0,
+        outputTokens: 0,
+      }),
+    };
   }
 
   handlerLog('sentence', 'building LLM payload', {
@@ -254,35 +261,12 @@ const buildSentenceData = async (
     prompt,
     mock: false,
   });
-  const { object, usage } = await llmJson(prompt, coerceSentenceResponse);
-  handlerLog('sentence', 'LLM response received', {
-    requestId: req.request_id,
-    sentenceId: req.payload.sentence_id,
-    model: usage?.modelId,
-    tokensIn: usage?.inputTokens,
-    tokensOut: usage?.outputTokens,
-    promptVersion: PROMPT_VERSION,
-  });
-  const data = mapSentenceResponse(object, req);
-  const hasContent =
-    (object.semantic_roles?.length ?? 0) > 0 ||
-    (object.modal_markers?.length ?? 0) > 0 ||
-    (object.dependency_light?.arcs?.length ?? 0) > 0 ||
-    Boolean(object.discourse_function);
-  if (!hasContent) {
-    handlerLog(
-      'sentence',
-      'LLM payload missing expected fields; using fallbacks',
-      { requestId: req.request_id, promptVersion: PROMPT_VERSION },
-      'warn',
-    );
-  }
-  return { data, usage };
+  return llmJson(prompt);
 };
 
 export const handleSentence = async (
   req: RequestEnvelopeSentence,
-): Promise<ResponseEnvelopeSentence> => {
+): Promise<CallReturn<string>> => {
   handlerLog('sentence', 'request received', {
     requestId: req.request_id,
     mock: config.useMockLLM,
@@ -296,39 +280,59 @@ export const handleSentence = async (
       cacheKey,
       promptVersion: PROMPT_VERSION,
     });
-    return { ...cached, served_from: 'cache' };
+    const text = JSON.stringify({ ...cached, served_from: 'cache' });
+    return {
+      data: (async function* () {
+        yield text;
+      })(),
+      usage: Promise.resolve({
+        modelId: cached.usage?.model_id,
+        inputTokens: cached.usage?.tokens_in,
+        outputTokens: cached.usage?.tokens_out,
+      }),
+    };
   }
 
   const started = Date.now();
-  const { data, usage } = await buildSentenceData(req);
-  handlerLog('sentence', 'data prepared', {
-    requestId: req.request_id,
-    source: config.useMockLLM ? 'mock' : 'llm',
-    promptVersion: PROMPT_VERSION,
-    roles: data.semantic_roles?.length ?? 0,
-    modalMarkers: data.modal_markers?.length ?? 0,
-  });
-  const response: ResponseEnvelopeSentence = {
-    request_id: req.request_id,
-    status: 'ok',
-    served_from: 'fresh',
-    data,
-    usage: {
-      latency_ms: Date.now() - started,
-      model_id: usage?.modelId ?? (config.useMockLLM ? `mock:${config.model}` : undefined),
-      tokens_in: usage?.inputTokens ?? (config.useMockLLM ? 0 : undefined),
-      tokens_out: usage?.outputTokens ?? (config.useMockLLM ? 0 : undefined),
-    },
-  };
+  const { data: stream, usage: usagePromise } = await buildSentenceData(req);
 
-  cache.set(cacheKey, response, config.cacheTtlMs);
-  handlerLog('sentence', 'response cached', {
-    requestId: req.request_id,
-    latencyMs: Date.now() - started,
-    cacheKey,
-    promptVersion: PROMPT_VERSION,
-  });
-  return response;
+  const tappedStream = (async function* () {
+    let text = '';
+    for await (const chunk of stream) {
+      text += chunk;
+      yield chunk;
+    }
+
+    // Background processing: parse, map, and cache
+    try {
+      const usage = await usagePromise;
+      let data: AnalyzeSentenceData;
+      if (config.useMockLLM) {
+        data = JSON.parse(text) as AnalyzeSentenceData;
+      } else {
+        const object = coerceSentenceResponse(extractJsonFromText(text));
+        data = mapSentenceResponse(object, req);
+      }
+
+      const response: ResponseEnvelopeSentence = {
+        request_id: req.request_id,
+        status: 'ok',
+        served_from: 'fresh',
+        data,
+        usage: {
+          latency_ms: Date.now() - started,
+          model_id: usage?.modelId,
+          tokens_in: usage?.inputTokens,
+          tokens_out: usage?.outputTokens,
+        },
+      };
+      cache.set(cacheKey, response, config.cacheTtlMs);
+    } catch (error) {
+      console.warn('[sentence] failed to cache response', error);
+    }
+  })();
+
+  return { data: tappedStream, usage: usagePromise };
 };
 
 export { buildPrompt as buildSentencePrompt, buildTasks as buildSentenceTasks };
