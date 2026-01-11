@@ -27,6 +27,26 @@ const server = http.createServer(async (req, res) => {
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       const result = await handleMsg(body);
+
+      if (result.stream) {
+        let text = '';
+        for await (const chunk of result.stream) {
+          text += chunk;
+        }
+        const data = JSON.parse(text);
+        const usage = await result.usage;
+        const buffered = {
+          ...result,
+          stream: undefined,
+          data,
+          usage,
+        };
+        res.setHeader('Content-Type', 'application/json');
+        res.writeHead(200);
+        res.end(JSON.stringify(buffered));
+        return;
+      }
+
       res.setHeader('Content-Type', 'application/json');
       const statusCode = result.status === 'error'
         ? result.error?.http ?? 500

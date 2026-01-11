@@ -79,21 +79,7 @@ export const handleMsg = async (raw: string): Promise<ResponseEnvelope> => {
   if (!validation.ok) return validation.error;
 
   try {
-    const result = await dispatch(validation.envelope);
-    if (result.stream) {
-      let text = '';
-      for await (const chunk of result.stream) {
-        text += chunk;
-      }
-      const data = JSON.parse(text);
-      return {
-        ...result,
-        stream: undefined,
-        data,
-        usage: await result.usage,
-      } as ResponseEnvelope;
-    }
-    return result;
+    return await dispatch(validation.envelope);
   } catch (error) {
     console.error('Handler error', error);
     return errorResponse(
