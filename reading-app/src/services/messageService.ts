@@ -75,9 +75,9 @@ export class MessageService {
   }
 
   /** Generic sender (escape hatch) */
-  async send<TRes extends ResponseEnvelope, TFrame = unknown>(
+  async send<TRes extends ResponseEnvelope, TFrame = unknown, TPartial = unknown>(
     envelope: RequestEnvelope,
-    sendOptions?: SendOptions<TFrame>,
+    sendOptions?: SendOptions<TFrame, TPartial>,
   ): Promise<TRes> {
     // Fill defaults
     if (!('api_version' in envelope)) {
@@ -98,11 +98,11 @@ export class MessageService {
     }
 
     // Automatically enable streaming mode if a frame callback is provided
-    if (sendOptions && (sendOptions).onFrame) {
+    if (sendOptions && ((sendOptions).onFrame || (sendOptions).onPartial)) {
       envelope.stream = true;
     }
 
-    const res = await this.client.send<TRes, RequestEnvelope, TFrame>(envelope, sendOptions);
+    const res = await this.client.send<TRes, RequestEnvelope, TFrame, TPartial>(envelope, sendOptions);
     return res;
   }
 
@@ -173,7 +173,7 @@ export class MessageService {
     payload: AnalyzeSubSentencePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
     meta?: Record<string, unknown>,
-    sendOptions?: SendOptions<Partial<AnalyzeSubSentenceData>>
+    sendOptions?: SendOptions<Partial<AnalyzeSubSentenceData>, Partial<AnalyzeSubSentenceData>>
   ): Promise<ResponseEnvelopeSubSentence> {
     const env: RequestEnvelope = {
       type: 'analyze.subsentence.v1',
@@ -186,9 +186,9 @@ export class MessageService {
       payload,
       meta,
     } as RequestEnvelope;
-
+    
     console.log("analyzeSubSentence");
-    return this.send<ResponseEnvelopeSubSentence, Partial<AnalyzeSubSentenceData>>(env, sendOptions);
+    return this.send<ResponseEnvelopeSubSentence, Partial<AnalyzeSubSentenceData>, Partial<AnalyzeSubSentenceData>>(env, sendOptions);
   }
 
   /** Health check helper that proxies through to the underlying NetworkClient. */

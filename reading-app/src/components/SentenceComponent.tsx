@@ -8,8 +8,8 @@ import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬�
 import mapSentenceToVM, { type SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
 import mapSubSentenceToVM, { type SubsentenceVM } from "../model/viewModels/mapSubSentenceToVM";
 import SubSentenceComponent from "./SubSentenceComponent";
-import messageService from "../services/messageService.instance";
-import type { StandardContext } from "../services/envelopes";
+import { streamingMessageService } from "../services/messageService.instance";
+import type { AnalyzeSubSentenceData, StandardContext } from "../services/envelopes";
 import SentenceRelationship from "./SentenceRelationship";
 
 const FREEZE_EVENT = "hovercard:freeze";
@@ -79,7 +79,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         };
         window.addEventListener(HIGHLIGHT_EVENT, onHighlight as EventListener);
         return () => window.removeEventListener(HIGHLIGHT_EVENT, onHighlight as EventListener);
-    }, []);
+    }, [sentence.id]);
 
     React.useEffect(() => () => {
         if (subsentenceAbortRef.current) {
@@ -240,13 +240,20 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     sentence_text: sentence.text,
                     fragment_text: sentence.text.slice(payload.span.start, payload.span.end),
                 };
-                const res = await messageService.analyzeSubSentence(
+                const res = await streamingMessageService.analyzeSubSentence(
                     payload,
                     ctx,
                     meta,
                     {
                         signal: controller.signal,
                         timeoutMs: 60_000,
+                        onPartial: (partialData) => {
+                            if (controller.signal.aborted) return;
+                            if (partialData.analysis) {
+                                const vm = mapSubSentenceToVM(partialData as AnalyzeSubSentenceData);
+                                if (vm) setSubsentenceVm(vm);
+                            }
+                        }
                     },
                 );
                 console.log("received from LLM")

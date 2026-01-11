@@ -10,6 +10,8 @@ const App: React.FC = () => {
   React.useEffect(() => {
     let cancelled = false;
 
+    console.log(`ping`);
+
     const runPing = async () => {
       try {
         await messageService.ping();

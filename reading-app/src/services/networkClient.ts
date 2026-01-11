@@ -72,12 +72,13 @@ export interface NetworkClientOptions {
   backoffBaseMs?: number;        // default 250
 }
 
-export interface SendOptions<TFrame = unknown> {
+export interface SendOptions<TFrame = unknown, TPartial = unknown> {
   signal?: AbortSignal;          // external cancel signal
   timeoutMs?: number;            // per attempt
   cacheHint?: CacheHint;         // override envelope.cache_hint
   priority?: Priority;           // override envelope.priority
   onFrame?: (frame: EnvelopeFrame<TFrame>) => void; // NDJSON/SSE streaming callback
+  onPartial?: (data: TPartial) => void; // Raw JSON streaming callback
 }
 
 // -----------------------------
@@ -110,10 +111,11 @@ export class NetworkClient {
   async send<
     TRes extends ResponseEnvelope,
     TReq extends RequestEnvelope = RequestEnvelope,
-    TFrame = unknown
+    TFrame = unknown,
+    TPartial = unknown
   >(
     envelope: TReq,
-    options: SendOptions<TFrame> = {},
+    options: SendOptions<TFrame, TPartial> = {},
   ): Promise<TRes> {
     // Ensure request_id & timestamp & optional overrides
     const req = {

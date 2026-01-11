@@ -1,11 +1,5 @@
-import { Readable } from 'node:stream';
-import Chain from 'stream-chain';
-import { parser } from 'stream-json';
-import { pick } from 'stream-json/filters/Pick';
-import { streamArray } from 'stream-json/streamers/StreamArray';
-
 import NetworkClient, { type SendOptions } from './networkClient';
-import type { EnvelopeFrame, RequestEnvelope, ResponseEnvelope } from './envelopes';
+import type { RequestEnvelope, ResponseEnvelope } from './envelopes';
 
 export default class StreamingNetworkClient extends NetworkClient {
   private _baseUrl: string;
@@ -20,13 +14,13 @@ export default class StreamingNetworkClient extends NetworkClient {
     this._defaultHeaders = config.defaultHeaders || {};
   }
 
-  override async send<TRes extends ResponseEnvelope, TReq extends RequestEnvelope, TFrame = unknown>(
+  override async send<TRes extends ResponseEnvelope, TReq extends RequestEnvelope, TFrame = unknown, TPartial = unknown>(
     envelope: TReq,
-    options?: SendOptions<TFrame>
+    options?: SendOptions<TFrame, TPartial>
   ): Promise<TRes> {
     // If no streaming callback is provided, delegate to the standard client logic
-    if (!options?.onFrame) {
-      return super.send(envelope, options);
+    if (!options?.onFrame && !options?.onPartial) {
+      return super.send<TRes, TReq, TFrame, TPartial>(envelope, options);
     }
 
     const url = `${this._baseUrl}${this._apiPath}`;
@@ -50,45 +44,81 @@ export default class StreamingNetworkClient extends NetworkClient {
       throw new Error('No response body received');
     }
 
-    // Convert Web ReadableStream to Node Readable for stream-json compatibility
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nodeStream = Readable.fromWeb(response.body as any);
+    // Mode 1: Raw JSON Streaming (Partial Parsing)
+    if (options.onPartial) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pipeline = new (Chain as any)([
-      nodeStream,
-      parser(),
-      pick({ filter: 'frames' }),
-      streamArray(),
-    ]);
-
-    const frames: TFrame[] = [];
-
-    return new Promise((resolve, reject) => {
-      pipeline.on('data', (data: { value: TFrame; }) => {
-        // stream-json/streamers/StreamArray emits objects like { key: number, value: T }
-        const frame = data.value as TFrame;
-        frames.push(frame);
-        try {
-          options.onFrame?.({ data: frame } as EnvelopeFrame<TFrame>);
-        } catch (err) {
-          console.error('Error in onFrame callback:', err);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (value) {
+          const chunk = decoder.decode(value, { stream: !done });
+          buffer += chunk;
+          try {
+            const fixed = fixJson(buffer);
+            const parsed = JSON.parse(fixed);
+            options.onPartial(parsed as TPartial);
+          } catch {
+            // ignore parse errors on incomplete chunks
+          }
         }
-      });
+        if (done) break;
+      }
 
-      pipeline.on('end', () => {
-        // Construct a partial response with the accumulated frames
-        const res: Partial<ResponseEnvelope> = {
-          status: 'ok',
-          request_id: envelope.request_id,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          frames: frames as any,
-        };
-        resolve(res as TRes);
-      });
+      // Return the final full response
+      return JSON.parse(buffer) as TRes;
+    }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      pipeline.on('error', (err: any) => reject(err));
-    });
+    // Mode 2: Frame-based Streaming (NDJSON / stream-json)
+    // Note: stream-json is not browser-compatible.
+    if (options.onFrame) {
+      console.warn('onFrame (Mode 2) is not supported in this browser build. Use onPartial (Mode 1).');
+    }
+    
+    // Fallback: parse the whole body as JSON if streaming wasn't handled
+    return response.json() as Promise<TRes>;
   }
+}
+
+/**
+ * Heuristic to close open JSON structures (objects, arrays, strings)
+ * so that a partial JSON string can be parsed.
+ */
+function fixJson(input: string): string {
+  let inString = false;
+  let escaped = false;
+  const stack: string[] = [];
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === '{') stack.push('}');
+      else if (char === '[') stack.push(']');
+      else if (char === '}' || char === ']') {
+        if (stack.length && stack[stack.length - 1] === char) {
+          stack.pop();
+        }
+      }
+    }
+  }
+
+  let res = input;
+  if (inString) res += '"';
+  while (stack.length) {
+    res += stack.pop();
+  }
+  return res;
 }
