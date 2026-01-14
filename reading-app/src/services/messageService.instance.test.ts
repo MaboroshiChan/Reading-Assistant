@@ -73,6 +73,7 @@ describe('MessageService Instances', () => {
     });
 
     it('should set stream=true in the envelope when onFrame is provided', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client = (streamingMessageService as any).client;
       client.send.mockResolvedValue({ status: 'ok', request_id: 'req-stream-1' });
 
@@ -90,6 +91,7 @@ describe('MessageService Instances', () => {
     });
 
     it('should NOT set stream=true when onFrame is missing', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client = (streamingMessageService as any).client;
       client.send.mockResolvedValue({ status: 'ok', request_id: 'req-2' });
 

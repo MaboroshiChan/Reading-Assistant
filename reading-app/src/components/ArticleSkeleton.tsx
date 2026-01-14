@@ -1,10 +1,12 @@
 import React, { useState, type ReactNode, type CSSProperties, useEffect } from 'react';
 import './css/ArticleSkeleton.css';
 import './css/Highlighted.css';
-import type { Paragraph } from '../model/structure/Paragraph';
+import type Paragraph  from '../model/structure/Paragraph';
+import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './ParagraphComponent';
 import exampleArticle from '../../../resource/examples/example-article.json';
 import config from '../services/config';
+import { streamingMessageService } from '../services/messageService.instance';
 
 
 const ExampleParagraph: React.FC = () => {
@@ -20,35 +22,6 @@ const ExampleParagraph: React.FC = () => {
   );
 };
 
-const ExampleParagraphText: React.FC = () => {
-  const [content, setContent] = useState<string[]>([]);
-
-  useEffect(() => {
-    const loadContent = async () => {
-      try {
-        const module = await import('../../../resource/examples/TestArticles/example-article.txt?raw');
-        const text = module.default;
-        // dissect text into paragraphs
-        const paragraphs = text.split('\n\n');
-        
-        setContent(paragraphs);
-
-      } catch (error) {
-        console.error("Failed to load example article text:", error);
-      }
-    }
-    loadContent();
-  }, []);
-  return (
-    <div style={{ whiteSpace: 'pre-wrap', textAlign: 'left' }}>
-      {
-        content.map((p, i) => (
-          <p key={i}>{p}</p>
-        ))
-      }
-    </div>
-  )
-}
 
 if(config.renderMode) {
   console.log('render mode on');
@@ -325,6 +298,29 @@ export type FontFamilyType = 'serif' | 'sans-serif';
 
 // Example usage component
 const ExampleArticle: React.FC = () => {
+  const [rawParagraphs, setRawParagraphs] = useState<string[]>([]);
+  const [analyzedData, setAnalyzedData] = useState<Paragraph[]>([]);
+  const [viewMode, setViewMode] = useState<'raw' | 'analyzing'>('raw');
+
+  useEffect(() => {
+    const loadContent = async () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        const module = await import('../../../resource/examples/TestArticles/example-article.txt?raw');
+        const text = module.default;
+        console.log(text);
+        const paragraphs = text.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
+        setRawParagraphs(paragraphs);
+      } catch (error) {
+        console.error("Failed to load example article text:", error);
+      }
+    };
+    if (config.renderMode) {
+      loadContent();
+    }
+  }, []);
+
   const handleShare = (): void => {
     console.log('Share clicked');
   };
@@ -337,10 +333,92 @@ const ExampleArticle: React.FC = () => {
     console.log('Like:', liked);
   };
 
-  const handleAnalyze = (): void => {
+  const handleAnalyze = async (): Promise<void> => {
+    if (viewMode === 'analyzing') return;
 
-    console.log('Analyze clicked');
+    // 1. Preprocessing: Convert raw text to "Pending" Paragraph skeletons immediately
+    const skeletons = rawParagraphs.map((text, index) => preprocessingFromText(text, index + 1));
+    setAnalyzedData(skeletons);
+    setViewMode('analyzing');
+
+    // 2. Streaming Analysis
+    skeletons.forEach(async (p) => {
+      // Mark as streaming
+      setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
+
+      try {
+        await streamingMessageService.analyzeParagraph(
+          {
+            doc_id: 'demo-doc',
+            paragraph_id: String(p.id),
+            paragraph_text: p.sentences.map(s => s.text).join(' '),
+          },
+          { doc: { doc_id: 'demo-doc', content_hash: 'demo-hash' } },
+          {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            onPartial: (partial: any) => {
+              console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
+              setAnalyzedData(prev => prev.map(item => {
+                if (item.id !== p.id) return item;
+                
+                // Immutable update of the paragraph
+                const updated = { ...item };
+                if (partial.summary) updated.centralIdea = partial.summary;
+                if (partial.rhetoric && partial.rhetoric.length > 0) {
+                  updated.structureType = partial.rhetoric[0].label;
+                }
+                if (partial.roles && partial.roles.length > 0) {
+                  updated.function = partial.roles[0].role;
+                }
+                if (partial.sentences && partial.sentences.length > 0) {
+                  updated.sentences = updated.sentences.map((s, i) => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const incoming = (partial.sentences as any[])[i];
+                    if (incoming) {
+                      console.log(`incoming ${incoming}`);
+                      return {
+                        ...s,
+                        ...incoming,
+                        id: s.id, // Ensure original ID is preserved
+                      };
+                    }
+                    return s;
+                  });
+                }
+                return updated;
+              }));
+            }
+          }
+        );
+
+        // Mark as complete
+        console.log(`[Stream] Paragraph ${p.id} complete`);
+        setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'complete' } : item));
+      } catch (err) {
+        console.error(`Analysis failed for paragraph ${p.id}`, err);
+        setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'error' } : item));
+      }
+    });
   };
+
+  // Determine content to render
+  let contentNode: ReactNode;
+  if (!config.renderMode) {
+    contentNode = <ExampleParagraph />;
+  } else if (viewMode === 'raw') {
+    console.log('raw mode');
+    contentNode = (
+      <div style={{ whiteSpace: 'pre-wrap', textAlign: 'left' }}>
+        {rawParagraphs.map((p, i) => <p key={i}>{p}</p>)}
+      </div>
+    );
+  } else {
+    contentNode = (
+      <div>
+        {analyzedData.map(p => <ParagraphComponent key={p.id} paragraph={p} />)}
+      </div>
+    );
+  }
 
   return (
     <ArticleFramework
@@ -353,7 +431,7 @@ const ExampleArticle: React.FC = () => {
       readTime="5 min read"
       image="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=400&fit=crop"
       imageAlt="Article header image"
-      content={(config.renderMode)? <ExampleParagraphText/>: <ExampleParagraph />}
+      content={contentNode}
       layout="default"
       theme="light"
       accentColor="#007acc"

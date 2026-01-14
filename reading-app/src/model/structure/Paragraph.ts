@@ -1,9 +1,10 @@
 import type { Sentence } from "./Sentence";
 
-export interface Paragraph {
+export default interface Paragraph {
   id: number;
   sentences: Sentence[];
 
+  status?: 'pending' | 'streaming' | 'complete' | 'error';
   /** 段落的中心思想，可由 LLM 提炼或用户指定 */
   centralIdea?: string;
 
@@ -13,3 +14,41 @@ export interface Paragraph {
   /** 可选：段落整体功能，如“引入”、“论证”、“结论”等 */
   function?: 'Introduction' | 'Premise' | 'Conclusion' | 'Evidence' | string;
 }
+
+export const preprocessingFromText = (text: string, id: number): Paragraph => {
+  let rawSentences: string[] = [];
+
+  // Use Intl.Segmenter if available for better sentence boundary detection
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (typeof Intl !== 'undefined' && (Intl as any).Segmenter) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const segmenter = new (Intl as any).Segmenter('en', { granularity: 'sentence' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const segment of segmenter.segment(text)) {
+      rawSentences.push(segment.segment);
+    }
+  } else {
+    // Fallback: Split by punctuation (.!?) followed by whitespace or end of string
+    rawSentences = text.match(/[^.!?]+[.!?]+["']?|[^.!?]+$/g) || [text];
+  }
+
+  const sentences: Sentence[] = rawSentences
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s, index) => ({
+      id: index + 1,
+      text: s,
+      // Default values for required fields (to be filled by analysis later)
+      function: 'Pending',
+      type: 'Declarative',
+      purpose: '',
+      mood: 'Indicative',
+    }));
+
+  return {
+    id,
+    sentences,
+    status: 'pending',
+    function: 'Pending',
+  };
+};

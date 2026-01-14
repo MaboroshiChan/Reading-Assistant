@@ -36,7 +36,7 @@ export const config: Config = {
     cacheTtlMs: Number(getEnv("CACHE_TTL_MS", "3600000")),
     useMockLLM: getEnv("MOCK_LLM") === "1" || getEnv("TEST_MODE") === "1",
     debugMode: getEnv("DEBUG_MODE") === "1",
-    renderMode: getEnv("RENDER_MODE") === "1"
+    renderMode: true
 };
 
 export default config;

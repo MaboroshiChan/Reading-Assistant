@@ -17,6 +17,18 @@ are not requested in the task list):
       "confidence": 0.0
     }
   ],
+  "sentences": [
+    {
+      "function": "string",
+      "type": "string",
+      "mood": "string",
+      "purpose": "string",
+      "relation": {
+        "type": "string",
+        "targetSentenceId": 0
+      }
+    }
+  ],
   "rhetoric": [
     {
       "label": "string",
@@ -48,8 +60,10 @@ Rules for offsets and anchors:
 General instructions:
 - Keep prose concise: summary ≤ 2 sentences.
 - `roles` describe major participant roles (topic, evidence, counterpoint, etc.).
+- `sentences` must contain one object per sentence in the paragraph, preserving order.
 - `rhetoric` captures discourse labels (statement, question, contrast, concession).
 - `claims` are factual or opinionated assertions with polarity and support.
+- `relation` describes logical connection to another sentence (targetSentenceId is 1-based).
 - Confidence scores are floats between 0 and 1.
 - When a section is not requested, omit that key entirely.
 - If unsure about a value, omit the field instead of guessing.

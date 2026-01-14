@@ -96,8 +96,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         setSubsentenceError(null);
         setIsLoadingSubsentence(false);
         setIsStreamingSubsentence(false);
-    }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood]);
+    }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood, sentence]);
 
+    const isPending = sentence.function === 'Pending';
 
     const handleClick = (e: MouseEvent<HTMLSpanElement>) => {
         if (!interactionEnabled) return;
@@ -184,7 +185,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             }
             return false;
         });
-    }, [interactionEnabled]);
+    }, [interactionEnabled, sentence]);
 
     const handleRelationshipHover = useCallback((id: number | null) => {
         window.dispatchEvent(new CustomEvent(HIGHLIGHT_EVENT, { detail: id }));
@@ -371,6 +372,10 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 onMouseMove={handleMouseMove}
                 className={className}
                 data-sentence-id={sentence.id}
+                style={{
+                    opacity: isPending ? 0.5 : 1,
+                    transition: "opacity 0.5s ease",
+                }}
             >
                 <span style={{
                     fontSize: "0.75em",

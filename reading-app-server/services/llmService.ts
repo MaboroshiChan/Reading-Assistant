@@ -126,6 +126,8 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
         responseMimeType: args.responseAs === 'json' ? 'application/json' : 'text/plain',
       },
     });
+
+    console.log("LLLLLLLLLLLLLM");
     
     const result:GenerateContentStreamResult = await model.generateContentStream(args.prompt);
 

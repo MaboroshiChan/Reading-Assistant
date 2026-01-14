@@ -74,6 +74,14 @@ export class MessageService {
     this.defaults = defaults;
   }
 
+  getClient(): NetworkClient {
+    return this.client;
+  }
+
+  getDefaults(): MessageServiceDefaults {
+    return this.defaults;
+  }
+
   /** Generic sender (escape hatch) */
   async send<TRes extends ResponseEnvelope, TFrame = unknown, TPartial = unknown>(
     envelope: RequestEnvelope,
