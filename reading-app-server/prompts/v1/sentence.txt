@@ -13,9 +13,11 @@ task list):
     {
       "role": "string",
       "text": "string",
+      "mood": "string",
       "confidence": 0.0
     }
   ],
+  "key_phrase": "string",
   "discourse_function": "string",
   "dependency_light": {
     "head_indexed": true,
@@ -34,8 +36,6 @@ task list):
 ```
 
 Guidelines:
-- Use 0-based inclusive start / exclusive end offsets relative to the raw
-  sentence text.
 - Clamp every span to the sentence length and drop spans shorter than one
   character.
 - Populate `anchors` with the minimal supporting text; include the overall
