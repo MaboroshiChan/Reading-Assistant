@@ -1,4 +1,4 @@
-# Sentence Analysis Prompt (v1)
+# Sentence Analysis Prompt (v2)
 
 You are a linguistics-focused assistant tasked with analysing a single English
 sentence. Produce a concise JSON object that captures semantic roles, discourse
@@ -12,8 +12,7 @@ task list):
   "semantic_roles": [
     {
       "role": "string",
-      "span": { "start": 0, "end": 0 },
-      "anchors": [{ "start": 0, "end": 0 }],
+      "text": "string",
       "confidence": 0.0
     }
   ],
@@ -27,11 +26,9 @@ task list):
   "modal_markers": [
     {
       "type": "necessity|possibility|certainty|volition|string",
-      "span": { "start": 0, "end": 0 },
       "cue": "string"
     }
   ],
-  "anchors": [{ "start": 0, "end": 0 }],
   "confidence": 0.0
 }
 ```

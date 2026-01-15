@@ -19,32 +19,21 @@ import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'sentence';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'sentence.v1';
+const PROMPT_VERSION = 'sentence.v2';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
 const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'discourse_function', 'dependency_light', 'modal_markers'];
 
 export type SentenceTask = 'semantic_roles' | 'discourse_function' | 'dependency_light' | 'modal_markers';
 export { PROMPT_VERSION as SENTENCE_PROMPT_VERSION };
 
-interface LLMSentenceSpan {
-  start: number;
-  end: number;
-}
-
-interface LLMSentenceAnchor extends LLMSentenceSpan {
-  sentence_id?: string;
-}
-
 interface LLMSentenceRole {
   role?: string;
-  span?: LLMSentenceSpan;
-  anchors?: LLMSentenceAnchor[];
+  text?: string;
   confidence?: number;
 }
 
 interface LLMSentenceModalMarker {
   type?: string;
-  span?: LLMSentenceSpan;
   cue?: string;
 }
 
@@ -64,7 +53,6 @@ interface LLMSentenceResponse {
   discourse_function?: string;
   dependency_light?: LLMSentenceDependencyLight;
   modal_markers?: LLMSentenceModalMarker[];
-  anchors?: LLMSentenceAnchor[];
   confidence?: number;
 }
 
@@ -355,9 +343,6 @@ const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
           .map(coerceModalMarker)
           .filter((marker): marker is LLMSentenceModalMarker => marker !== null)
       : undefined,
-    anchors: Array.isArray(value.anchors)
-      ? coerceAnchorArray(value.anchors)
-      : undefined,
     confidence: asConfidence(value.confidence),
   };
 };
@@ -387,39 +372,22 @@ const mapSentenceResponse = (
     anchorIndex.set(baseAnchor.anchor_hash, baseAnchor);
   }
 
-  const collectAnchors = (rawAnchors: LLMSentenceAnchor[] | undefined, fallback = false): Anchor[] => {
-    const anchors: Anchor[] = [];
-    const seen = new Set<string>();
-
-    if (rawAnchors) {
-      for (const raw of rawAnchors) {
-        const anchor = anchorFromSpan(raw, text, sentenceId);
-        if (anchor && !seen.has(anchor.anchor_hash)) {
-          anchors.push(anchor);
-          seen.add(anchor.anchor_hash);
-          anchorIndex.set(anchor.anchor_hash, anchor);
-        }
-      }
-    }
-
-    if (!anchors.length && fallback && baseAnchor) {
-      anchors.push(baseAnchor);
-    }
-
-    return anchors;
-  };
-
   const semanticRoles = shouldInclude('semantic_roles') && payload.semantic_roles
     ? (() => {
         const roles: SentenceRole[] = [];
         for (const role of payload.semantic_roles) {
-          if (!role.role) continue;
-          const span = role.span ? normalizeSpan(role.span.start, role.span.end, text.length) : null;
-          const anchors = collectAnchors(role.anchors, true);
+          if (!role.role || !role.text) continue;
+          const span = findSpan(text, role.text);
+          const anchors = span ? [makeAnchor({ sentenceId, span, text: role.text })] : undefined;
+
+          if (anchors) {
+            for (const a of anchors) anchorIndex.set(a.anchor_hash, a);
+          }
+
           roles.push({
             role: normalizeRoleLabel(role.role),
             span: span ?? undefined,
-            anchors: anchors.length ? anchors : undefined,
+            anchors,
             confidence: role.confidence,
           });
         }
@@ -441,7 +409,7 @@ const mapSentenceResponse = (
         const seen = new Set<string>();
         for (const marker of payload.modal_markers) {
           if (!marker.type || !marker.cue) continue;
-          const span = marker.span ? normalizeSpan(marker.span.start, marker.span.end, text.length) : null;
+          const span = findSpan(text, marker.cue);
           if (!span) continue;
           const normalizedType = normalizeModalType(marker.type);
           const key = `${normalizedType}:${span.start}:${span.end}:${marker.cue.toLowerCase()}`;
@@ -462,10 +430,6 @@ const mapSentenceResponse = (
         return markers.length ? markers : undefined;
       })()
     : undefined;
-
-  if (payload.anchors) {
-    collectAnchors(payload.anchors, true);
-  }
 
   const anchorList = anchorIndex.size ? sortAnchors(Array.from(anchorIndex.values())) : undefined;
 
@@ -512,45 +476,17 @@ const mapDependencyLight = (raw: LLMSentenceDependencyLight): DependencyLight | 
   };
 };
 
-const anchorFromSpan = (
-  anchor: LLMSentenceAnchor,
-  sentenceText: string,
-  sentenceId: string,
-): Anchor | null => {
-  const span = normalizeSpan(anchor.start, anchor.end, sentenceText.length);
-  if (!span) return null;
-  const snippet = sentenceText.slice(span.start, span.end);
-  if (!snippet) return null;
-
-  return makeAnchor({
-    sentenceId,
-    span,
-    text: snippet,
-  });
-};
-
-// What does this function do?
-const normalizeSpan = (start: number, end: number, maxLength: number) => {
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  let s = Math.floor(start);
-  let e = Math.floor(end);
-  if (e < s) {
-    const tmp = s;
-    s = e;
-    e = tmp;
-  }
-  s = Math.max(0, Math.min(s, maxLength));
-  e = Math.max(0, Math.min(e, maxLength));
-  if (e <= s) return null;
-  return { start: s, end: e };
+const findSpan = (text: string, substring: string) => {
+  const start = text.indexOf(substring);
+  if (start === -1) return null;
+  return { start, end: start + substring.length };
 };
 
 const coerceRole = (value: unknown): LLMSentenceRole | null => {
   if (!isRecord(value)) return null;
   return {
     role: asString(value.role),
-    span: coerceSpan(value.span),
-    anchors: coerceAnchorArray(value.anchors),
+    text: asString(value.text),
     confidence: asConfidence(value.confidence),
   };
 };
@@ -559,12 +495,10 @@ const coerceModalMarker = (value: unknown): LLMSentenceModalMarker | null => {
   if (!isRecord(value)) return null;
   const type = asString(value.type);
   const cue = asString(value.cue);
-  const span = coerceSpan(value.span);
-  if (!type || !cue || !span) return null;
+  if (!type || !cue) return null;
   return {
     type: normalizeModalType(type),
     cue,
-    span,
   };
 };
 
@@ -588,35 +522,6 @@ const coerceDependencyLight = (value: Record<string, unknown>): LLMSentenceDepen
     head_indexed: headIndexed,
     arcs,
   };
-};
-
-const coerceSpan = (value: unknown): LLMSentenceSpan | undefined => {
-  if (!isRecord(value)) return undefined;
-  const start = asNumber(value.start);
-  const end = asNumber(value.end);
-  if (typeof start !== 'number' || typeof end !== 'number') return undefined;
-  if (end <= start) return undefined;
-  return { start, end };
-};
-
-const coerceAnchor = (value: unknown): LLMSentenceAnchor | null => {
-  const span = coerceSpan(value);
-  if (!span) return null;
-  const sentenceId =
-    isRecord(value) && typeof value.sentence_id === 'string'
-      ? value.sentence_id
-      : undefined;
-  return { ...span, sentence_id: sentenceId };
-};
-
-const coerceAnchorArray = (value: unknown): LLMSentenceAnchor[] => {
-  if (!Array.isArray(value)) return [];
-  const anchors: LLMSentenceAnchor[] = [];
-  for (const item of value) {
-    const anchor = coerceAnchor(item);
-    if (anchor) anchors.push(anchor);
-  }
-  return anchors;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
