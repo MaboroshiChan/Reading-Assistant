@@ -206,3 +206,65 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* Key Phrase Highlighting */
+.sentence-key-phrase {
+  font-weight: bold;
+  color: red;
+  transition: text-shadow 0.2s ease;
+}
+
+.sentence-key-phrase:hover {
+  text-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
+}
+
+/* Tag Variants */
+.tag.variant-blue {
+  background: rgba(123, 168, 255, 0.24);
+  color: #dde6ff;
+}
+
+.tag.variant-green {
+  background: rgba(103, 232, 185, 0.22);
+  color: #d2f5ea;
+}
+
+.tag.variant-yellow {
+  background: rgba(253, 224, 138, 0.24);
+  color: #fef3c7;
+}
+
+.tag.variant-gray {
+  background: rgba(226, 232, 240, 0.18);
+  color: #e2e8f0;
+}
+
+/* Tag Dots */
+.tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+  flex: 0 0 auto;
+}
+
+.tag-dot.variant-blue {
+  background: #84a9ff;
+}
+
+.tag-dot.variant-green {
+  background: #34d399;
+}
+
+.tag-dot.variant-yellow {
+  background: #facc15;
+}
+
+.tag-dot.variant-gray {
+  background: #94a3b8;
+}
+
+/* Spinner Internals */
+.sentence-spinner-circle { opacity: 0.25; }
+.sentence-spinner-path { opacity: 0.75; }

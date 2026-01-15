@@ -308,49 +308,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         void run();
     }, [isSubsentenceActive, sentence]);
 
-    // ---- [A] Tag 颜色与映射（内联样式，免改 CSS） ----
     type Variant = "blue" | "green" | "yellow" | "gray";
-
-    const styleFor = (v: Variant) => {
-        switch (v) {
-            case "blue":
-                return { background: "rgba(123,168,255,0.24)", color: "#dde6ff" };
-            case "green":
-                return { background: "rgba(103,232,185,0.22)", color: "#d2f5ea" };
-            case "yellow":
-                return { background: "rgba(253,224,138,0.24)", color: "#fef3c7" };
-            default:
-                return { background: "rgba(226,232,240,0.18)", color: "#e2e8f0" };
-        }
-    };
-
-    const dotColor = (v: Variant) => {
-        switch (v) {
-            case "blue":
-                return "#84a9ff";
-            case "green":
-                return "#34d399";
-            case "yellow":
-                return "#facc15";
-            default:
-                return "#94a3b8";
-        }
-    };
-
-    const dotEl = (v: Variant) => (
-        <span
-            aria-hidden
-            style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: dotColor(v),
-                display: "inline-block",
-                marginRight: 6,
-                flex: "0 0 auto",
-            }}
-        />
-    );
 
     // 简单规则：你可按需扩展
     const fnVariant = (fn: string): Variant => {
@@ -392,16 +350,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     return (
         <>
-            <style>{`
-                .sentence-key-phrase {
-                    font-weight: bold;
-                    color: red;
-                    transition: text-shadow 0.2s ease;
-                }
-                .sentence-key-phrase:hover {
-                    text-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
-                }
-            `}</style>
             <span
                 role={interactionEnabled ? "button" : undefined}
                 tabIndex={interactionEnabled ? 0 : undefined}
@@ -493,8 +441,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                             const roleLabel = sentenceVm.roleLabel ?? sentence.function;
                             const v = fnVariant (roleLabel);
                             return (
-                                <span className="tag" style={styleFor(v)}>
-                                    {dotEl(v)}
+                                <span className={`tag variant-${v}`}>
+                                    <span className={`tag-dot variant-${v}`} aria-hidden />
                                     {roleLabel}
                                 </span>
                             );
@@ -508,8 +456,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                                 ? ` · ${sentence.relation.type} → #${sentence.relation.targetSentenceId}`
                                 : "";
                             return (
-                                <span className="tag" style={styleFor(v)}>
-                                    {dotEl(v)}
+                                <span className={`tag variant-${v}`}>
+                                    <span className={`tag-dot variant-${v}`} aria-hidden />
                                     {structureLabel}
                                     {relationPiece}
                                 </span>
@@ -521,8 +469,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                             const moodLabel = sentenceVm.mood ?? sentence.mood;
                             const v = moodVariant(moodLabel);
                             return (
-                                <span className="tag" style={styleFor(v)}>
-                                    {dotEl(v)}
+                                <span className={`tag variant-${v}`}>
+                                    <span className={`tag-dot variant-${v}`} aria-hidden />
                                     {moodLabel}
                                 </span>
                             );
@@ -550,8 +498,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
 const Spinner = () => (
     <svg className="sentence-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        <circle className="sentence-spinner-circle" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="sentence-spinner-path" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
 );
 
