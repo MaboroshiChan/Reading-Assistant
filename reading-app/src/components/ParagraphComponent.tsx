@@ -76,6 +76,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
       {paragraph.sentences.map((sentence) => (
         <SentenceComponent
           id={sentence.id - paragraph.id}
+          paragraphId={paragraph.id}
           key={sentence.id}
           sentence={sentence}
           interactionEnabled={isInteractive}

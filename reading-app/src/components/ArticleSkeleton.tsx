@@ -391,7 +391,7 @@ const ExampleArticle: React.FC = () => {
         );
 
         // Mark as complete
-        console.log(`[Stream] Paragraph ${p.id} complete`);
+        // console.log(`[Stream] Paragraph ${p.id} complete`);
         setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'complete' } : item));
       } catch (err) {
         console.error(`Analysis failed for paragraph ${p.id}`, err);

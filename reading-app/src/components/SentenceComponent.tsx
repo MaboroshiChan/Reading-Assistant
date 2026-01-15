@@ -25,6 +25,7 @@ const isAbortError = (error: unknown): boolean =>
 
 interface SentenceComponentProps {
     id: number;
+    paragraphId: number;
     sentence: Sentence;
     onToggleFocus?: (id: number, isFocused: boolean) => void;
     onHoverChange?: (id: number, isHovered: boolean) => void;
@@ -35,6 +36,7 @@ interface SentenceComponentProps {
 type Point = { x: number; y: number };
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
+    paragraphId,
     sentence,
     onToggleFocus,
     onHoverChange,
@@ -74,12 +76,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
 
     React.useEffect(() => {
         const onHighlight = (e: Event) => {
-            const detail = (e as CustomEvent<number | null>).detail ?? null;
-            setIsRemoteHovered(detail === sentence.id);
+            const detail = (e as CustomEvent<{ pId: number; sId: number } | null>).detail ?? null;
+            setIsRemoteHovered(detail?.pId === paragraphId && detail?.sId === sentence.id);
         };
         window.addEventListener(HIGHLIGHT_EVENT, onHighlight as EventListener);
         return () => window.removeEventListener(HIGHLIGHT_EVENT, onHighlight as EventListener);
-    }, [sentence.id]);
+    }, [sentence.id, paragraphId]);
 
     React.useEffect(() => () => {
         if (subsentenceAbortRef.current) {
@@ -198,16 +200,17 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         });
     }, [interactionEnabled, sentence]);
 
-    const handleRelationshipHover = useCallback((id: number | null) => {
-        window.dispatchEvent(new CustomEvent(HIGHLIGHT_EVENT, { detail: id }));
-    }, []);
+    const handleRelationshipHover = useCallback((targetId: number | null) => {
+        const detail = targetId === null ? null : { pId: paragraphId, sId: targetId };
+        window.dispatchEvent(new CustomEvent(HIGHLIGHT_EVENT, { detail }));
+    }, [paragraphId]);
 
     const handleStartSubsentence = useCallback((): void => {
         if (isSubsentenceActive) {
             if (subsentenceAbortRef.current) {
                 subsentenceAbortRef.current.abort();
                 subsentenceAbortRef.current = null;
-            }
+             }
             setSubsentenceError(null);
             setIsLoadingSubsentence(false);
             setIsSubsentenceActive(false);
