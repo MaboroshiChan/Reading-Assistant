@@ -374,8 +374,34 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const shouldShowSubsentence =
         isSubsentenceActive || isLoadingSubsentence || subsentenceError !== null || subsentenceVm !== null;
 
+    const renderContent = () => {
+        const keyPhrase = sentence.key_phrase;
+        if (!keyPhrase || typeof keyPhrase !== "string" || !sentence.text.includes(keyPhrase)) {
+            return sentence.text;
+        }
+        const parts = sentence.text.split(keyPhrase);
+        return parts.map((part, index) => (
+            <React.Fragment key={index}>
+                {part}
+                {index < parts.length - 1 && (
+                    <span className="sentence-key-phrase">{keyPhrase}</span>
+                )}
+            </React.Fragment>
+        ));
+    };
+
     return (
         <>
+            <style>{`
+                .sentence-key-phrase {
+                    font-weight: bold;
+                    color: red;
+                    transition: text-shadow 0.2s ease;
+                }
+                .sentence-key-phrase:hover {
+                    text-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
+                }
+            `}</style>
             <span
                 role={interactionEnabled ? "button" : undefined}
                 tabIndex={interactionEnabled ? 0 : undefined}
@@ -397,7 +423,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                         <span className="sentence-id">{sentence.id}</span>
                     )}
                 </span>
-                {sentence.text}
+                {renderContent()}
             </span>
 
             <SentenceHoverCard

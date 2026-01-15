@@ -13,5 +13,6 @@ export interface Sentence {
   purpose: string;          // Short natural language explanation
   mood: string;             // e.g., Indicative, Subjunctive 
   relation?: SentenceRelation;
-  text: string
+  text: string;
+  key_phrase?: string;
 }

@@ -309,7 +309,6 @@ const ExampleArticle: React.FC = () => {
         // @ts-ignore
         const module = await import('../../../resource/examples/TestArticles/example-article.txt?raw');
         const text = module.default;
-        console.log(text);
         const paragraphs = text.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
         setRawParagraphs(paragraphs);
       } catch (error) {
@@ -352,12 +351,15 @@ const ExampleArticle: React.FC = () => {
             doc_id: 'demo-doc',
             paragraph_id: String(p.id),
             paragraph_text: p.sentences.map(s => s.text).join(' '),
+            options: {
+              tasks: ['roles', 'rhetoric', 'summary','claims']
+            }
           },
           { doc: { doc_id: 'demo-doc', content_hash: 'demo-hash' } },
           {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onPartial: (partial: any) => {
-              console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
+               // console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
               setAnalyzedData(prev => prev.map(item => {
                 if (item.id !== p.id) return item;
                 

@@ -19,11 +19,11 @@ import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'sentence';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'sentence.v2';
+const PROMPT_VERSION = 'sentence.v5';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
-const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'discourse_function', 'dependency_light', 'modal_markers'];
+const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'key_phrase', 'discourse_function', 'dependency_light', 'modal_markers'];
 
-export type SentenceTask = 'semantic_roles' | 'discourse_function' | 'dependency_light' | 'modal_markers';
+export type SentenceTask = 'semantic_roles' | 'key_phrase' | 'discourse_function' | 'dependency_light' | 'modal_markers';
 export { PROMPT_VERSION as SENTENCE_PROMPT_VERSION };
 
 interface LLMSentenceRole {
@@ -50,7 +50,11 @@ interface LLMSentenceDependencyLight {
 
 interface LLMSentenceResponse {
   semantic_roles?: LLMSentenceRole[];
-  discourse_function?: string;
+  key_phrase?: string;
+  function?: string;
+  type?: string;
+  mood?: string;
+  purpose?: string;
   dependency_light?: LLMSentenceDependencyLight;
   modal_markers?: LLMSentenceModalMarker[];
   confidence?: number;
@@ -334,7 +338,11 @@ const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
           .map(coerceRole)
           .filter((role): role is LLMSentenceRole => role !== null)
       : undefined,
-    discourse_function: asLowercaseString(value.discourse_function),
+    key_phrase: asString(value.key_phrase),
+    function: asString(value.function),
+    type: asString(value.type),
+    mood: asString(value.mood),
+    purpose: asString(value.purpose),
     dependency_light: isRecord(value.dependency_light)
       ? coerceDependencyLight(value.dependency_light)
       : undefined,
@@ -395,9 +403,25 @@ const mapSentenceResponse = (
       })()
     : undefined;
 
-  const discourseFunction = shouldInclude('discourse_function')
-    ? payload.discourse_function
+  const keyPhrase = shouldInclude('key_phrase') && payload.key_phrase
+    ? (() => {
+        const phrase = payload.key_phrase;
+        const span = findSpan(text, phrase);
+        if (span) {
+          const anchor = makeAnchor({ sentenceId, span, text: phrase });
+          anchorIndex.set(anchor.anchor_hash, anchor);
+        }
+        return phrase;
+      })()
     : undefined;
+
+  // Map 'discourse_function' task to the new classification fields
+  const classification = shouldInclude('discourse_function') ? {
+    function: payload.function,
+    type: payload.type,
+    mood: payload.mood,
+    purpose: payload.purpose,
+  } : {};
 
   const dependencyLight = shouldInclude('dependency_light') && payload.dependency_light
     ? mapDependencyLight(payload.dependency_light)
@@ -435,7 +459,8 @@ const mapSentenceResponse = (
 
   return {
     semantic_roles: semanticRoles,
-    discourse_function: discourseFunction ?? undefined,
+    key_phrase: keyPhrase,
+    ...classification,
     dependency_light: dependencyLight,
     modal_markers: modalMarkers,
     anchors: anchorList,

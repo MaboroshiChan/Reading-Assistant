@@ -22,6 +22,7 @@ are not requested in the task list):
       "type": "string",
       "mood": "string",
       "purpose": "string",
+      "key_phrase": "string",
       "relation": {
         "type": "string",
         "targetSentenceId": 0
@@ -41,6 +42,7 @@ are not requested in the task list):
 ```
 General instructions:
 - Keep prose concise: summary ≤ 2 sentences.
+- key_phrase is the most semantically significant text_piece in each sentence.
 - `roles` describe major participant roles (topic, evidence, counterpoint, etc.).
 - `sentences` must contain one object per sentence in the paragraph, preserving order.
 - `rhetoric` captures discourse labels (statement, question, contrast, concession).
