@@ -99,6 +99,17 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood, sentence]);
 
     const isPending = sentence.function === 'Pending';
+    const [showSuccess, setShowSuccess] = useState(false);
+    const prevPending = React.useRef(isPending);
+
+    React.useEffect(() => {
+        if (prevPending.current && !isPending) {
+            setShowSuccess(true);
+            const timer = setTimeout(() => setShowSuccess(false), 2000);
+            return () => clearTimeout(timer);
+        }
+        prevPending.current = isPending;
+    }, [isPending]);
 
     const handleClick = (e: MouseEvent<HTMLSpanElement>) => {
         if (!interactionEnabled) return;
@@ -351,6 +362,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const className = [
         "sentence",
         "component",
+        isPending ? "pending" : "",
         interactionEnabled && (isRemoteHovered || (isHovered && !blocked)) ? "hovered" : "",
         interactionEnabled && isClicked ? "clicked" : "",
     ]
@@ -372,18 +384,15 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 onMouseMove={handleMouseMove}
                 className={className}
                 data-sentence-id={sentence.id}
-                style={{
-                    opacity: isPending ? 0.5 : 1,
-                    transition: "opacity 0.5s ease",
-                }}
             >
-                <span style={{
-                    fontSize: "0.75em",
-                    color: interactionEnabled && isHovered && !blocked ? "#e2e8f0" : "#9ca3af",
-                    marginRight: "0.3em",
-                    userSelect: "none"
-                }}>
-                    {sentence.id}
+                <span className="sentence-indicator" contentEditable={false}>
+                    {isPending ? (
+                        <Spinner />
+                    ) : showSuccess ? (
+                        <CheckMark />
+                    ) : (
+                        <span className="sentence-id">{sentence.id}</span>
+                    )}
                 </span>
                 {sentence.text}
             </span>
@@ -509,5 +518,18 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         </>
     );
 };
+
+const Spinner = () => (
+    <svg className="sentence-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+);
+
+const CheckMark = () => (
+    <svg className="sentence-check" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+);
 
 export default SentenceComponent;

@@ -78,7 +78,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
           id={sentence.id - paragraph.id}
           key={sentence.id}
           sentence={sentence}
-          interactionEnabled={isClicked}
+          interactionEnabled={isInteractive}
         />
       ))}
     </div>

@@ -375,7 +375,6 @@ const ExampleArticle: React.FC = () => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const incoming = (partial.sentences as any[])[i];
                     if (incoming) {
-                      console.log(`incoming ${incoming}`);
                       return {
                         ...s,
                         ...incoming,

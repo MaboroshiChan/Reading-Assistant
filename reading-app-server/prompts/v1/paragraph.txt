@@ -13,7 +13,6 @@ are not requested in the task list):
   "roles": [
     {
       "role": "string",
-      "anchors": [{ "start": 0, "end": 0, "sentence_id": "optional string" }],
       "confidence": 0.0
     }
   ],
@@ -29,13 +28,6 @@ are not requested in the task list):
       }
     }
   ],
-  "rhetoric": [
-    {
-      "label": "string",
-      "evidence_anchors": [{ "start": 0, "end": 0, "sentence_id": "optional string" }],
-      "confidence": 0.0
-    }
-  ],
   "claims": [
     {
       "text": "string",
@@ -45,7 +37,6 @@ are not requested in the task list):
       "entity_links": ["optional-id"]
     }
   ],
-  "anchors": [{ "start": 0, "end": 0, "sentence_id": "optional string" }],
   "confidence": 0.0
 }
 ```
