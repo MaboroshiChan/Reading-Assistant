@@ -33,21 +33,12 @@ are not requested in the task list):
       "text": "string",
       "polarity": "pos|neg|nu",
       "support": "strong|weak|unspecified",
-      "anchors": [{ "start": 0, "end": 0, "sentence_id": "optional string" }],
       "entity_links": ["optional-id"]
     }
   ],
   "confidence": 0.0
 }
 ```
-
-Rules for offsets and anchors:
-- Use 0-based character offsets relative to the raw paragraph text provided.
-- Offsets are `[start, end)` (start inclusive, end exclusive).
-- Clamp offsets to the text length; discard spans shorter than one character.
-- Include `sentence_id` only if the span belongs to a known sentence.
-- Anchors should point to the smallest span that supports the statement.
-
 General instructions:
 - Keep prose concise: summary ≤ 2 sentences.
 - `roles` describe major participant roles (topic, evidence, counterpoint, etc.).

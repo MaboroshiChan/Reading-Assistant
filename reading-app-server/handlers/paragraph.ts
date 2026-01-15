@@ -137,7 +137,7 @@ const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
     `Prompt Version: ${PROMPT_VERSION}`,
     `Requested tasks: ${tasks.join(', ')}`,
     '',
-    'Paragraph text (0-based offsets):',
+    'Paragraph text:',
     '```text',
     req.payload.paragraph_text,
     '```',
