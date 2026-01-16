@@ -12,39 +12,28 @@ import type {
 } from '../../reading-app/src/services/envelopes';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
-import { json as llmJson, type LLMUsage } from '../services/llmService';
+import { json as llmJson, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
 import { buildStableCacheKey, makeAnchor, sortAnchors } from './shared';
 import { buildMockSentenceData } from './mock/sentenceMock';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'sentence';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'sentence.v1';
+const PROMPT_VERSION = 'sentence.v5';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
-const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'discourse_function', 'dependency_light', 'modal_markers'];
+const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'key_phrase', 'discourse_function', 'dependency_light', 'modal_markers'];
 
-export type SentenceTask = 'semantic_roles' | 'discourse_function' | 'dependency_light' | 'modal_markers';
+export type SentenceTask = 'semantic_roles' | 'key_phrase' | 'discourse_function' | 'dependency_light' | 'modal_markers';
 export { PROMPT_VERSION as SENTENCE_PROMPT_VERSION };
-
-interface LLMSentenceSpan {
-  start: number;
-  end: number;
-}
-
-interface LLMSentenceAnchor extends LLMSentenceSpan {
-  sentence_id?: string;
-}
 
 interface LLMSentenceRole {
   role?: string;
-  span?: LLMSentenceSpan;
-  anchors?: LLMSentenceAnchor[];
+  text?: string;
   confidence?: number;
 }
 
 interface LLMSentenceModalMarker {
   type?: string;
-  span?: LLMSentenceSpan;
   cue?: string;
 }
 
@@ -61,16 +50,14 @@ interface LLMSentenceDependencyLight {
 
 interface LLMSentenceResponse {
   semantic_roles?: LLMSentenceRole[];
-  discourse_function?: string;
+  key_phrase?: string;
+  function?: string;
+  type?: string;
+  mood?: string;
+  purpose?: string;
   dependency_light?: LLMSentenceDependencyLight;
   modal_markers?: LLMSentenceModalMarker[];
-  anchors?: LLMSentenceAnchor[];
   confidence?: number;
-}
-
-interface SentenceBuildResult {
-  data: AnalyzeSentenceData;
-  usage?: LLMUsage;
 }
 
 const ROLE_ALIAS: Record<string, string> = {
@@ -225,7 +212,7 @@ const buildPrompt = async (req: RequestEnvelopeSentence): Promise<string> => {
 
 const buildSentenceData = async (
   req: RequestEnvelopeSentence,
-): Promise<SentenceBuildResult> => {
+): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
   if (config.useMockLLM) {
@@ -235,7 +222,19 @@ const buildSentenceData = async (
       promptVersion: PROMPT_VERSION,
       mock: true,
     });
-    return { data: await buildMockSentenceData(req) };
+    const mockData = await buildMockSentenceData(req);
+    const text = JSON.stringify(mockData);
+    const stream = (async function* () {
+      yield text;
+    })();
+    return {
+      data: stream,
+      usage: Promise.resolve({
+        modelId: `mock:${config.model}`,
+        inputTokens: 0,
+        outputTokens: 0,
+      }),
+    };
   }
 
   handlerLog('sentence', 'building LLM payload', {
@@ -254,35 +253,12 @@ const buildSentenceData = async (
     prompt,
     mock: false,
   });
-  const { object, usage } = await llmJson(prompt, coerceSentenceResponse);
-  handlerLog('sentence', 'LLM response received', {
-    requestId: req.request_id,
-    sentenceId: req.payload.sentence_id,
-    model: usage?.modelId,
-    tokensIn: usage?.inputTokens,
-    tokensOut: usage?.outputTokens,
-    promptVersion: PROMPT_VERSION,
-  });
-  const data = mapSentenceResponse(object, req);
-  const hasContent =
-    (object.semantic_roles?.length ?? 0) > 0 ||
-    (object.modal_markers?.length ?? 0) > 0 ||
-    (object.dependency_light?.arcs?.length ?? 0) > 0 ||
-    Boolean(object.discourse_function);
-  if (!hasContent) {
-    handlerLog(
-      'sentence',
-      'LLM payload missing expected fields; using fallbacks',
-      { requestId: req.request_id, promptVersion: PROMPT_VERSION },
-      'warn',
-    );
-  }
-  return { data, usage };
+  return llmJson(prompt);
 };
 
 export const handleSentence = async (
   req: RequestEnvelopeSentence,
-): Promise<ResponseEnvelopeSentence> => {
+): Promise<CallReturn<string>> => {
   handlerLog('sentence', 'request received', {
     requestId: req.request_id,
     mock: config.useMockLLM,
@@ -296,39 +272,60 @@ export const handleSentence = async (
       cacheKey,
       promptVersion: PROMPT_VERSION,
     });
-    return { ...cached, served_from: 'cache' };
+    const text = JSON.stringify({ ...cached, served_from: 'cache' });
+    const usage = await Promise.resolve(cached.usage);
+    return {
+      data: (async function* () {
+        yield text;
+      })(),
+      usage: Promise.resolve({
+        modelId: usage?.model_id,
+        inputTokens: usage?.tokens_in,
+        outputTokens: usage?.tokens_out,
+      }),
+    };
   }
 
   const started = Date.now();
-  const { data, usage } = await buildSentenceData(req);
-  handlerLog('sentence', 'data prepared', {
-    requestId: req.request_id,
-    source: config.useMockLLM ? 'mock' : 'llm',
-    promptVersion: PROMPT_VERSION,
-    roles: data.semantic_roles?.length ?? 0,
-    modalMarkers: data.modal_markers?.length ?? 0,
-  });
-  const response: ResponseEnvelopeSentence = {
-    request_id: req.request_id,
-    status: 'ok',
-    served_from: 'fresh',
-    data,
-    usage: {
-      latency_ms: Date.now() - started,
-      model_id: usage?.modelId ?? (config.useMockLLM ? `mock:${config.model}` : undefined),
-      tokens_in: usage?.inputTokens ?? (config.useMockLLM ? 0 : undefined),
-      tokens_out: usage?.outputTokens ?? (config.useMockLLM ? 0 : undefined),
-    },
-  };
+  const { data: stream, usage: usagePromise } = await buildSentenceData(req);
 
-  cache.set(cacheKey, response, config.cacheTtlMs);
-  handlerLog('sentence', 'response cached', {
-    requestId: req.request_id,
-    latencyMs: Date.now() - started,
-    cacheKey,
-    promptVersion: PROMPT_VERSION,
-  });
-  return response;
+  const tappedStream = (async function* () {
+    let text = '';
+    for await (const chunk of stream) {
+      text += chunk;
+      yield chunk;
+    }
+
+    // Background processing: parse, map, and cache
+    try {
+      const usage = await usagePromise;
+      let data: AnalyzeSentenceData;
+      if (config.useMockLLM) {
+        data = JSON.parse(text) as AnalyzeSentenceData;
+      } else {
+        const object = coerceSentenceResponse(extractJsonFromText(text));
+        data = mapSentenceResponse(object, req);
+      }
+
+      const response: ResponseEnvelopeSentence = {
+        request_id: req.request_id,
+        status: 'ok',
+        served_from: 'fresh',
+        data,
+        usage: {
+          latency_ms: Date.now() - started,
+          model_id: usage?.modelId,
+          tokens_in: usage?.inputTokens,
+          tokens_out: usage?.outputTokens,
+        },
+      };
+      cache.set(cacheKey, response, config.cacheTtlMs);
+    } catch (error) {
+      console.warn('[sentence] failed to cache response', error);
+    }
+  })();
+
+  return { data: tappedStream, usage: usagePromise };
 };
 
 export { buildPrompt as buildSentencePrompt, buildTasks as buildSentenceTasks };
@@ -341,7 +338,11 @@ const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
           .map(coerceRole)
           .filter((role): role is LLMSentenceRole => role !== null)
       : undefined,
-    discourse_function: asLowercaseString(value.discourse_function),
+    key_phrase: asString(value.key_phrase),
+    function: asString(value.function),
+    type: asString(value.type),
+    mood: asString(value.mood),
+    purpose: asString(value.purpose),
     dependency_light: isRecord(value.dependency_light)
       ? coerceDependencyLight(value.dependency_light)
       : undefined,
@@ -349,9 +350,6 @@ const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
       ? value.modal_markers
           .map(coerceModalMarker)
           .filter((marker): marker is LLMSentenceModalMarker => marker !== null)
-      : undefined,
-    anchors: Array.isArray(value.anchors)
-      ? coerceAnchorArray(value.anchors)
       : undefined,
     confidence: asConfidence(value.confidence),
   };
@@ -382,39 +380,22 @@ const mapSentenceResponse = (
     anchorIndex.set(baseAnchor.anchor_hash, baseAnchor);
   }
 
-  const collectAnchors = (rawAnchors: LLMSentenceAnchor[] | undefined, fallback = false): Anchor[] => {
-    const anchors: Anchor[] = [];
-    const seen = new Set<string>();
-
-    if (rawAnchors) {
-      for (const raw of rawAnchors) {
-        const anchor = anchorFromSpan(raw, text, sentenceId);
-        if (anchor && !seen.has(anchor.anchor_hash)) {
-          anchors.push(anchor);
-          seen.add(anchor.anchor_hash);
-          anchorIndex.set(anchor.anchor_hash, anchor);
-        }
-      }
-    }
-
-    if (!anchors.length && fallback && baseAnchor) {
-      anchors.push(baseAnchor);
-    }
-
-    return anchors;
-  };
-
   const semanticRoles = shouldInclude('semantic_roles') && payload.semantic_roles
     ? (() => {
         const roles: SentenceRole[] = [];
         for (const role of payload.semantic_roles) {
-          if (!role.role) continue;
-          const span = role.span ? normalizeSpan(role.span.start, role.span.end, text.length) : null;
-          const anchors = collectAnchors(role.anchors, true);
+          if (!role.role || !role.text) continue;
+          const span = findSpan(text, role.text);
+          const anchors = span ? [makeAnchor({ sentenceId, span, text: role.text })] : undefined;
+
+          if (anchors) {
+            for (const a of anchors) anchorIndex.set(a.anchor_hash, a);
+          }
+
           roles.push({
             role: normalizeRoleLabel(role.role),
             span: span ?? undefined,
-            anchors: anchors.length ? anchors : undefined,
+            anchors,
             confidence: role.confidence,
           });
         }
@@ -422,9 +403,25 @@ const mapSentenceResponse = (
       })()
     : undefined;
 
-  const discourseFunction = shouldInclude('discourse_function')
-    ? payload.discourse_function
+  const keyPhrase = shouldInclude('key_phrase') && payload.key_phrase
+    ? (() => {
+        const phrase = payload.key_phrase;
+        const span = findSpan(text, phrase);
+        if (span) {
+          const anchor = makeAnchor({ sentenceId, span, text: phrase });
+          anchorIndex.set(anchor.anchor_hash, anchor);
+        }
+        return phrase;
+      })()
     : undefined;
+
+  // Map 'discourse_function' task to the new classification fields
+  const classification = shouldInclude('discourse_function') ? {
+    function: payload.function,
+    type: payload.type,
+    mood: payload.mood,
+    purpose: payload.purpose,
+  } : {};
 
   const dependencyLight = shouldInclude('dependency_light') && payload.dependency_light
     ? mapDependencyLight(payload.dependency_light)
@@ -436,7 +433,7 @@ const mapSentenceResponse = (
         const seen = new Set<string>();
         for (const marker of payload.modal_markers) {
           if (!marker.type || !marker.cue) continue;
-          const span = marker.span ? normalizeSpan(marker.span.start, marker.span.end, text.length) : null;
+          const span = findSpan(text, marker.cue);
           if (!span) continue;
           const normalizedType = normalizeModalType(marker.type);
           const key = `${normalizedType}:${span.start}:${span.end}:${marker.cue.toLowerCase()}`;
@@ -458,15 +455,12 @@ const mapSentenceResponse = (
       })()
     : undefined;
 
-  if (payload.anchors) {
-    collectAnchors(payload.anchors, true);
-  }
-
   const anchorList = anchorIndex.size ? sortAnchors(Array.from(anchorIndex.values())) : undefined;
 
   return {
     semantic_roles: semanticRoles,
-    discourse_function: discourseFunction ?? undefined,
+    key_phrase: keyPhrase,
+    ...classification,
     dependency_light: dependencyLight,
     modal_markers: modalMarkers,
     anchors: anchorList,
@@ -507,44 +501,17 @@ const mapDependencyLight = (raw: LLMSentenceDependencyLight): DependencyLight | 
   };
 };
 
-const anchorFromSpan = (
-  anchor: LLMSentenceAnchor,
-  sentenceText: string,
-  sentenceId: string,
-): Anchor | null => {
-  const span = normalizeSpan(anchor.start, anchor.end, sentenceText.length);
-  if (!span) return null;
-  const snippet = sentenceText.slice(span.start, span.end);
-  if (!snippet) return null;
-
-  return makeAnchor({
-    sentenceId,
-    span,
-    text: snippet,
-  });
-};
-
-const normalizeSpan = (start: number, end: number, maxLength: number) => {
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  let s = Math.floor(start);
-  let e = Math.floor(end);
-  if (e < s) {
-    const tmp = s;
-    s = e;
-    e = tmp;
-  }
-  s = Math.max(0, Math.min(s, maxLength));
-  e = Math.max(0, Math.min(e, maxLength));
-  if (e <= s) return null;
-  return { start: s, end: e };
+const findSpan = (text: string, substring: string) => {
+  const start = text.indexOf(substring);
+  if (start === -1) return null;
+  return { start, end: start + substring.length };
 };
 
 const coerceRole = (value: unknown): LLMSentenceRole | null => {
   if (!isRecord(value)) return null;
   return {
     role: asString(value.role),
-    span: coerceSpan(value.span),
-    anchors: coerceAnchorArray(value.anchors),
+    text: asString(value.text),
     confidence: asConfidence(value.confidence),
   };
 };
@@ -553,12 +520,10 @@ const coerceModalMarker = (value: unknown): LLMSentenceModalMarker | null => {
   if (!isRecord(value)) return null;
   const type = asString(value.type);
   const cue = asString(value.cue);
-  const span = coerceSpan(value.span);
-  if (!type || !cue || !span) return null;
+  if (!type || !cue) return null;
   return {
     type: normalizeModalType(type),
     cue,
-    span,
   };
 };
 
@@ -582,35 +547,6 @@ const coerceDependencyLight = (value: Record<string, unknown>): LLMSentenceDepen
     head_indexed: headIndexed,
     arcs,
   };
-};
-
-const coerceSpan = (value: unknown): LLMSentenceSpan | undefined => {
-  if (!isRecord(value)) return undefined;
-  const start = asNumber(value.start);
-  const end = asNumber(value.end);
-  if (typeof start !== 'number' || typeof end !== 'number') return undefined;
-  if (end <= start) return undefined;
-  return { start, end };
-};
-
-const coerceAnchor = (value: unknown): LLMSentenceAnchor | null => {
-  const span = coerceSpan(value);
-  if (!span) return null;
-  const sentenceId =
-    isRecord(value) && typeof value.sentence_id === 'string'
-      ? value.sentence_id
-      : undefined;
-  return { ...span, sentence_id: sentenceId };
-};
-
-const coerceAnchorArray = (value: unknown): LLMSentenceAnchor[] => {
-  if (!Array.isArray(value)) return [];
-  const anchors: LLMSentenceAnchor[] = [];
-  for (const item of value) {
-    const anchor = coerceAnchor(item);
-    if (anchor) anchors.push(anchor);
-  }
-  return anchors;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

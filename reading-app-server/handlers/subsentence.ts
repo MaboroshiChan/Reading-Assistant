@@ -12,7 +12,7 @@ import * as cache from '../services/cache';
 import { buildStableCacheKey, hashString } from './shared';
 import { buildMockSubSentenceData } from './mock/subsentenceMock';
 import { handlerLog } from './logger';
-import { json as llmJson, type LLMUsage } from '../services/llmService';
+import { json as llmJson, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
 
 const CACHE_PREFIX = 'subsentence';
 const CACHE_VERSION = 'v1';
@@ -277,14 +277,9 @@ const buildPrompt = async (req: RequestEnvelopeSubsentence): Promise<string> => 
   return sections.join('\n');
 };
 
-interface SubSentenceBuildResult {
-  data: AnalyzeSubSentenceData;
-  usage?: LLMUsage;
-}
-
 const buildSubSentenceData = async (
   req: RequestEnvelopeSubsentence,
-): Promise<SubSentenceBuildResult> => {
+): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
   if (config.useMockLLM) {
@@ -293,7 +288,19 @@ const buildSubSentenceData = async (
       sentenceId: req.payload.sentence_id,
       tasks,
     });
-    return { data: buildMockSubSentenceData(req) };
+    const mockData = buildMockSubSentenceData(req);
+    const text = JSON.stringify(mockData);
+    const stream = (async function* () {
+      yield text;
+    })();
+    return {
+      data: stream,
+      usage: Promise.resolve({
+        modelId: `mock:${config.model}`,
+        inputTokens: 0,
+        outputTokens: 0,
+      }),
+    };
   }
 
   handlerLog('subsentence', 'building LLM payload', {
@@ -310,24 +317,14 @@ const buildSubSentenceData = async (
     tasks,
     promptLength: prompt.length,
   });
-  const { object, usage } = await llmJson<unknown>(prompt);
-  handlerLog('subsentence', 'LLM response received', {
-    requestId: req.request_id,
-    sentenceId: req.payload.sentence_id,
-    promptVersion: PROMPT_VERSION,
-    model: usage?.modelId,
-    tokensIn: usage?.inputTokens,
-    tokensOut: usage?.outputTokens,
-  });
-
-  const data = mapSubSentenceResponse(object, req, tasks);
-  return { data, usage };
+  return llmJson(prompt);
 };
 
 export const handleSubSentence = async (
   req: RequestEnvelopeSubsentence,
-): Promise<ResponseEnvelopeSubSentence> => {
-  
+): Promise<CallReturn<string>> => {
+  console.log("[DEBUG] handleSubSentence starting", req.request_id);
+
   handlerLog('subsentence', 'request received', {
     requestId: req.request_id,
     mock: config.useMockLLM,
@@ -343,52 +340,66 @@ export const handleSubSentence = async (
         cacheKey,
         promptVersion: PROMPT_VERSION,
       });
-      return { ...cached, served_from: 'cache' };
+      const text = JSON.stringify({ ...cached, served_from: 'cache' });
+      const usage = await Promise.resolve(cached.usage);
+      return {
+        data: (async function* () {
+          yield text;
+        })(),
+        usage: Promise.resolve({
+          modelId: usage?.model_id,
+          inputTokens: usage?.tokens_in,
+          outputTokens: usage?.tokens_out,
+        }),
+      };
     }
   }
 
   const started = Date.now();
-  const { data, usage } = await buildSubSentenceData(req);
-  persistNormalizedSubSentence(req, data).catch((error) => {
-    handlerLog(
-      'subsentence',
-      'failed to persist normalized subsentence response',
-      {
-        requestId: req.request_id,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      'warn',
-    );
-  });
-  handlerLog('subsentence', 'data prepared', {
-    requestId: req.request_id,
-    source: config.useMockLLM ? 'mock' : 'llm',
-    units: data.analysis.units.length,
-    promptVersion: PROMPT_VERSION,
-  });
-  const response: ResponseEnvelopeSubSentence = {
-    request_id: req.request_id,
-    status: 'ok',
-    served_from: 'fresh',
-    data,
-    usage: {
-      latency_ms: Date.now() - started,
-      model_id: usage?.modelId ?? (config.useMockLLM ? `mock:${config.model}` : undefined),
-      tokens_in: usage?.inputTokens ?? (config.useMockLLM ? 0 : undefined),
-      tokens_out: usage?.outputTokens ?? (config.useMockLLM ? 0 : undefined),
-    },
-  };
+  const { data: stream, usage: usagePromise } = await buildSubSentenceData(req);
 
-  if (USE_CACHE && cacheKey) {
-    cache.set(cacheKey, response, config.cacheTtlMs);
-    handlerLog('subsentence', 'response cached', {
-      requestId: req.request_id,
-      latencyMs: Date.now() - started,
-      cacheKey,
-      promptVersion: PROMPT_VERSION,
-    });
-  }
-  return response;
+  const tappedStream = (async function* () {
+    let text = '';
+    for await (const chunk of stream) {
+      console.log("[DEBUG] subsentence chunk:", chunk.slice(0, 50));
+      text += chunk;
+      yield chunk;
+    }
+
+    // Background processing
+    try {
+      const usage = await usagePromise;
+      let data: AnalyzeSubSentenceData;
+      if (config.useMockLLM) {
+        data = JSON.parse(text) as AnalyzeSubSentenceData;
+      } else {
+        const object = extractJsonFromText(text);
+        data = mapSubSentenceResponse(object, req, buildTasks(req));
+      }
+
+      void persistNormalizedSubSentence(req, data);
+
+      const response: ResponseEnvelopeSubSentence = {
+        request_id: req.request_id,
+        status: 'ok',
+        served_from: 'fresh',
+        data,
+        usage: {
+          latency_ms: Date.now() - started,
+          model_id: usage?.modelId,
+          tokens_in: usage?.inputTokens,
+          tokens_out: usage?.outputTokens,
+        },
+      };
+      if (USE_CACHE && cacheKey) {
+        cache.set(cacheKey, response, config.cacheTtlMs);
+      }
+    } catch (error) {
+      console.warn('[subsentence] failed to process/cache response', error);
+    }
+  })();
+
+  return { data: tappedStream, usage: usagePromise };
 };
 
 interface SanitizeContext {
@@ -605,10 +616,10 @@ const sanitizeBackbone = (
 ): SubSentenceAnalysisData['backbone'] | undefined => {
   const fromRaw = isRecord(raw)
     ? {
-        subjectId: asString(raw.subjectId ?? raw.subject_id),
-        predicateId: asString(raw.predicateId ?? raw.predicate_id),
-        objectId: asString(raw.objectId ?? raw.object_id),
-      }
+      subjectId: asString(raw.subjectId ?? raw.subject_id),
+      predicateId: asString(raw.predicateId ?? raw.predicate_id),
+      objectId: asString(raw.objectId ?? raw.object_id),
+    }
     : {};
 
   const derived = {
@@ -653,9 +664,9 @@ function normalizeLegacyAnalysis(
     ctx.fragmentText ??
     (ctx.sentenceText
       ? ctx.sentenceText.slice(
-          Math.max(0, ctx.req.payload.span.start),
-          Math.max(Math.max(0, ctx.req.payload.span.start), ctx.req.payload.span.end),
-        )
+        Math.max(0, ctx.req.payload.span.start),
+        Math.max(Math.max(0, ctx.req.payload.span.start), ctx.req.payload.span.end),
+      )
       : '');
 
   const units: SubSentenceUnitData[] = [];

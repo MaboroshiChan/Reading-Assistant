@@ -1,11 +1,10 @@
 import NetworkClient from './networkClient';
+import StreamingNetworkClient from './streamingNetworkClient';
 import MessageService, { type MessageServiceDefaults } from './messageService';
-
-const baseUrl = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL
-  ?? '';
+import { config } from './config';
 
 const client = new NetworkClient({
-  baseUrl,
+  baseUrl: config.apiBaseUrl,
   apiPath: '/msg',
   defaultHeaders: {
     'X-App-Client': 'reading-app',
@@ -26,5 +25,15 @@ const defaults: MessageServiceDefaults = {
 };
 
 export const messageService = new MessageService(client, defaults);
+
+const streamingClient = new StreamingNetworkClient({
+  baseUrl: config.apiBaseUrl,
+  apiPath: '/stream',
+  defaultHeaders: {
+    'X-App-Client': 'reading-app',
+  },
+});
+
+export const streamingMessageService = new MessageService(streamingClient, defaults);
 
 export default messageService;

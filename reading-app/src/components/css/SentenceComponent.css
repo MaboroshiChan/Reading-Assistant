@@ -12,19 +12,31 @@
   background-color: transparent;
 }
 
-/* hover 效果：淡淡的彩色雾感 */
-.sentence.hovered {
-  background-color: rgba(191, 196, 253, 0.45);
-  box-shadow: 0 0 0 3px rgba(191, 196, 253, 0.28);
-  border-color: rgba(191, 196, 253, 0.4);
+/* Pending state: Gray text */
+.sentence.pending {
+  color: #9ca3af;
 }
 
-/* 点击状态：略深的高亮，有阅读感 */
+/* hover 效果：轻盈的天蓝色 */
+.sentence.hovered {
+  background-color: rgba(186, 230, 253, 0.4);
+  box-shadow: 0 0 0 3px rgba(186, 230, 253, 0.25);
+  border-color: rgba(125, 211, 252, 0.4);
+}
+
+/* 点击状态：更轻快的高亮 */
 .sentence.clicked,
 .sentence.component.clicked {
-  background-color: rgba(165, 180, 252, 0.55);
-  box-shadow: 0 0 0 4px rgba(165, 180, 252, 0.3);
-  border-color: rgba(99, 102, 241, 0.45);
+  background-color: rgba(165, 180, 252, 0.35);
+  box-shadow: 0 0 0 4px rgba(165, 180, 252, 0.2);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* New: Bridge Highlighted State */
+.sentence.component.bridge-highlighted {
+  background-color: rgba(46, 125, 50, 0.12);
+  /* Green tint matching bridge */
+  box-shadow: 0 0 0 1px rgba(46, 125, 50, 0.2);
 }
 
 /* 让文字更平滑 */
@@ -33,14 +45,12 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* 浅色模式渐层感（可选） */
+/* 浅色模式更自由的天蓝渐层 */
 @media (prefers-color-scheme: light) {
   .sentence.hovered {
-    background: linear-gradient(
-      90deg,
-      rgba(191, 196, 253, 0.58),
-      rgba(165, 180, 252, 0.5)
-    );
+    background: linear-gradient(90deg,
+        rgba(186, 230, 253, 0.5),
+        rgba(125, 211, 252, 0.4));
   }
 }
 
@@ -91,12 +101,14 @@
       20px 0 0 currentColor;
     opacity: 0.4;
   }
+
   50% {
     box-shadow:
       0 0 0 currentColor,
       10px 0 0 currentColor;
     opacity: 1;
   }
+
   100% {
     box-shadow:
       10px 0 0 currentColor,
@@ -161,4 +173,115 @@
   font-size: 10px;
   opacity: 0.7;
   align-self: center;
+}
+
+/* --- Indicator (Spinner / Check / ID) --- */
+
+.sentence-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.8em;
+  height: 1.2em;
+  margin-right: 0.15em;
+  vertical-align: middle;
+}
+
+.sentence-id {
+  font-size: 0.75em;
+  color: #9ca3af;
+  user-select: none;
+}
+
+.sentence.hovered .sentence-id {
+  color: #e2e8f0;
+}
+
+.sentence-spinner {
+  width: 1em;
+  height: 1em;
+  animation: sentence-spin 1s linear infinite;
+}
+
+.sentence-check {
+  width: 1em;
+  height: 1em;
+  color: #22c55e;
+}
+
+@keyframes sentence-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Key Phrase Highlighting */
+.sentence-key-phrase {
+  font-weight: bold;
+  color: red;
+  transition: text-shadow 0.2s ease;
+}
+
+.sentence-key-phrase:hover {
+  text-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
+}
+
+/* Tag Variants */
+.tag.variant-blue {
+  background: rgba(123, 168, 255, 0.24);
+  color: #dde6ff;
+}
+
+.tag.variant-green {
+  background: rgba(103, 232, 185, 0.22);
+  color: #d2f5ea;
+}
+
+.tag.variant-yellow {
+  background: rgba(253, 224, 138, 0.24);
+  color: #fef3c7;
+}
+
+.tag.variant-gray {
+  background: rgba(226, 232, 240, 0.18);
+  color: #e2e8f0;
+}
+
+/* Tag Dots */
+.tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+  flex: 0 0 auto;
+}
+
+.tag-dot.variant-blue {
+  background: #84a9ff;
+}
+
+.tag-dot.variant-green {
+  background: #34d399;
+}
+
+.tag-dot.variant-yellow {
+  background: #facc15;
+}
+
+.tag-dot.variant-gray {
+  background: #94a3b8;
+}
+
+/* Spinner Internals */
+.sentence-spinner-circle {
+  opacity: 0.25;
+}
+
+.sentence-spinner-path {
+  opacity: 0.75;
 }

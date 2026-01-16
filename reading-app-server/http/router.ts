@@ -2,6 +2,7 @@ import type {
   RequestEnvelope,
   ResponseEnvelope,
 } from '../../reading-app/src/services/envelopes';
+import type { CallReturn } from '../services/llmService';
 import { handleParagraph } from '../handlers/paragraph';
 import { handleSentence } from '../handlers/sentence';
 import { handleSkeleton } from '../handlers/skeleton';
@@ -38,26 +39,36 @@ const parseBody = (raw: string): { ok: true; value: unknown } | { ok: false; err
 };
 
 const dispatch = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> => {
+  let result: CallReturn<string>;
   if (envelope.type === 'analyze.skeleton.v1') {
-    return handleSkeleton(envelope);
-  }
-  if (envelope.type === 'analyze.paragraph.v1') {
-    return handleParagraph(envelope);
-  }
-  if (envelope.type === 'analyze.sentence.v1') {
-    return handleSentence(envelope);
-  }
-  if (envelope.type === 'analyze.subsentence.v1') {
+    result = await handleSkeleton(envelope);
+  } else if (envelope.type === 'analyze.paragraph.v1') {
+    result = await handleParagraph(envelope);
+  } else if (envelope.type === 'analyze.sentence.v1') {
+    result = await handleSentence(envelope);
+  } else if (envelope.type === 'analyze.subsentence.v1') {
     console.log('handle subsentence');
-    return handleSubSentence(envelope);
+    result = await handleSubSentence(envelope);
+  } else {
+    const _exhaustive: never = envelope;
+    return errorResponse(
+      UNKNOWN_REQUEST_ID,
+      'E.BAD_REQUEST',
+      400,
+      'Unsupported message type',
+    );
   }
-  const _exhaustive: never = envelope;
-  return errorResponse(
-    UNKNOWN_REQUEST_ID,
-    'E.BAD_REQUEST',
-    400,
-    'Unsupported message type',
-  );
+
+  return {
+    request_id: envelope.request_id,
+    status: 'ok',
+    stream: result.data,
+    usage: result.usage.then((u) => ({
+      tokens_in: u.inputTokens,
+      tokens_out: u.outputTokens,
+      model_id: u.modelId,
+    })),
+  } as ResponseEnvelope;
 };
 
 export const handleMsg = async (raw: string): Promise<ResponseEnvelope> => {
@@ -71,6 +82,25 @@ export const handleMsg = async (raw: string): Promise<ResponseEnvelope> => {
     return await dispatch(validation.envelope);
   } catch (error) {
     console.error('Handler error', error);
+    return errorResponse(
+      validation.envelope.request_id,
+      'E.SERVER',
+      500,
+      error instanceof Error ? error.message : 'Unexpected server error',
+    );
+  }
+};
+
+export const handleStream = async (raw: string): Promise<ResponseEnvelope> => {
+  const parsed = parseBody(raw);
+  if (!parsed.ok) return parsed.error;
+
+  const validation = validateEnvelope(parsed.value);
+  if (!validation.ok) return validation.error;
+
+  try {
+    return await dispatch(validation.envelope);
+  } catch (error) {
     return errorResponse(
       validation.envelope.request_id,
       'E.SERVER',

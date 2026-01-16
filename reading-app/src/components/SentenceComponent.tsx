@@ -8,10 +8,12 @@ import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬�
 import mapSentenceToVM, { type SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
 import mapSubSentenceToVM, { type SubsentenceVM } from "../model/viewModels/mapSubSentenceToVM";
 import SubSentenceComponent from "./SubSentenceComponent";
-import messageService from "../services/messageService.instance";
-import type { StandardContext } from "../services/envelopes";
+import { streamingMessageService } from "../services/messageService.instance";
+import type { AnalyzeSubSentenceData, StandardContext } from "../services/envelopes";
+import SentenceRelationship from "./SentenceRelationship";
 
 const FREEZE_EVENT = "hovercard:freeze";
+const HIGHLIGHT_EVENT = "sentence:highlight";
 const DEFAULT_DOC_CONTEXT: StandardContext["doc"] = {
     doc_id: "example-article",
     content_hash: "example-article#dev",
@@ -22,20 +24,25 @@ const isAbortError = (error: unknown): boolean =>
         : error instanceof Error && error.name === "AbortError";
 
 interface SentenceComponentProps {
+    id: number;
+    paragraphId: number;
     sentence: Sentence;
     onToggleFocus?: (id: number, isFocused: boolean) => void;
     onHoverChange?: (id: number, isHovered: boolean) => void;
     interactionEnabled?: boolean;
+    isBridgeHighlighted?: boolean;
 }
 
 // 鼠标坐标类型
 type Point = { x: number; y: number };
 
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
+    paragraphId,
     sentence,
     onToggleFocus,
     onHoverChange,
     interactionEnabled = true,
+    isBridgeHighlighted = false,
 }) => {
     /**
      * 逻辑：
@@ -55,6 +62,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [focusedUnitId, setFocusedUnitId] = useState<string | null>(null);
     const [sentenceVm, setSentenceVm] = useState<SentenceViewModel>(() => mapSentenceToVM(sentence));
     const [isSubsentenceActive, setIsSubsentenceActive] = useState(false);
+    const [isRemoteHovered, setIsRemoteHovered] = useState(false);
 
     // 新增：记录鼠标坐标（供 HoverCard 使用）
     const [anchor, setAnchor] = useState<Point | null>(null);
@@ -67,6 +75,15 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         window.addEventListener(FREEZE_EVENT, onFreeze as EventListener);
         return () => window.removeEventListener(FREEZE_EVENT, onFreeze as EventListener);
     }, []);
+
+    React.useEffect(() => {
+        const onHighlight = (e: Event) => {
+            const detail = (e as CustomEvent<{ pId: number; sId: number } | null>).detail ?? null;
+            setIsRemoteHovered(detail?.pId === paragraphId && detail?.sId === sentence.id);
+        };
+        window.addEventListener(HIGHLIGHT_EVENT, onHighlight as EventListener);
+        return () => window.removeEventListener(HIGHLIGHT_EVENT, onHighlight as EventListener);
+    }, [sentence.id, paragraphId]);
 
     React.useEffect(() => () => {
         if (subsentenceAbortRef.current) {
@@ -83,8 +100,20 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         setSubsentenceError(null);
         setIsLoadingSubsentence(false);
         setIsStreamingSubsentence(false);
-    }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood]);
+    }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood, sentence]);
 
+    const isPending = sentence.function === 'Pending';
+    const [showSuccess, setShowSuccess] = useState(false);
+    const prevPending = React.useRef(isPending);
+
+    React.useEffect(() => {
+        if (prevPending.current && !isPending) {
+            setShowSuccess(true);
+            const timer = setTimeout(() => setShowSuccess(false), 2000);
+            return () => clearTimeout(timer);
+        }
+        prevPending.current = isPending;
+    }, [isPending]);
 
     const handleClick = (e: MouseEvent<HTMLSpanElement>) => {
         if (!interactionEnabled) return;
@@ -136,7 +165,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (globalFrozenId !== null && globalFrozenId !== sentence.id) return;
         setIsHovered(false);
         onHoverChange?.(sentence.id, false);
-        if (!isFrozen) setAnchor(null);
+        if (!isFrozen) {
+            setAnchor(null);
+            if (isSubsentenceActive) {
+                handleStartSubsentence();
+            }
+        }
     };
 
     // 新增：持续捕获鼠标坐标
@@ -145,7 +179,6 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (!interactionEnabled) return;
         if (isFrozen || (globalFrozenId !== null && globalFrozenId !== sentence.id)) return;
         setAnchor({ x: e.clientX, y: e.clientY });
-
     };
 
     const blocked = globalFrozenId !== null && globalFrozenId !== sentence.id;
@@ -172,7 +205,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             }
             return false;
         });
-    }, [interactionEnabled]);
+    }, [interactionEnabled, sentence]);
+
+    const handleRelationshipHover = useCallback((targetId: number | null) => {
+        const detail = targetId === null ? null : { pId: paragraphId, sId: targetId };
+        window.dispatchEvent(new CustomEvent(HIGHLIGHT_EVENT, { detail }));
+    }, [paragraphId]);
 
     const handleStartSubsentence = useCallback((): void => {
         if (isSubsentenceActive) {
@@ -196,12 +234,15 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         const controller = new AbortController();
         subsentenceAbortRef.current = controller;
 
+        console.log("Starting subsentence analysis for ID:", sentence.id);
+
         setIsSubsentenceActive(true);
         setIsLoadingSubsentence(true);
         setIsStreamingSubsentence(true);
         setSubsentenceError(null);
         setSubsentenceVm(null);
         setFocusedUnitId(null);
+
 
         const tasks: Array<'micro_roles' | 'cue_interaction' | 'contrast_resolution'> = [
             "micro_roles",
@@ -224,13 +265,25 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     sentence_text: sentence.text,
                     fragment_text: sentence.text.slice(payload.span.start, payload.span.end),
                 };
-                const res = await messageService.analyzeSubSentence(
+                const res = await streamingMessageService.analyzeSubSentence(
                     payload,
                     ctx,
                     meta,
                     {
                         signal: controller.signal,
                         timeoutMs: 60_000,
+                        onPartial: (partialData) => {
+                            if (controller.signal.aborted) return;
+                            // Ensure we map whatever partial data we have so far
+                            if (partialData && typeof partialData === 'object') {
+                                const vm = mapSubSentenceToVM(partialData as AnalyzeSubSentenceData);
+                                if (vm) {
+                                    setSubsentenceVm(vm);
+                                    // Auto-focus the first unit if not already set, to give user context
+                                    setFocusedUnitId(prev => prev ?? vm.analysis.units[0]?.id ?? null);
+                                }
+                            }
+                        }
                     },
                 );
                 console.log("received from LLM")
@@ -270,49 +323,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         void run();
     }, [isSubsentenceActive, sentence]);
 
-    // ---- [A] Tag 颜色与映射（内联样式，免改 CSS） ----
     type Variant = "blue" | "green" | "yellow" | "gray";
-
-    const styleFor = (v: Variant) => {
-        switch (v) {
-            case "blue":
-                return { background: "rgba(123,168,255,0.24)", color: "#dde6ff" };
-            case "green":
-                return { background: "rgba(103,232,185,0.22)", color: "#d2f5ea" };
-            case "yellow":
-                return { background: "rgba(253,224,138,0.24)", color: "#fef3c7" };
-            default:
-                return { background: "rgba(226,232,240,0.18)", color: "#e2e8f0" };
-        }
-    };
-
-    const dotColor = (v: Variant) => {
-        switch (v) {
-            case "blue":
-                return "#84a9ff";
-            case "green":
-                return "#34d399";
-            case "yellow":
-                return "#facc15";
-            default:
-                return "#94a3b8";
-        }
-    };
-
-    const dotEl = (v: Variant) => (
-        <span
-            aria-hidden
-            style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: dotColor(v),
-                display: "inline-block",
-                marginRight: 6,
-                flex: "0 0 auto",
-            }}
-        />
-    );
 
     // 简单规则：你可按需扩展
     const fnVariant = (fn: string): Variant => {
@@ -327,13 +338,31 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const className = [
         "sentence",
         "component",
-        interactionEnabled && isHovered && !blocked ? "hovered" : "",
+        isPending ? "pending" : "",
+        interactionEnabled && (isRemoteHovered || (isHovered && !blocked)) ? "hovered" : "",
         interactionEnabled && isClicked ? "clicked" : "",
+        interactionEnabled && isBridgeHighlighted ? "bridge-highlighted" : "",
     ]
         .filter(Boolean)
         .join(" ");
     const shouldShowSubsentence =
         isSubsentenceActive || isLoadingSubsentence || subsentenceError !== null || subsentenceVm !== null;
+
+    const renderContent = () => {
+        const keyPhrase = sentence.key_phrase;
+        if (!keyPhrase || typeof keyPhrase !== "string" || !sentence.text.includes(keyPhrase)) {
+            return sentence.text;
+        }
+        const parts = sentence.text.split(keyPhrase);
+        return parts.map((part, index) => (
+            <React.Fragment key={index}>
+                {part}
+                {index < parts.length - 1 && (
+                    <span className="sentence-key-phrase">{keyPhrase}</span>
+                )}
+            </React.Fragment>
+        ));
+    };
 
     return (
         <>
@@ -349,7 +378,16 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 className={className}
                 data-sentence-id={sentence.id}
             >
-                {sentence.text}
+                <span className="sentence-indicator" contentEditable={false}>
+                    {isPending ? (
+                        <Spinner />
+                    ) : showSuccess ? (
+                        <CheckMark />
+                    ) : (
+                        <span className="sentence-id">{sentence.id}</span>
+                    )}
+                </span>
+                {renderContent()}
             </span>
 
             <SentenceHoverCard
@@ -419,8 +457,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                             const roleLabel = sentenceVm.roleLabel ?? sentence.function;
                             const v = fnVariant(roleLabel);
                             return (
-                                <span className="tag" style={styleFor(v)}>
-                                    {dotEl(v)}
+                                <span className={`tag variant-${v}`}>
+                                    <span className={`tag-dot variant-${v}`} aria-hidden />
                                     {roleLabel}
                                 </span>
                             );
@@ -434,8 +472,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                                 ? ` · ${sentence.relation.type} → #${sentence.relation.targetSentenceId}`
                                 : "";
                             return (
-                                <span className="tag" style={styleFor(v)}>
-                                    {dotEl(v)}
+                                <span className={`tag variant-${v}`}>
+                                    <span className={`tag-dot variant-${v}`} aria-hidden />
                                     {structureLabel}
                                     {relationPiece}
                                 </span>
@@ -447,8 +485,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                             const moodLabel = sentenceVm.mood ?? sentence.mood;
                             const v = moodVariant(moodLabel);
                             return (
-                                <span className="tag" style={styleFor(v)}>
-                                    {dotEl(v)}
+                                <span className={`tag variant-${v}`}>
+                                    <span className={`tag-dot variant-${v}`} aria-hidden />
                                     {moodLabel}
                                 </span>
                             );
@@ -458,12 +496,33 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     <div className="purpose">
                         Explanation:
                         <br />
-                            {sentence.purpose}
+                        {sentence.purpose}
                     </div>
+                    <SentenceRelationship
+                        current_id={sentence.id}
+                        prev_id={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId < sentence.id ? sentence.relation.targetSentenceId : sentence.id - 1}
+                        next_id={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId > sentence.id ? sentence.relation.targetSentenceId : sentence.id + 1}
+                        prev={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId < sentence.id ? sentence.relation.type : ""}
+                        next={sentence.relation?.targetSentenceId !== undefined && sentence.relation.targetSentenceId > sentence.id ? sentence.relation.type : ""}
+                        onHoverSentence={handleRelationshipHover}
+                    />
                 </div>
             </SentenceHoverCard>
         </>
     );
 };
+
+const Spinner = () => (
+    <svg className="sentence-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="sentence-spinner-circle" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="sentence-spinner-path" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+);
+
+const CheckMark = () => (
+    <svg className="sentence-check" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+);
 
 export default SentenceComponent;

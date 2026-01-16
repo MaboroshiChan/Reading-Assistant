@@ -74,10 +74,18 @@ export class MessageService {
     this.defaults = defaults;
   }
 
+  getClient(): NetworkClient {
+    return this.client;
+  }
+
+  getDefaults(): MessageServiceDefaults {
+    return this.defaults;
+  }
+
   /** Generic sender (escape hatch) */
-  async send<TRes extends ResponseEnvelope, TFrame = unknown>(
+  async send<TRes extends ResponseEnvelope, TFrame = unknown, TPartial = unknown>(
     envelope: RequestEnvelope,
-    sendOptions?: SendOptions<TFrame>,
+    sendOptions?: SendOptions<TFrame, TPartial>,
   ): Promise<TRes> {
     // Fill defaults
     if (!('api_version' in envelope)) {
@@ -97,7 +105,12 @@ export class MessageService {
       envelope.context = buildContext(envelope.context, this.defaults);
     }
 
-    const res = await this.client.send<TRes, RequestEnvelope, TFrame>(envelope, sendOptions);
+    // Automatically enable streaming mode if a frame callback is provided
+    if (sendOptions && ((sendOptions).onFrame || (sendOptions).onPartial)) {
+      envelope.stream = true;
+    }
+
+    const res = await this.client.send<TRes, RequestEnvelope, TFrame, TPartial>(envelope, sendOptions);
     return res;
   }
 
@@ -168,9 +181,10 @@ export class MessageService {
     payload: AnalyzeSubSentencePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
     meta?: Record<string, unknown>,
-    sendOptions?: SendOptions<Partial<AnalyzeSubSentenceData>>
+    options?: SendOptions<unknown, Partial<AnalyzeSubSentenceData>>,
   ): Promise<ResponseEnvelopeSubSentence> {
-    const env: RequestEnvelope = {
+    console.log("messageService.analyzeSubSentence called", { payload });
+    const envelope: RequestEnvelope = {
       type: 'analyze.subsentence.v1',
       api_version: this.defaults.apiVersion ?? 'v1',
       request_id: crypto.randomUUID(),
@@ -182,8 +196,8 @@ export class MessageService {
       meta,
     } as RequestEnvelope;
 
-    console.log("analyzeSubSentence");
-    return this.send<ResponseEnvelopeSubSentence, Partial<AnalyzeSubSentenceData>>(env, sendOptions);
+    console.log("analyzeSubSentence.sending", envelope);
+    return this.send<ResponseEnvelopeSubSentence, unknown, Partial<AnalyzeSubSentenceData>>(envelope, options);
   }
 
   /** Health check helper that proxies through to the underlying NetworkClient. */

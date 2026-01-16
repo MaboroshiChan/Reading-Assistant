@@ -16,7 +16,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GenerateContentStreamResult, GoogleGenerativeAI } from '@google/generative-ai';
 
 // -----------------------------
 // Public types
@@ -36,18 +36,15 @@ export interface LLMUsage {
   modelId?: string;
 }
 
+export interface CallReturn<T> {
+  data: AsyncIterable<T>;
+  usage: Promise<LLMUsage>;
+}
+
 export interface CompleteResult {
   text: string;
   usage: LLMUsage;
 }
-
-export interface JsonResult<T> {
-  object: T;
-  usage: LLMUsage;
-}
-
-// Optional runtime validator signature (e.g., from Zod: (u) => schema.parse(u))
-export type Validator<T> = (u: unknown) => T;
 
 // -----------------------------
 // Public API
@@ -55,7 +52,7 @@ export type Validator<T> = (u: unknown) => T;
 
 /** Plain-text completion */
 export async function complete(prompt: string, opts: LLMOptions = {}): Promise<CompleteResult> {
-  const { data, usage } = await callLLM<string>({
+  const { data, usage } = await callLLM({
     prompt,
     responseAs: 'text',
     model: opts.model ?? config.model,
@@ -65,16 +62,17 @@ export async function complete(prompt: string, opts: LLMOptions = {}): Promise<C
     signal: opts.signal,
   });
 
-  return { text: data, usage };
+  let text = '';
+  for await (const chunk of data) {
+    text += chunk;
+  }
+
+  return { text, usage: await usage };
 }
 
 /** JSON-structured completion. If you pass a validator, it will be applied before returning. */
-export async function json<T>(
-  prompt: string,
-  validator?: Validator<T>,
-  opts: LLMOptions = {}
-): Promise<JsonResult<T>> {
-  const { data, usage } = await callLLM({
+export async function json(prompt: string, opts: LLMOptions = {}): Promise<CallReturn<string>> {
+  return callLLM({
     prompt,
     responseAs: 'json',
     model: opts.model ?? config.model,
@@ -83,11 +81,6 @@ export async function json<T>(
     timeoutMs: opts.timeoutMs ?? config.timeoutMs,
     signal: opts.signal,
   });
-
-  // `data` is unknown until we validate or assert
-  const parsed: unknown = data;
-  const object: T = validator ? validator(parsed) : (parsed as T);
-  return { object, usage };
 }
 
 // -----------------------------
@@ -104,17 +97,15 @@ interface CallArgs {
   signal?: AbortSignal;
 }
 
-interface CallReturn<T> { data: T; usage: LLMUsage }
-
 const LOG_DIR = path.join(__dirname, '..', 'log');
 const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
 const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
 
-async function callLLM<T extends string | unknown>(args: CallArgs): Promise<CallReturn<T>> {
+async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
   await logPromptIfDebug(args);
 
   if (config.useMockLLM) {
-    return callMockLLM<T>(args);
+    return callMockLLM(args);
   }
 
   // Note: The Google Generative AI Node SDK does not currently expose a simple AbortSignal hook
@@ -136,39 +127,43 @@ async function callLLM<T extends string | unknown>(args: CallArgs): Promise<Call
       },
     });
 
-    const result = await model.generateContent(args.prompt);
-    const response = await result.response;
-    const text = response.text();
+    console.log("LLLLLLLLLLLLLM");
+    
+    const result:GenerateContentStreamResult = await model.generateContentStream(args.prompt);
 
-    if (config.debugMode) {
-      console.log(
-        JSON.stringify({
-          level: 'info',
-          scope: 'llm-service',
-          message: 'LLM response received',
-          model: args.model,
-          responseAs: args.responseAs,
-          inputTokens: response.usageMetadata?.promptTokenCount,
-          outputTokens: response.usageMetadata?.candidatesTokenCount,
-          timestamp: new Date().toISOString(),
-        }),
-      );
-    }
-    void persistLLMResponse(args, text);
-
-    const usage: LLMUsage = {
-      inputTokens: response.usageMetadata?.promptTokenCount,
-      outputTokens: response.usageMetadata?.candidatesTokenCount,
+    const usagePromise = result.response.then(res => ({
+      inputTokens: res.usageMetadata?.promptTokenCount || 0,
+      outputTokens: res.usageMetadata?.candidatesTokenCount || 0,
       modelId: args.model,
-    };
+    }));
 
-    if (args.responseAs === 'text') {
-      return { data: text as T, usage };
-    }
+    const dataStream = (async function* () {
+      let fullText = '';
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        fullText += text;
+        yield text;
+      }
 
-    // responseAs === 'json'
-    const obj = extractJsonFromText(text);
-    return { data: obj as T, usage };
+      if (config.debugMode) {
+        const u = await usagePromise;
+        console.log(
+          JSON.stringify({
+            level: 'info',
+            scope: 'llm-service',
+            message: 'LLM response received',
+            model: args.model,
+            responseAs: args.responseAs,
+            inputTokens: u.inputTokens,
+            outputTokens: u.outputTokens,
+            timestamp: new Date().toISOString(),
+          }),
+        );
+      }
+      void persistLLMResponse(args, fullText);
+    })();
+
+    return { data: dataStream, usage: usagePromise };
   } catch (error: unknown) {
     throw normalizeError(error);
   }
@@ -198,7 +193,7 @@ async function logPromptIfDebug(args: CallArgs): Promise<void> {
   }
 }
 
-async function callMockLLM<T extends string | unknown>(args: CallArgs): Promise<CallReturn<T>> {
+async function callMockLLM(args: CallArgs): Promise<CallReturn<string>> {
   if (args.signal?.aborted) {
     throw new Error('Mock LLM call aborted');
   }
@@ -209,17 +204,23 @@ async function callMockLLM<T extends string | unknown>(args: CallArgs): Promise<
     outputTokens: 0,
   };
 
+  let text: string;
   if (args.responseAs === 'text') {
-    const reply = `[mock:${args.model}] ${truncate(args.prompt.replace(/\s+/g, ' ').trim(), 200)}`;
-    return { data: reply as T, usage };
+    text = `[mock:${args.model}] ${truncate(args.prompt.replace(/\s+/g, ' ').trim(), 200)}`;
+  } else {
+    const json = extractJsonFromPrompt(args.prompt) ?? {
+      mock: true,
+      model: args.model,
+      prompt_preview: truncate(args.prompt, 200),
+    };
+    text = JSON.stringify(json, null, 2);
   }
 
-  const json = extractJsonFromPrompt(args.prompt) ?? {
-    mock: true,
-    model: args.model,
-    prompt_preview: truncate(args.prompt, 200),
-  };
-  return { data: json as T, usage };
+  const data = (async function* () {
+    yield text;
+  })();
+
+  return { data, usage: Promise.resolve(usage) };
 }
 
 async function persistLLMResponse(args: CallArgs, text: string): Promise<void> {
@@ -251,7 +252,7 @@ async function persistLLMResponse(args: CallArgs, text: string): Promise<void> {
 }
 
 // Extract JSON value (object) from text output
-function extractJsonFromText(text: string): unknown {
+export function extractJsonFromText(text: string): unknown {
   const trimmed = text.trim();
   if (!trimmed) return {};
   try {

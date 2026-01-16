@@ -146,8 +146,8 @@ const sanitizeAnalysis = (analysis?: SubSentenceAnalysisData): SubSentenceAnalys
   const text = analysis?.text ?? '';
   const units = Array.isArray(analysis?.units)
     ? analysis.units
-        .map((unit) => sanitizeUnit(unit))
-        .filter((unit): unit is SubUnit => unit !== null)
+      .map((unit) => sanitizeUnit(unit))
+      .filter((unit): unit is SubUnit => unit !== null)
     : [];
 
   const finalUnits = units.length ? units : [buildFallbackUnit(text || sentenceId)];
@@ -168,15 +168,15 @@ const sanitizeAnalysis = (analysis?: SubSentenceAnalysisData): SubSentenceAnalys
     sentenceId,
     text,
     units: finalUnits,
-    ...(backbone ? { backbone } : {}),
-    ...(legend ? { legend } : {}),
-    ...(layoutHint ? { layoutHint } : {}),
-    ...(analyzedAt ? { analyzedAt } : {}),
-    ...(version !== undefined ? { version } : {}),
-    ...(confidence !== undefined ? { confidence } : {}),
-    ...(issues ? { issues } : {}),
-    ...(annotations ? { annotations } : {}),
-    ...(meta ? { meta } : {}),
+    backbone, // Allow undefined
+    legend,   // Allow undefined
+    layoutHint, // Allow undefined 
+    analyzedAt, // Allow undefined
+    version, // Allow undefined
+    confidence, // Allow undefined
+    issues, // Allow undefined
+    annotations, // Allow undefined
+    meta, // Allow undefined
   };
 };
 
@@ -196,8 +196,8 @@ const sanitizeUnit = (unit?: SubSentenceUnitData | null): SubUnit | null => {
 
   const children = Array.isArray(unit.children)
     ? unit.children
-        .map((child) => sanitizeUnit(child))
-        .filter((child): child is SubUnit => child !== null)
+      .map((child) => sanitizeUnit(child))
+      .filter((child): child is SubUnit => child !== null)
     : undefined;
 
   const clause = unit.clause ? sanitizeAnalysis(unit.clause) : undefined;

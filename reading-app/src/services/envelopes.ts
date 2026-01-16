@@ -229,6 +229,7 @@ export interface AnalyzeSentenceData {
   modal_markers?: ModalMarker[];
   anchors?: Anchor[];
   confidence?: number;
+  key_phrase?: string;
 }
 
 // 4) analyze.subsentence.v1
@@ -316,6 +317,7 @@ export interface StandardEnvelopeBase {
   // auth is usually added by transport, not included here
   locale?: string;              // e.g., "zh-CN"
   cache_hint?: CacheHint;       // default: "prefer"
+  stream?: boolean;             // signal to server to stream partial results
   context?: StandardContext;    // standardized context block
   meta?: Record<string, unknown>;
   timestamp?: ISO8601;          // client-side timestamp for audit
@@ -355,9 +357,10 @@ export interface ResponseEnvelopeBase {
   status: EnvelopeStatus;
   served_from?: 'fresh' | 'cache';
   error?: EnvelopeError;
-  usage?: UsageMeta;        
+  usage?: UsageMeta | Promise<UsageMeta>;
   etag?: string;            // for client-side caching of results
   cursor?: string;          // reserved for future incremental sync
+  stream?: AsyncIterable<string>;
 }
 
 export interface ResponseEnvelopeSkeleton extends ResponseEnvelopeBase {

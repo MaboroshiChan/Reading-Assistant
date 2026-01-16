@@ -11,8 +11,8 @@ export interface Sentence {
   function: string;         // e.g., Premise, Conclusion
   type: string;             // e.g., Declarative, Interrogative
   purpose: string;          // Short natural language explanation
-  mood: string;             // e.g., Indicative, Subjunctive
+  mood: string;             // e.g., Indicative, Subjunctive 
   relation?: SentenceRelation;
-  text: string
+  text: string;
+  key_phrase?: string;
 }
-

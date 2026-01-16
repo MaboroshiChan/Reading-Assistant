@@ -8,7 +8,7 @@ import type {
 } from '../../reading-app/src/services/envelopes';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
-import { json as llmJson, type LLMUsage } from '../services/llmService';
+import { json as llmJson, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
 import {
   buildStableCacheKey,
   makeAnchor,
@@ -60,11 +60,6 @@ interface LLMParagraphResponse {
   claims?: LLMParagraphClaim[];
   anchors?: LLMParagraphAnchor[];
   confidence?: number;
-}
-
-interface ParagraphBuildResult {
-  data: AnalyzeParagraphData;
-  usage?: LLMUsage;
 }
 
 const buildCacheKey = (req: RequestEnvelopeParagraph): string => {
@@ -142,7 +137,7 @@ const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
     `Prompt Version: ${PROMPT_VERSION}`,
     `Requested tasks: ${tasks.join(', ')}`,
     '',
-    'Paragraph text (0-based offsets):',
+    'Paragraph text:',
     '```text',
     req.payload.paragraph_text,
     '```',
@@ -163,7 +158,7 @@ const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
 
 const buildParagraphData = async (
   req: RequestEnvelopeParagraph,
-): Promise<ParagraphBuildResult> => {
+): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
   if (config.useMockLLM) {
@@ -173,7 +168,19 @@ const buildParagraphData = async (
       promptVersion: PROMPT_VERSION,
       mock: true,
     });
-    return { data: await buildMockParagraphData(req) };
+    const mockData = await buildMockParagraphData(req);
+    const text = JSON.stringify(mockData);
+    const stream = (async function* () {
+      yield text;
+    })();
+    return {
+      data: stream,
+      usage: Promise.resolve({
+        modelId: `mock:${config.model}`,
+        inputTokens: 0,
+        outputTokens: 0,
+      }),
+    };
   }
 
   handlerLog('paragraph', 'building LLM prompt', {
@@ -191,34 +198,12 @@ const buildParagraphData = async (
     prompt,
     mock: false,
   });
-  const { object, usage } = await llmJson(prompt, coerceParagraphResponse);
-  handlerLog('paragraph', 'LLM response received', {
-    requestId: req.request_id,
-    model: usage?.modelId,
-    tokensIn: usage?.inputTokens,
-    tokensOut: usage?.outputTokens,
-    promptVersion: PROMPT_VERSION,
-  });
-  const data = mapParagraphResponse(object, req);
-  const hasContent =
-    Boolean(object.summary) ||
-    (object.roles?.length ?? 0) > 0 ||
-    (object.rhetoric?.length ?? 0) > 0 ||
-    (object.claims?.length ?? 0) > 0;
-  if (!hasContent) {
-    handlerLog(
-      'paragraph',
-      'LLM payload missing expected fields; using fallbacks',
-      { requestId: req.request_id, promptVersion: PROMPT_VERSION },
-      'warn',
-    );
-  }
-  return { data, usage };
+  return llmJson(prompt);
 };
 
 export const handleParagraph = async (
   req: RequestEnvelopeParagraph,
-): Promise<ResponseEnvelopeParagraph> => {
+): Promise<CallReturn<string>> => {
   handlerLog('paragraph', 'request received', {
     requestId: req.request_id,
     paragraphId: req.payload.paragraph_id,
@@ -233,40 +218,60 @@ export const handleParagraph = async (
       cacheKey,
       promptVersion: PROMPT_VERSION,
     });
-    return { ...cached, served_from: 'cache' };
+    const text = JSON.stringify({ ...cached, served_from: 'cache' });
+    const usage = await Promise.resolve(cached.usage);
+    return {
+      data: (async function* () {
+        yield text;
+      })(),
+      usage: Promise.resolve({
+        modelId: usage?.model_id,
+        inputTokens: usage?.tokens_in,
+        outputTokens: usage?.tokens_out,
+      }),
+    };
   }
 
   const started = Date.now();
-  const { data, usage } = await buildParagraphData(req);
-  handlerLog('paragraph', 'data prepared', {
-    requestId: req.request_id,
-    source: config.useMockLLM ? 'mock' : 'llm',
-    promptVersion: PROMPT_VERSION,
-    summaryLength: data.summary?.length ?? 0,
-    roles: data.roles?.length ?? 0,
-    claims: data.claims?.length ?? 0,
-  });
-  const response: ResponseEnvelopeParagraph = {
-    request_id: req.request_id,
-    status: 'ok',
-    served_from: 'fresh',
-    data,
-    usage: {
-      latency_ms: Date.now() - started,
-      model_id: usage?.modelId ?? (config.useMockLLM ? `mock:${config.model}` : undefined),
-      tokens_in: usage?.inputTokens ?? (config.useMockLLM ? 0 : undefined),
-      tokens_out: usage?.outputTokens ?? (config.useMockLLM ? 0 : undefined),
-    },
-  };
+  const { data: stream, usage: usagePromise } = await buildParagraphData(req);
 
-  cache.set(cacheKey, response, config.cacheTtlMs);
-  handlerLog('paragraph', 'response cached', {
-    requestId: req.request_id,
-    latencyMs: Date.now() - started,
-    cacheKey,
-    promptVersion: PROMPT_VERSION,
-  });
-  return response;
+  const tappedStream = (async function* () {
+    let text = '';
+    for await (const chunk of stream) {
+      text += chunk;
+      yield chunk;
+    }
+
+    // Background processing
+    try {
+      const usage = await usagePromise;
+      let data: AnalyzeParagraphData;
+      if (config.useMockLLM) {
+        data = JSON.parse(text) as AnalyzeParagraphData;
+      } else {
+        const object = coerceParagraphResponse(extractJsonFromText(text));
+        data = mapParagraphResponse(object, req);
+      }
+
+      const response: ResponseEnvelopeParagraph = {
+        request_id: req.request_id,
+        status: 'ok',
+        served_from: 'fresh',
+        data,
+        usage: {
+          latency_ms: Date.now() - started,
+          model_id: usage?.modelId,
+          tokens_in: usage?.inputTokens,
+          tokens_out: usage?.outputTokens,
+        },
+      };
+      cache.set(cacheKey, response, config.cacheTtlMs);
+    } catch (error) {
+      console.warn('[paragraph] failed to cache response', error);
+    }
+  })();
+
+  return { data: tappedStream, usage: usagePromise };
 };
 
 export { buildPrompt as buildParagraphPrompt, buildTasks as buildParagraphTasks };
