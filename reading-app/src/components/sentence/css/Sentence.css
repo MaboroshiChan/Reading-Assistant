@@ -285,3 +285,12 @@
 .sentence-spinner-path {
   opacity: 0.75;
 }
+
+/* Topic Sentence */
+.sentence.component.topic-sentence-explicit {
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: var(--accent-color, #007acc);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+}

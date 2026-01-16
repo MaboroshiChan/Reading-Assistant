@@ -98,6 +98,10 @@ export const buildMockParagraphData = async (
     rhetoric,
     claims,
     anchors: [paragraphAnchor],
+    topic_sentence: {
+      is_implicit: false,
+      text: fragments[0]?.text ?? text,
+    },
     confidence: 0.6,
   };
 

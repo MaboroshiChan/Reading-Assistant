@@ -9,6 +9,7 @@ export interface ParagraphViewModel {
   summary?: string;
   roles?: string[];
   confidence?: number;
+  topicSentence?: { is_implicit: boolean; text: string };
 }
 
 export const mapParagraphToVM = (
@@ -23,6 +24,7 @@ export const mapParagraphToVM = (
     summary: analysis?.summary,
     roles: analysis?.roles?.map((role) => role.role).filter(Boolean),
     confidence: analysis?.confidence,
+    topicSentence: paragraph.topicSentence ?? analysis?.topic_sentence,
   };
 };
 

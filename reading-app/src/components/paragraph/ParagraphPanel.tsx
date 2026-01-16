@@ -24,7 +24,13 @@ export const ParagraphPanel: React.FC<ParagraphPanelProps> = ({ vm }) => {
                         {vm.centralIdea}
                     </div>
                 )}
-                {!vm.centralIdea && !vm.structureType && !vm.function && (
+                {vm.topicSentence && (
+                    <div style={{ marginTop: '8px' }}>
+                        <span className="paragraph-label">Topic Sentence ({vm.topicSentence.is_implicit ? 'Implicit' : 'Explicit'}):</span>
+                        {vm.topicSentence.text}
+                    </div>
+                )}
+                {!vm.centralIdea && !vm.structureType && !vm.function && !vm.topicSentence && (
                     <span className="paragraph-label">No analysis data available.</span>
                 )}
             </div>

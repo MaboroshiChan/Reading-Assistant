@@ -13,6 +13,9 @@ export default interface Paragraph {
 
   /** 可选：段落整体功能，如“引入”、“论证”、“结论”等 */
   function?: 'Introduction' | 'Premise' | 'Conclusion' | 'Evidence' | string;
+
+  /** Topic Sentence data */
+  topicSentence?: { is_implicit: boolean; text: string };
 }
 
 export const preprocessingFromText = (text: string, id: number): Paragraph => {

@@ -206,6 +206,7 @@ export interface AnalyzeParagraphData {
   rhetoric?: ParagraphRhetoric[];
   claims?: ParagraphClaim[];
   anchors?: Anchor[];
+  topic_sentence?: { is_implicit: boolean; text: string };
   confidence?: number; // aggregate
 }
 

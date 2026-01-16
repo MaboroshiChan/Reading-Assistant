@@ -20,7 +20,7 @@ import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'paragraph';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'paragraph.v1';
+const PROMPT_VERSION = 'paragraph.v1.1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
 const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims'];
 
@@ -59,6 +59,7 @@ interface LLMParagraphResponse {
   rhetoric?: LLMParagraphRhetoric[];
   claims?: LLMParagraphClaim[];
   anchors?: LLMParagraphAnchor[];
+  topic_sentence?: { is_implicit: boolean; text: string };
   confidence?: number;
 }
 
@@ -282,21 +283,24 @@ const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
     summary: asString(value.summary),
     roles: Array.isArray(value.roles)
       ? value.roles
-          .map(coerceRole)
-          .filter((role): role is LLMParagraphRole => role !== null)
+        .map(coerceRole)
+        .filter((role): role is LLMParagraphRole => role !== null)
       : undefined,
     rhetoric: Array.isArray(value.rhetoric)
       ? value.rhetoric
-          .map(coerceRhetoric)
-          .filter((item): item is LLMParagraphRhetoric => item !== null)
+        .map(coerceRhetoric)
+        .filter((item): item is LLMParagraphRhetoric => item !== null)
       : undefined,
     claims: Array.isArray(value.claims)
       ? value.claims
-          .map(coerceClaim)
-          .filter((item): item is LLMParagraphClaim => item !== null)
+        .map(coerceClaim)
+        .filter((item): item is LLMParagraphClaim => item !== null)
       : undefined,
     anchors: Array.isArray(value.anchors)
       ? coerceAnchorArray(value.anchors)
+      : undefined,
+    topic_sentence: isRecord(value.topic_sentence) && typeof value.topic_sentence.text === 'string' && typeof value.topic_sentence.is_implicit === 'boolean'
+      ? { is_implicit: value.topic_sentence.is_implicit, text: value.topic_sentence.text }
       : undefined,
     confidence: asConfidence(value.confidence),
   };
@@ -317,10 +321,10 @@ const mapParagraphResponse = (
   const baseAnchor =
     text.length > 0
       ? makeAnchor({
-          paragraphId,
-          span: { start: 0, end: text.length },
-          text,
-        })
+        paragraphId,
+        span: { start: 0, end: text.length },
+        text,
+      })
       : null;
 
   if (baseAnchor) {
@@ -354,81 +358,81 @@ const mapParagraphResponse = (
 
   const roles = shouldInclude('roles') && payload.roles
     ? (() => {
-        const items = payload.roles
-          .map((role) => {
-            const anchors = collectAnchors(role.anchors);
-            if (!role.role) return null;
-            return {
-              role: role.role,
-              anchors,
-              confidence: role.confidence,
-            };
-          })
-          .filter((role): role is { role: string; anchors: Anchor[]; confidence: number | undefined } => role !== null)
-          .map((role) => ({
+      const items = payload.roles
+        .map((role) => {
+          const anchors = collectAnchors(role.anchors);
+          if (!role.role) return null;
+          return {
             role: role.role,
-            anchors: role.anchors,
+            anchors,
             confidence: role.confidence,
-          }));
-        return items.length ? items : undefined;
-      })()
+          };
+        })
+        .filter((role): role is { role: string; anchors: Anchor[]; confidence: number | undefined } => role !== null)
+        .map((role) => ({
+          role: role.role,
+          anchors: role.anchors,
+          confidence: role.confidence,
+        }));
+      return items.length ? items : undefined;
+    })()
     : undefined;
 
   const rhetoric = shouldInclude('rhetoric') && payload.rhetoric
     ? (() => {
-        const items = payload.rhetoric
-          .map((item) => {
-            const label = item.label;
-            if (!label) return null;
-            return {
-              label,
-              evidence_anchors: collectAnchors(item.evidence_anchors),
-              confidence: item.confidence,
-            };
-          })
-          .filter(
-            (entry): entry is {
-              label: string;
-              evidence_anchors: Anchor[];
-              confidence: number | undefined;
-            } => entry !== null,
-          )
-          .map((entry) => ({
-            label: entry.label,
-            evidence_anchors: entry.evidence_anchors.length ? entry.evidence_anchors : undefined,
-            confidence: entry.confidence,
-          }));
-        return items.length ? items : undefined;
-      })()
+      const items = payload.rhetoric
+        .map((item) => {
+          const label = item.label;
+          if (!label) return null;
+          return {
+            label,
+            evidence_anchors: collectAnchors(item.evidence_anchors),
+            confidence: item.confidence,
+          };
+        })
+        .filter(
+          (entry): entry is {
+            label: string;
+            evidence_anchors: Anchor[];
+            confidence: number | undefined;
+          } => entry !== null,
+        )
+        .map((entry) => ({
+          label: entry.label,
+          evidence_anchors: entry.evidence_anchors.length ? entry.evidence_anchors : undefined,
+          confidence: entry.confidence,
+        }));
+      return items.length ? items : undefined;
+    })()
     : undefined;
 
   const claims = shouldInclude('claims') && payload.claims
     ? (() => {
-        const items = payload.claims
-          .map((claim) => {
-            const textValue = claim.text;
-            if (!textValue) return null;
-            const anchors = collectAnchors(claim.anchors, true);
-            const entityLinks = claim.entity_links?.filter((id) => typeof id === 'string' && id.trim());
-            return {
-              text: textValue,
-              polarity: normalizePolarity(claim.polarity),
-              support: normalizeSupport(claim.support),
-              anchors,
-              entity_links: entityLinks && entityLinks.length ? entityLinks : undefined,
-            };
-          })
-          .filter(
-            (entry): entry is {
-              text: string;
-              polarity: 'pos' | 'neg' | 'nu';
-              support: 'strong' | 'weak' | 'unspecified';
-              anchors: Anchor[];
-              entity_links: string[] | undefined;
-            } => entry !== null,
-          );
-        return items.length ? items : undefined;
-      })()
+      const items = payload.claims
+        .map((claim) => {
+          const textValue = claim.text;
+          if (!textValue) return null;
+          const anchors = collectAnchors(claim.anchors, true);
+          const entityLinks = claim.entity_links?.filter((id) => typeof id === 'string' && id.trim());
+          return {
+            text: textValue,
+            polarity: normalizePolarity(claim.polarity),
+            support: normalizeSupport(claim.support),
+            anchors,
+            entity_links: entityLinks && entityLinks.length ? entityLinks : undefined,
+          };
+        })
+        .filter(
+          (entry): entry is {
+            text: string;
+            polarity: 'pos' | 'neg' | 'nu';
+            support: 'strong' | 'weak' | 'unspecified';
+            anchors: Anchor[];
+            entity_links: string[] | undefined;
+          } => entry !== null,
+        );
+      return items.length ? items : undefined;
+    })()
     : undefined;
 
   if (payload.anchors) {
@@ -447,6 +451,7 @@ const mapParagraphResponse = (
     rhetoric,
     claims,
     anchors: anchorList,
+    topic_sentence: payload.topic_sentence,
     confidence: payload.confidence,
   };
 };
@@ -558,8 +563,8 @@ const coerceClaim = (value: unknown): LLMParagraphClaim | null => {
     anchors: coerceAnchorArray(value.anchors),
     entity_links: Array.isArray(value.entity_links)
       ? value.entity_links
-          .map(asString)
-          .filter((id): id is string => typeof id === 'string')
+        .map(asString)
+        .filter((id): id is string => typeof id === 'string')
       : undefined,
   };
 };

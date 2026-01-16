@@ -31,6 +31,7 @@ interface SentenceComponentProps {
     onHoverChange?: (id: number, isHovered: boolean) => void;
     interactionEnabled?: boolean;
     isBridgeHighlighted?: boolean;
+    isTopicSentence?: boolean;
 }
 
 // 鼠标坐标类型
@@ -43,6 +44,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     onHoverChange,
     interactionEnabled = true,
     isBridgeHighlighted = false,
+    isTopicSentence = false,
 }) => {
     /**
      * 逻辑：
@@ -342,6 +344,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         interactionEnabled && (isRemoteHovered || (isHovered && !blocked)) ? "hovered" : "",
         interactionEnabled && isClicked ? "clicked" : "",
         interactionEnabled && isBridgeHighlighted ? "bridge-highlighted" : "",
+        isTopicSentence ? "topic-sentence-explicit" : "",
     ]
         .filter(Boolean)
         .join(" ");

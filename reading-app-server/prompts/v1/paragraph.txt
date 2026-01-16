@@ -37,6 +37,10 @@ are not requested in the task list):
       "entity_links": ["optional-id"]
     }
   ],
+  "topic_sentence": {
+    "is_implicit": boolean,
+    "text": "string"
+  }
   "confidence": 0.0
 }
 ```
@@ -48,6 +52,9 @@ General instructions:
 - `rhetoric` captures discourse labels (statement, question, contrast, concession).
 - `claims` are factual or opinionated assertions with polarity and support.
 - `relation` describes logical connection to another sentence (targetSentenceId is 1-based).
+- `topic_sentence` is the main topic of the paragraph.
+  - `is_implicit` is true if the topic sentence is not explicitly stated.
+  - `text` is the topic sentence text. It should be direct copy from the paragraph if it is explicit. Otherwise, it should be inferred from the paragraph.
 - Confidence scores are floats between 0 and 1.
 - When a section is not requested, omit that key entirely.
 - If unsure about a value, omit the field instead of guessing.

@@ -19,6 +19,13 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   const [isClicked, setIsClicked] = useState(false);
   const paragraphVm = useMemo(() => mapParagraphToVM(paragraph), [paragraph]);
 
+  // Debugging Topic Sentence Data
+  React.useEffect(() => {
+    if (paragraph.status === 'complete') {
+      console.log(`[Paragraph ${paragraph.id}] VM Data:`, paragraphVm);
+    }
+  }, [paragraph.status, paragraph.id, paragraphVm]);
+
   const isInteractive = !paragraph.status || paragraph.status === 'complete';
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -142,6 +149,12 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
               (bridgeBeforeId !== null && activeBridgeId === bridgeBeforeId) ||
               (bridgeAfterId !== null && activeBridgeId === bridgeAfterId);
 
+            // Check for explicit topic sentence
+            const normalize = (s: string) => s.trim().toLowerCase().replace(/[^\w\s]|_/g, "").replace(/\s+/g, " ");
+            const isTopicSentence = !paragraphVm.topicSentence?.is_implicit &&
+              paragraphVm.topicSentence?.text &&
+              normalize(sentence.text).includes(normalize(paragraphVm.topicSentence.text));
+
             return (
               <React.Fragment key={sentence.id}>
                 {bridge}
@@ -151,6 +164,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
                   sentence={sentence}
                   interactionEnabled={isInteractive}
                   isBridgeHighlighted={isBridgeHighlighted}
+                  isTopicSentence={!!isTopicSentence}
                 />
               </React.Fragment>
             );
