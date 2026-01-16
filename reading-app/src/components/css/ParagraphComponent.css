@@ -16,9 +16,9 @@
 }
 
 .paragraph.hovered {
-  background-color: rgba(139, 92, 246, 0.16);
-  box-shadow: 0 12px 32px rgba(47, 54, 95, 0.22);
-  border-color: rgba(139, 92, 246, 0.35);
+  background-color: rgba(255, 182, 193, 0.3);
+  box-shadow: 0 12px 32px rgba(255, 182, 193, 0.2);
+  border-color: rgba(255, 182, 193, 0.5);
 }
 
 .paragraph.clicked {
@@ -29,9 +29,9 @@
 
 @media (prefers-color-scheme: dark) {
   .paragraph.hovered {
-    background-color: rgba(139, 92, 246, 0.28);
-    box-shadow: 0 12px 24px rgba(15, 17, 39, 0.5);
-    border-color: rgba(139, 92, 246, 0.45);
+    background-color: rgba(255, 182, 193, 0.4);
+    box-shadow: 0 12px 24px rgba(255, 182, 193, 0.25);
+    border-color: rgba(255, 182, 193, 0.6);
   }
 
   .paragraph.clicked {

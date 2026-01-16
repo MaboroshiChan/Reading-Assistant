@@ -181,9 +181,10 @@ export class MessageService {
     payload: AnalyzeSubSentencePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
     meta?: Record<string, unknown>,
-    sendOptions?: SendOptions<Partial<AnalyzeSubSentenceData>, Partial<AnalyzeSubSentenceData>>
+    options?: SendOptions<unknown, Partial<AnalyzeSubSentenceData>>,
   ): Promise<ResponseEnvelopeSubSentence> {
-    const env: RequestEnvelope = {
+    console.log("messageService.analyzeSubSentence called", { payload });
+    const envelope: RequestEnvelope = {
       type: 'analyze.subsentence.v1',
       api_version: this.defaults.apiVersion ?? 'v1',
       request_id: crypto.randomUUID(),
@@ -195,8 +196,8 @@ export class MessageService {
       meta,
     } as RequestEnvelope;
 
-    console.log("analyzeSubSentence");
-    return this.send<ResponseEnvelopeSubSentence, Partial<AnalyzeSubSentenceData>, Partial<AnalyzeSubSentenceData>>(env, sendOptions);
+    console.log("analyzeSubSentence.sending", envelope);
+    return this.send<ResponseEnvelopeSubSentence, unknown, Partial<AnalyzeSubSentenceData>>(envelope, options);
   }
 
   /** Health check helper that proxies through to the underlying NetworkClient. */

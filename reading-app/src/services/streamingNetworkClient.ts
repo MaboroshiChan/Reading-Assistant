@@ -58,6 +58,7 @@ export default class StreamingNetworkClient extends NetworkClient {
           try {
             const fixed = fixJson(buffer);
             const parsed = JSON.parse(fixed);
+            // console.log("streamingNetworkClient.onPartial chunk", parsed); 
             options.onPartial(parsed as TPartial);
           } catch {
             // ignore parse errors on incomplete chunks
@@ -67,7 +68,22 @@ export default class StreamingNetworkClient extends NetworkClient {
       }
 
       // Return the final full response
-      return JSON.parse(buffer) as TRes;
+      const finalJson = JSON.parse(buffer);
+      // Heuristic: if valid JSON helps but lacks 'status', wrap it
+      // Note: This assumes the server streams raw data (AnalyzeSubSentenceData) instead of an Envelope.
+      const isEnvelope = finalJson && typeof finalJson === 'object' && 'status' in finalJson;
+
+      if (isEnvelope) {
+        return finalJson as TRes;
+      }
+
+      // valid raw data
+      return {
+        request_id: envelope.request_id,
+        status: 'ok',
+        data: finalJson,
+        served_from: 'fresh',
+      } as unknown as TRes;
     }
 
     // Mode 2: Frame-based Streaming (NDJSON / stream-json)
@@ -75,7 +91,7 @@ export default class StreamingNetworkClient extends NetworkClient {
     if (options.onFrame) {
       console.warn('onFrame (Mode 2) is not supported in this browser build. Use onPartial (Mode 1).');
     }
-    
+
     // Fallback: parse the whole body as JSON if streaming wasn't handled
     return response.json() as Promise<TRes>;
   }

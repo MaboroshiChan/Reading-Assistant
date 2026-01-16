@@ -323,7 +323,8 @@ const buildSubSentenceData = async (
 export const handleSubSentence = async (
   req: RequestEnvelopeSubsentence,
 ): Promise<CallReturn<string>> => {
-  
+  console.log("[DEBUG] handleSubSentence starting", req.request_id);
+
   handlerLog('subsentence', 'request received', {
     requestId: req.request_id,
     mock: config.useMockLLM,
@@ -360,6 +361,7 @@ export const handleSubSentence = async (
   const tappedStream = (async function* () {
     let text = '';
     for await (const chunk of stream) {
+      console.log("[DEBUG] subsentence chunk:", chunk.slice(0, 50));
       text += chunk;
       yield chunk;
     }
@@ -614,10 +616,10 @@ const sanitizeBackbone = (
 ): SubSentenceAnalysisData['backbone'] | undefined => {
   const fromRaw = isRecord(raw)
     ? {
-        subjectId: asString(raw.subjectId ?? raw.subject_id),
-        predicateId: asString(raw.predicateId ?? raw.predicate_id),
-        objectId: asString(raw.objectId ?? raw.object_id),
-      }
+      subjectId: asString(raw.subjectId ?? raw.subject_id),
+      predicateId: asString(raw.predicateId ?? raw.predicate_id),
+      objectId: asString(raw.objectId ?? raw.object_id),
+    }
     : {};
 
   const derived = {
@@ -662,9 +664,9 @@ function normalizeLegacyAnalysis(
     ctx.fragmentText ??
     (ctx.sentenceText
       ? ctx.sentenceText.slice(
-          Math.max(0, ctx.req.payload.span.start),
-          Math.max(Math.max(0, ctx.req.payload.span.start), ctx.req.payload.span.end),
-        )
+        Math.max(0, ctx.req.payload.span.start),
+        Math.max(Math.max(0, ctx.req.payload.span.start), ctx.req.payload.span.end),
+      )
       : '');
 
   const units: SubSentenceUnitData[] = [];

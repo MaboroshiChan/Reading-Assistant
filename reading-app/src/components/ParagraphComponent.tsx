@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState, type MouseEvent } from "react";
 import type Paragraph from "../model/structure/Paragraph";
-import "./css/SemanticParagraph.css";
+import "./css/ParagraphComponent.css";
 import SentenceComponent from "./SentenceComponent";
 import mapParagraphToVM from "../model/viewModels/mapParagraphToVM";
 

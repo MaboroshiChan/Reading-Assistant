@@ -17,19 +17,19 @@
   color: #9ca3af;
 }
 
-/* hover 效果：淡淡的彩色雾感 */
+/* hover 效果：轻盈的天蓝色 */
 .sentence.hovered {
-  background-color: rgba(191, 196, 253, 0.45);
-  box-shadow: 0 0 0 3px rgba(191, 196, 253, 0.28);
-  border-color: rgba(191, 196, 253, 0.4);
+  background-color: rgba(186, 230, 253, 0.4);
+  box-shadow: 0 0 0 3px rgba(186, 230, 253, 0.25);
+  border-color: rgba(125, 211, 252, 0.4);
 }
 
-/* 点击状态：略深的高亮，有阅读感 */
+/* 点击状态：更轻快的高亮 */
 .sentence.clicked,
 .sentence.component.clicked {
-  background-color: rgba(165, 180, 252, 0.55);
-  box-shadow: 0 0 0 4px rgba(165, 180, 252, 0.3);
-  border-color: rgba(99, 102, 241, 0.45);
+  background-color: rgba(165, 180, 252, 0.35);
+  box-shadow: 0 0 0 4px rgba(165, 180, 252, 0.2);
+  border-color: rgba(99, 102, 241, 0.3);
 }
 
 /* 让文字更平滑 */
@@ -38,14 +38,12 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* 浅色模式渐层感（可选） */
+/* 浅色模式更自由的天蓝渐层 */
 @media (prefers-color-scheme: light) {
   .sentence.hovered {
-    background: linear-gradient(
-      90deg,
-      rgba(191, 196, 253, 0.58),
-      rgba(165, 180, 252, 0.5)
-    );
+    background: linear-gradient(90deg,
+        rgba(186, 230, 253, 0.5),
+        rgba(125, 211, 252, 0.4));
   }
 }
 
@@ -96,12 +94,14 @@
       20px 0 0 currentColor;
     opacity: 0.4;
   }
+
   50% {
     box-shadow:
       0 0 0 currentColor,
       10px 0 0 currentColor;
     opacity: 1;
   }
+
   100% {
     box-shadow:
       10px 0 0 currentColor,
@@ -203,8 +203,13 @@
 }
 
 @keyframes sentence-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Key Phrase Highlighting */
@@ -266,5 +271,10 @@
 }
 
 /* Spinner Internals */
-.sentence-spinner-circle { opacity: 0.25; }
-.sentence-spinner-path { opacity: 0.75; }
+.sentence-spinner-circle {
+  opacity: 0.25;
+}
+
+.sentence-spinner-path {
+  opacity: 0.75;
+}

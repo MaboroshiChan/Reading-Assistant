@@ -63,7 +63,7 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
 
     const getUnitRole = useCallback((unit: SubUnit): string | undefined => {
         let role: string | undefined = unit?.role;
-        
+
         if (!role && analysis.backbone) {
             if (analysis.backbone.subjectId === unit.id) role = "subject";
             else if (analysis.backbone.predicateId === unit.id) role = "predicate";
@@ -133,8 +133,8 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                     </Fragment>
                 );
             }),
-        [focusUnitId, handleHover, onFocusChange, handleKeyDown, getUnitRole],
-    )
+        [focusUnitId, handleHover, onFocusChange, handleKeyDown, getUnitRole, analysis.units],
+    );
 
     return (
         <div className="subsentence-analysis">

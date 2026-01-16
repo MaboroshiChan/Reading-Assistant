@@ -163,7 +163,12 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (globalFrozenId !== null && globalFrozenId !== sentence.id) return;
         setIsHovered(false);
         onHoverChange?.(sentence.id, false);
-        if (!isFrozen) setAnchor(null);
+        if (!isFrozen) {
+            setAnchor(null);
+            if (isSubsentenceActive) {
+                handleStartSubsentence();
+            }
+        }
     };
 
     // 新增：持续捕获鼠标坐标
@@ -210,7 +215,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             if (subsentenceAbortRef.current) {
                 subsentenceAbortRef.current.abort();
                 subsentenceAbortRef.current = null;
-             }
+            }
             setSubsentenceError(null);
             setIsLoadingSubsentence(false);
             setIsSubsentenceActive(false);
@@ -227,12 +232,15 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         const controller = new AbortController();
         subsentenceAbortRef.current = controller;
 
+        console.log("Starting subsentence analysis for ID:", sentence.id);
+
         setIsSubsentenceActive(true);
         setIsLoadingSubsentence(true);
         setIsStreamingSubsentence(true);
         setSubsentenceError(null);
         setSubsentenceVm(null);
         setFocusedUnitId(null);
+
 
         const tasks: Array<'micro_roles' | 'cue_interaction' | 'contrast_resolution'> = [
             "micro_roles",
@@ -264,9 +272,14 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                         timeoutMs: 60_000,
                         onPartial: (partialData) => {
                             if (controller.signal.aborted) return;
-                            if (partialData.analysis) {
+                            // Ensure we map whatever partial data we have so far
+                            if (partialData && typeof partialData === 'object') {
                                 const vm = mapSubSentenceToVM(partialData as AnalyzeSubSentenceData);
-                                if (vm) setSubsentenceVm(vm);
+                                if (vm) {
+                                    setSubsentenceVm(vm);
+                                    // Auto-focus the first unit if not already set, to give user context
+                                    setFocusedUnitId(prev => prev ?? vm.analysis.units[0]?.id ?? null);
+                                }
                             }
                         }
                     },
@@ -439,7 +452,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                         {/* Tag 1: function -> 常为蓝/绿/灰 */}
                         {(() => {
                             const roleLabel = sentenceVm.roleLabel ?? sentence.function;
-                            const v = fnVariant (roleLabel);
+                            const v = fnVariant(roleLabel);
                             return (
                                 <span className={`tag variant-${v}`}>
                                     <span className={`tag-dot variant-${v}`} aria-hidden />
@@ -480,7 +493,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     <div className="purpose">
                         Explanation:
                         <br />
-                            {sentence.purpose}
+                        {sentence.purpose}
                     </div>
                     <SentenceRelationship
                         current_id={sentence.id}
