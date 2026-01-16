@@ -1,4 +1,4 @@
-// SentenceComponent.tsx
+// Sentence.tsx
 import React, { useState, useCallback, type KeyboardEvent, type MouseEvent } from "react";
 import type { Sentence } from "../../model/structure/Sentence";
 import "./css/Sentence.css";

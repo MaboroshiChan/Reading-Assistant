@@ -3,15 +3,19 @@ import type Paragraph from "../../model/structure/Paragraph";
 import "./css/Paragraph.css";
 import SentenceComponent from "../sentence/Sentence";
 import mapParagraphToVM from "../../model/viewModels/mapParagraphToVM";
+import { ParagraphGutter } from "./ParagraphGutter";
+import { ParagraphPanel } from "./ParagraphPanel";
 
-// There is no paragraph hover card
+// Import helper to avoid top-level import issues if not yet defined in file
+import { SentenceBridge as ImportedSentenceBridge } from "../sentence/Bridge";
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
 }
 
 export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
-  const [isHovered, setIsHovered] = useState(false);
+
+  // isClicked now serves as "isActive" for showing the panel
   const [isClicked, setIsClicked] = useState(false);
   const paragraphVm = useMemo(() => mapParagraphToVM(paragraph), [paragraph]);
 
@@ -19,7 +23,8 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMouseEnter = useCallback((_event: MouseEvent<HTMLDivElement>) => {
-    if (isInteractive) setIsHovered(true);
+    // Hover logic handled by gutter now
+    // if (isInteractive) setIsHovered(true);
   }, [isInteractive]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -28,7 +33,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    setIsHovered(false);
+    // setIsHovered(false);
   }, []);
 
   const [activeBridgeId, setActiveBridgeId] = useState<string | null>(null);
@@ -36,27 +41,27 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   const handleClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
     if (!isInteractive) return;
-    // If clicking paragraph background (not bridge), we might want to reset bridge?
-    // Current logic toggles paragraph clicked state. 
+
+    // Toggle active state for panel
     setIsClicked((prev) => {
       const next = !prev;
       if (!next) {
-        setIsHovered(false);
-        setActiveBridgeId(null); // Clear bridge selection on deselect
+        // setIsHovered(false);
+        setActiveBridgeId(null);
       }
       return next;
     });
   }, [isInteractive]);
 
   const handleBridgeClick = useCallback((bridgeId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent paragraph click
+    e.stopPropagation();
     setActiveBridgeId(prev => prev === bridgeId ? null : bridgeId);
   }, []);
 
   const className = [
     "paragraph",
     "component",
-    isHovered ? "hovered" : "",
+    // isHovered ? "hovered" : "", // Removed hovered class from container to reduce noise, gutter handles it
     isClicked ? "clicked" : "",
     paragraph.status ? `status-${paragraph.status}` : "",
   ]
@@ -81,67 +86,77 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
       onMouseEnter={handleMouseEnter}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      onClick={handleClick}
     >
-      {paragraph.sentences.map((sentence, index) => {
-        // Logic to determine if a bridge is needed before this sentence
-        let bridge = null;
-        if (index > 0) {
-          const prevSentence = paragraph.sentences[index - 1];
-          // Check if current sentence has a relation pointing to previous (normal backward flow)
-          const relToPrev = sentence.relation && sentence.relation.targetSentenceId === prevSentence.id
-            ? sentence.relation
-            : null;
+      <ParagraphGutter
+        id={paragraph.id}
+        status={paragraph.status}
+        structureType={paragraphVm.structureType}
+        isActive={isClicked}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleClick(e as any);
+        }}
+      />
 
-          const isPrevReady = prevSentence.function !== 'Pending';
-          const isCurrReady = sentence.function !== 'Pending';
+      <div className="paragraph-content-wrapper" style={{ flex: 1 }}>
+        {isClicked && <ParagraphPanel vm={paragraphVm} />}
 
-          if (relToPrev && isPrevReady && isCurrReady) {
-            const bridgeId = `${prevSentence.id}-${sentence.id}`;
-            const isActive = activeBridgeId === bridgeId;
+        <div className="paragraph-content" onClick={handleClick}>
+          {paragraph.sentences.map((sentence, index) => {
+            // Logic to determine if a bridge is needed before this sentence
+            let bridge = null;
+            if (index > 0) {
+              const prevSentence = paragraph.sentences[index - 1];
+              // Check if current sentence has a relation pointing to previous (normal backward flow)
+              const relToPrev = sentence.relation && sentence.relation.targetSentenceId === prevSentence.id
+                ? sentence.relation
+                : null;
 
-            bridge = (
-              <ImportedSentenceBridge
-                key={`bridge-${bridgeId}`}
-                type={relToPrev.type}
-                isActive={isActive}
-                onClick={(e) => handleBridgeClick(bridgeId, e)}
-              />
+              const isPrevReady = prevSentence.function !== 'Pending';
+              const isCurrReady = sentence.function !== 'Pending';
+
+              if (relToPrev && isPrevReady && isCurrReady) {
+                const bridgeId = `${prevSentence.id}-${sentence.id}`;
+                const isActive = activeBridgeId === bridgeId;
+
+                bridge = (
+                  <ImportedSentenceBridge
+                    key={`bridge-${bridgeId}`}
+                    type={relToPrev.type}
+                    isActive={isActive}
+                    onClick={(e) => handleBridgeClick(bridgeId, e)}
+                  />
+                );
+              }
+            }
+
+            // Determine if this sentence should be highlighted by a bridge
+            const prevSentence = index > 0 ? paragraph.sentences[index - 1] : null;
+            const nextSentence = index < paragraph.sentences.length - 1 ? paragraph.sentences[index + 1] : null;
+
+            const bridgeBeforeId = prevSentence ? `${prevSentence.id}-${sentence.id}` : null;
+            const relFromNext = nextSentence?.relation && nextSentence.relation.targetSentenceId === sentence.id;
+            const bridgeAfterId = relFromNext ? `${sentence.id}-${nextSentence!.id}` : null;
+
+            const isBridgeHighlighted =
+              (bridgeBeforeId !== null && activeBridgeId === bridgeBeforeId) ||
+              (bridgeAfterId !== null && activeBridgeId === bridgeAfterId);
+
+            return (
+              <React.Fragment key={sentence.id}>
+                {bridge}
+                <SentenceComponent
+                  id={sentence.id - paragraph.id}
+                  paragraphId={paragraph.id}
+                  sentence={sentence}
+                  interactionEnabled={isInteractive}
+                  isBridgeHighlighted={isBridgeHighlighted}
+                />
+              </React.Fragment>
             );
-          }
-        }
-
-        // Determine if this sentence should be highlighted by a bridge
-        // It should be highlighted if the bridge BEFORE it is active OR the bridge AFTER it is active.
-        const prevSentence = index > 0 ? paragraph.sentences[index - 1] : null;
-        const nextSentence = index < paragraph.sentences.length - 1 ? paragraph.sentences[index + 1] : null;
-
-        const bridgeBeforeId = prevSentence ? `${prevSentence.id}-${sentence.id}` : null;
-        // Logic for bridge after: if next sentence points to current
-        // We only support 'backward' relations for bridges right now as per logic above
-        const relFromNext = nextSentence?.relation && nextSentence.relation.targetSentenceId === sentence.id;
-        const bridgeAfterId = relFromNext ? `${sentence.id}-${nextSentence!.id}` : null; // Note: using ! because logical check passed
-
-        const isBridgeHighlighted =
-          (bridgeBeforeId !== null && activeBridgeId === bridgeBeforeId) ||
-          (bridgeAfterId !== null && activeBridgeId === bridgeAfterId);
-
-        return (
-          <React.Fragment key={sentence.id}>
-            {bridge}
-            <SentenceComponent
-              id={sentence.id - paragraph.id}
-              paragraphId={paragraph.id}
-              sentence={sentence}
-              interactionEnabled={isInteractive}
-              isBridgeHighlighted={isBridgeHighlighted}
-            />
-          </React.Fragment>
-        );
-      })}
+          })}
+        </div>
+      </div>
     </div>
   );
 };
-
-// Import helper to avoid top-level import issues if not yet defined in file
-import { SentenceBridge as ImportedSentenceBridge } from "../sentence/Bridge";

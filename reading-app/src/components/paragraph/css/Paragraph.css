@@ -13,30 +13,35 @@
 
 .paragraph.component {
   background-color: transparent;
+  display: flex;
+  /* FLEX LAYOUT FOR GUTTER */
+  align-items: flex-start;
+  position: relative;
+  padding-left: 12px;
+  /* Less padding on left since gutter is there */
+}
+
+/* Wrapper for panel + sentences */
+.paragraph-content-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.paragraph-content {
+  /* This holds the sentences */
 }
 
 .paragraph.hovered {
-  background-color: rgba(255, 182, 193, 0.3);
-  box-shadow: 0 12px 32px rgba(255, 182, 193, 0.2);
-  border-color: rgba(255, 182, 193, 0.5);
+  /* background-color: rgba(255, 182, 193, 0.3); */
+  /* Disable pink hover on whole container */
 }
 
 .paragraph.clicked {
-  background-color: rgba(124, 58, 237, 0.22);
-  box-shadow: 0 14px 36px rgba(42, 48, 94, 0.28);
-  border-color: rgba(124, 58, 237, 0.55);
+  /* background-color: rgba(124, 58, 237, 0.22); */
+  /* Disable purple click on whole container */
 }
 
 @media (prefers-color-scheme: dark) {
-  .paragraph.hovered {
-    background-color: rgba(255, 182, 193, 0.4);
-    box-shadow: 0 12px 24px rgba(255, 182, 193, 0.25);
-    border-color: rgba(255, 182, 193, 0.6);
-  }
-
-  .paragraph.clicked {
-    background-color: rgba(109, 40, 217, 0.36);
-    box-shadow: 0 16px 36px rgba(9, 10, 26, 0.6);
-    border-color: rgba(136, 84, 232, 0.6);
-  }
+  /* ... existing dark mode adjustments if needed ... */
 }
