@@ -1,5 +1,5 @@
 import type { AnalyzeParagraphData } from '../../services/envelopes';
-import type { Paragraph } from '../structure/Paragraph';
+import type Paragraph from '../structure/Paragraph';
 
 export interface ParagraphViewModel {
   id: string;
@@ -16,7 +16,7 @@ export const mapParagraphToVM = (
   analysis?: AnalyzeParagraphData | null,
 ): ParagraphViewModel => {
   return {
-    id: paragraph.id,
+    id: String(paragraph.id),
     centralIdea: paragraph.centralIdea ?? analysis?.summary,
     structureType: paragraph.structureType,
     function: paragraph.function,

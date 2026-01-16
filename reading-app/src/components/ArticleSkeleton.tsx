@@ -1,9 +1,9 @@
 import React, { useState, type ReactNode, type CSSProperties, useEffect } from 'react';
 import './css/ArticleSkeleton.css';
 import './css/Highlighted.css';
-import type Paragraph  from '../model/structure/Paragraph';
+import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
-import { ParagraphComponent } from './ParagraphComponent';
+import { ParagraphComponent } from './paragraph/Paragraph';
 import exampleArticle from '../../../resource/examples/example-article.json';
 import config from '../services/config';
 import { streamingMessageService } from '../services/messageService.instance';
@@ -16,14 +16,14 @@ const ExampleParagraph: React.FC = () => {
   return (
     <div>
       {article.map(p => (
-        <ParagraphComponent paragraph={p}/>
+        <ParagraphComponent paragraph={p} />
       ))}
     </div>
   );
 };
 
 
-if(config.renderMode) {
+if (config.renderMode) {
   console.log('render mode on');
 }
 else {
@@ -352,17 +352,17 @@ const ExampleArticle: React.FC = () => {
             paragraph_id: String(p.id),
             paragraph_text: p.sentences.map(s => s.text).join(' '),
             options: {
-              tasks: ['roles', 'rhetoric', 'summary','claims']
+              tasks: ['roles', 'rhetoric', 'summary', 'claims']
             }
           },
           { doc: { doc_id: 'demo-doc', content_hash: 'demo-hash' } },
           {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onPartial: (partial: any) => {
-               // console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
+              // console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
               setAnalyzedData(prev => prev.map(item => {
                 if (item.id !== p.id) return item;
-                
+
                 // Immutable update of the paragraph
                 const updated = { ...item };
                 if (partial.summary) updated.centralIdea = partial.summary;

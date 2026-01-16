@@ -91,12 +91,12 @@ export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
           <div className="hovercard-footer">
             <button
               type="button"
-              onClick={(e)=>{ e.stopPropagation(); onStartSubSentence?.(); }}
+              onClick={(e) => { e.stopPropagation(); onStartSubSentence?.(); }}
             >
               {subSentenceActive ? "关闭子结构分析" : "启动子结构分析"}
             </button>
           </div>
-        )}  
+        )}
       </div>
     </div>
   );

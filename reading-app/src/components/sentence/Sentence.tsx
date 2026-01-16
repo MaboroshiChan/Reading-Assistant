@@ -1,16 +1,16 @@
 // SentenceComponent.tsx
 import React, { useState, useCallback, type KeyboardEvent, type MouseEvent } from "react";
-import type { Sentence } from "../model/structure/Sentence";
-import "./css/SentenceComponent.css";
-import { SentenceHoverCard } from "./SentenceHoverCard"; // 新增：引入悬浮卡片
+import type { Sentence } from "../../model/structure/Sentence";
+import "./css/Sentence.css";
+import { SentenceHoverCard } from "./HoverCard"; // 新增：引入悬浮卡片
 // Network 
 // import { SentenceCardComponent } from "./InfoComponent";
-import mapSentenceToVM, { type SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
-import mapSubSentenceToVM, { type SubsentenceVM } from "../model/viewModels/mapSubSentenceToVM";
-import SubSentenceComponent from "./SubSentenceComponent";
-import { streamingMessageService } from "../services/messageService.instance";
-import type { AnalyzeSubSentenceData, StandardContext } from "../services/envelopes";
-import SentenceRelationship from "./SentenceRelationship";
+import mapSentenceToVM, { type SentenceViewModel } from "../../model/viewModels/mapSentenceToVM";
+import mapSubSentenceToVM, { type SubsentenceVM } from "../../model/viewModels/mapSubSentenceToVM";
+import SubSentenceComponent from "./SubSentence";
+import { streamingMessageService } from "../../services/messageService.instance";
+import type { AnalyzeSubSentenceData, StandardContext } from "../../services/envelopes";
+import SentenceRelationship from "./RelationshipMap";
 
 const FREEZE_EVENT = "hovercard:freeze";
 const HIGHLIGHT_EVENT = "sentence:highlight";

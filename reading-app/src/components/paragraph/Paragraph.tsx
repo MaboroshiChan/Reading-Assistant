@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo, useState, type MouseEvent } from "react";
-import type Paragraph from "../model/structure/Paragraph";
-import "./css/ParagraphComponent.css";
-import SentenceComponent from "./SentenceComponent";
-import mapParagraphToVM from "../model/viewModels/mapParagraphToVM";
+import type Paragraph from "../../model/structure/Paragraph";
+import "./css/Paragraph.css";
+import SentenceComponent from "../sentence/Sentence";
+import mapParagraphToVM from "../../model/viewModels/mapParagraphToVM";
 
 // There is no paragraph hover card
 
@@ -144,4 +144,4 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
 };
 
 // Import helper to avoid top-level import issues if not yet defined in file
-import { SentenceBridge as ImportedSentenceBridge } from "./SentenceBridge";
+import { SentenceBridge as ImportedSentenceBridge } from "../sentence/Bridge";

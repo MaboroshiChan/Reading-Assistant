@@ -45,11 +45,11 @@
 }
 
 .sentence-bridge.active {
-    background-color: #2e7d32;
-    /* Greenish for connection */
-    border-color: #2e7d32;
+    background-color: var(--bridge-color, #2e7d32);
+    border-color: var(--bridge-color, #2e7d32);
     color: #fff;
-    box-shadow: 0 2px 4px rgba(46, 125, 50, 0.3);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    /* Generic shadow since color varies */
     transform: scale(1.15);
 }
 

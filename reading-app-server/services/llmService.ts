@@ -16,7 +16,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config';
-import { GenerateContentStreamResult, GoogleGenerativeAI } from '@google/generative-ai';
+import { type GenerateContentStreamResult, GoogleGenerativeAI } from '@google/generative-ai';
 
 // -----------------------------
 // Public types
@@ -128,8 +128,8 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
     });
 
     console.log("LLLLLLLLLLLLLM");
-    
-    const result:GenerateContentStreamResult = await model.generateContentStream(args.prompt);
+
+    const result: GenerateContentStreamResult = await model.generateContentStream(args.prompt);
 
     const usagePromise = result.response.then(res => ({
       inputTokens: res.usageMetadata?.promptTokenCount || 0,

@@ -1,5 +1,5 @@
 import React, { useCallback, Fragment, useMemo, useState } from "react";
-import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
+import type { SubSentenceAnalysis, SubUnit } from "../../model/structure/SubSentence";
 import "./css/SubSentence.css";
 
 interface SubSentenceComponentProps {
