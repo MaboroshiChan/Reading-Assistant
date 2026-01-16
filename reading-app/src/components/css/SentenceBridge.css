@@ -1,0 +1,97 @@
+.sentence-bridge-container {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    margin: 0 6px;
+    position: relative;
+    /* Ensure it doesn't break flow too much but stands out */
+}
+
+.sentence-bridge {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid #e0e0e0;
+    background-color: #fff;
+    color: #888;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease-out;
+    padding: 0;
+    outline: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    animation: bridgeFadeIn 0.3s ease-out backwards;
+}
+
+@keyframes bridgeFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.sentence-bridge:hover {
+    border-color: #aaa;
+    color: #555;
+    background-color: #f8f9fa;
+    transform: scale(1.1);
+}
+
+.sentence-bridge.active {
+    background-color: #2e7d32;
+    /* Greenish for connection */
+    border-color: #2e7d32;
+    color: #fff;
+    box-shadow: 0 2px 4px rgba(46, 125, 50, 0.3);
+    transform: scale(1.15);
+}
+
+/* Icon Sizing */
+.sentence-bridge svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Popover Bubble */
+.sentence-bridge-bubble {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background-color: #1a1a1a;
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sentence-bridge-bubble.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Small arrow for the bubble */
+.sentence-bridge-bubble::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 4px;
+    border-style: solid;
+    border-color: #1a1a1a transparent transparent transparent;
+}

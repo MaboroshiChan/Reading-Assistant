@@ -32,6 +32,13 @@
   border-color: rgba(99, 102, 241, 0.3);
 }
 
+/* New: Bridge Highlighted State */
+.sentence.component.bridge-highlighted {
+  background-color: rgba(46, 125, 50, 0.12);
+  /* Green tint matching bridge */
+  box-shadow: 0 0 0 1px rgba(46, 125, 50, 0.2);
+}
+
 /* 让文字更平滑 */
 .sentence,
 .sentence * {

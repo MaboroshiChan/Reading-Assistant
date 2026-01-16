@@ -30,6 +30,7 @@ interface SentenceComponentProps {
     onToggleFocus?: (id: number, isFocused: boolean) => void;
     onHoverChange?: (id: number, isHovered: boolean) => void;
     interactionEnabled?: boolean;
+    isBridgeHighlighted?: boolean;
 }
 
 // 鼠标坐标类型
@@ -41,6 +42,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     onToggleFocus,
     onHoverChange,
     interactionEnabled = true,
+    isBridgeHighlighted = false,
 }) => {
     /**
      * 逻辑：
@@ -339,6 +341,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         isPending ? "pending" : "",
         interactionEnabled && (isRemoteHovered || (isHovered && !blocked)) ? "hovered" : "",
         interactionEnabled && isClicked ? "clicked" : "",
+        interactionEnabled && isBridgeHighlighted ? "bridge-highlighted" : "",
     ]
         .filter(Boolean)
         .join(" ");
