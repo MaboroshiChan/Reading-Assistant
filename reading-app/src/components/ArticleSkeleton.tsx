@@ -372,6 +372,10 @@ const ExampleArticle: React.FC = () => {
                 if (partial.roles && partial.roles.length > 0) {
                   updated.function = partial.roles[0].role;
                 }
+                if (partial.topic_sentence) {
+                  console.log('topic_sentence', partial.topic_sentence);
+                  updated.topicSentence = partial.topic_sentence;
+                }
                 if (partial.sentences && partial.sentences.length > 0) {
                   updated.sentences = updated.sentences.map((s, i) => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
