@@ -41,6 +41,14 @@
   filter: drop-shadow(0 -1px 1px rgba(0, 0, 0, 0.28));
 }
 
+.hovercard-caret.flipped {
+  top: auto;
+  bottom: -8px;
+  border-bottom: none;
+  border-top: 8px solid #1f1f24;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.28));
+}
+
 /* 胶囊标签（灰底、圆角） */
 .hovercard-inner .tag {
   display: inline-flex;
@@ -184,7 +192,8 @@
 .subsentence-wrapper {
   overflow: hidden;
   margin: 8px 0;
-  max-height: 1000px; /* large enough to fit typical content */
+  max-height: 1000px;
+  /* large enough to fit typical content */
   opacity: 1;
   transform: translateY(0);
   transition:
