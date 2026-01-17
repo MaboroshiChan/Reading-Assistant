@@ -22,7 +22,7 @@ are not requested in the task list):
       "type": "string",
       "mood": "string",
       "purpose": "string",
-      "key_phrase": "string",
+      "key_words": ["string"],
       "relation": {
         "type": "string",
         "targetSentenceId": 0
@@ -43,10 +43,12 @@ are not requested in the task list):
   }
   "confidence": 0.0
 }
-```
 General instructions:
 - Keep prose concise: summary ≤ 2 sentences.
-- key_phrase is the most semantically significant text_piece in each sentence.
+- key_words is the most semantically significant text_piece in each sentence.
+  - It can be the predicate and/or a subclause marker (e.g., "that", "which", "who", "because", "since", "although", "while", "if", "unless", "whether", "how", "why", "when", "where", "as"). 
+  - Usually it is short (1-3 words). Don't include entire clauses.
+  - every sentenece contains at least one key_word.
 - `roles` describe major participant roles (topic, evidence, counterpoint, etc.).
 - `sentences` must contain one object per sentence in the paragraph, preserving order.
 - `rhetoric` captures discourse labels (statement, question, contrast, concession).
@@ -55,6 +57,7 @@ General instructions:
 - `topic_sentence` is the main topic of the paragraph.
   - `is_implicit` is true if the topic sentence is not explicitly stated.
   - `text` is the topic sentence text. It should be direct copy from the paragraph if it is explicit. Otherwise, it should be inferred from the paragraph.
+  - every paragraph has a topic sentence, either explicit or implicit.
 - Confidence scores are floats between 0 and 1.
 - When a section is not requested, omit that key entirely.
 - If unsure about a value, omit the field instead of guessing.

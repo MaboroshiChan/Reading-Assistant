@@ -127,8 +127,6 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
       },
     });
 
-    console.log("LLLLLLLLLLLLLM");
-
     const result: GenerateContentStreamResult = await model.generateContentStream(args.prompt);
 
     const usagePromise = result.response.then(res => ({

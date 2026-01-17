@@ -352,19 +352,28 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         isSubsentenceActive || isLoadingSubsentence || subsentenceError !== null || subsentenceVm !== null;
 
     const renderContent = () => {
-        const keyPhrase = sentence.key_phrase;
-        if (!keyPhrase || typeof keyPhrase !== "string" || !sentence.text.includes(keyPhrase)) {
+        const keyWords = sentence.key_words;
+        if (!keyWords || keyWords.length === 0) {
             return sentence.text;
         }
-        const parts = sentence.text.split(keyPhrase);
-        return parts.map((part, index) => (
-            <React.Fragment key={index}>
-                {part}
-                {index < parts.length - 1 && (
-                    <span className="sentence-key-phrase">{keyPhrase}</span>
-                )}
-            </React.Fragment>
-        ));
+
+        // Escape special chars for regex
+        const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // Join all key words with | for regex
+        const pattern = new RegExp(`(${keyWords.map(escapeRegExp).join('|')})`, 'g');
+        const parts = sentence.text.split(pattern);
+
+        return parts.map((part, index) => {
+            if (keyWords.includes(part)) {
+                return (
+                    <span key={index} className="sentence-key-phrase">
+                        {part}
+                    </span>
+                );
+            }
+            return <React.Fragment key={index}>{part}</React.Fragment>;
+        });
     };
 
     return (

@@ -230,7 +230,7 @@ export interface AnalyzeSentenceData {
   modal_markers?: ModalMarker[];
   anchors?: Anchor[];
   confidence?: number;
-  key_phrase?: string;
+  key_words?: string[];
 }
 
 // 4) analyze.subsentence.v1

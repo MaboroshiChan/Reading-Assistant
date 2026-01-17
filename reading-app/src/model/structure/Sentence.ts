@@ -14,5 +14,5 @@ export interface Sentence {
   mood: string;             // e.g., Indicative, Subjunctive 
   relation?: SentenceRelation;
   text: string;
-  key_phrase?: string;
+  key_words?: string[];
 }

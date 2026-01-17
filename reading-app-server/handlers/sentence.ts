@@ -50,7 +50,7 @@ interface LLMSentenceDependencyLight {
 
 interface LLMSentenceResponse {
   semantic_roles?: LLMSentenceRole[];
-  key_phrase?: string;
+  key_phrase?: string | string[];
   function?: string;
   type?: string;
   mood?: string;
@@ -335,10 +335,10 @@ const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
   return {
     semantic_roles: Array.isArray(value.semantic_roles)
       ? value.semantic_roles
-          .map(coerceRole)
-          .filter((role): role is LLMSentenceRole => role !== null)
+        .map(coerceRole)
+        .filter((role): role is LLMSentenceRole => role !== null)
       : undefined,
-    key_phrase: asString(value.key_phrase),
+    key_phrase: value.key_phrase as (string | string[]),
     function: asString(value.function),
     type: asString(value.type),
     mood: asString(value.mood),
@@ -348,8 +348,8 @@ const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
       : undefined,
     modal_markers: Array.isArray(value.modal_markers)
       ? value.modal_markers
-          .map(coerceModalMarker)
-          .filter((marker): marker is LLMSentenceModalMarker => marker !== null)
+        .map(coerceModalMarker)
+        .filter((marker): marker is LLMSentenceModalMarker => marker !== null)
       : undefined,
     confidence: asConfidence(value.confidence),
   };
@@ -370,10 +370,10 @@ const mapSentenceResponse = (
   const baseAnchor =
     text.length > 0
       ? makeAnchor({
-          sentenceId,
-          span: { start: 0, end: text.length },
-          text,
-        })
+        sentenceId,
+        span: { start: 0, end: text.length },
+        text,
+      })
       : null;
 
   if (baseAnchor) {
@@ -382,37 +382,45 @@ const mapSentenceResponse = (
 
   const semanticRoles = shouldInclude('semantic_roles') && payload.semantic_roles
     ? (() => {
-        const roles: SentenceRole[] = [];
-        for (const role of payload.semantic_roles) {
-          if (!role.role || !role.text) continue;
-          const span = findSpan(text, role.text);
-          const anchors = span ? [makeAnchor({ sentenceId, span, text: role.text })] : undefined;
+      const roles: SentenceRole[] = [];
+      for (const role of payload.semantic_roles) {
+        if (!role.role || !role.text) continue;
+        const span = findSpan(text, role.text);
+        const anchors = span ? [makeAnchor({ sentenceId, span, text: role.text })] : undefined;
 
-          if (anchors) {
-            for (const a of anchors) anchorIndex.set(a.anchor_hash, a);
-          }
-
-          roles.push({
-            role: normalizeRoleLabel(role.role),
-            span: span ?? undefined,
-            anchors,
-            confidence: role.confidence,
-          });
+        if (anchors) {
+          for (const a of anchors) anchorIndex.set(a.anchor_hash, a);
         }
-        return roles.length ? roles : undefined;
-      })()
+
+        roles.push({
+          role: normalizeRoleLabel(role.role),
+          span: span ?? undefined,
+          anchors,
+          confidence: role.confidence,
+        });
+      }
+      return roles.length ? roles : undefined;
+    })()
     : undefined;
 
-  const keyPhrase = shouldInclude('key_phrase') && payload.key_phrase
+  const keyWords = shouldInclude('key_phrase') && payload.key_phrase
     ? (() => {
-        const phrase = payload.key_phrase;
+      const words: string[] = [];
+      // Support both string (legacy/single) and array
+      const raw = payload.key_phrase;
+      const candidates = Array.isArray(raw) ? raw : [raw];
+
+      for (const phrase of candidates) {
+        if (!phrase || typeof phrase !== 'string') continue;
+        words.push(phrase);
         const span = findSpan(text, phrase);
         if (span) {
           const anchor = makeAnchor({ sentenceId, span, text: phrase });
           anchorIndex.set(anchor.anchor_hash, anchor);
         }
-        return phrase;
-      })()
+      }
+      return words.length ? words : undefined;
+    })()
     : undefined;
 
   // Map 'discourse_function' task to the new classification fields
@@ -429,37 +437,37 @@ const mapSentenceResponse = (
 
   const modalMarkers = shouldInclude('modal_markers') && payload.modal_markers
     ? (() => {
-        const markers: ModalMarker[] = [];
-        const seen = new Set<string>();
-        for (const marker of payload.modal_markers) {
-          if (!marker.type || !marker.cue) continue;
-          const span = findSpan(text, marker.cue);
-          if (!span) continue;
-          const normalizedType = normalizeModalType(marker.type);
-          const key = `${normalizedType}:${span.start}:${span.end}:${marker.cue.toLowerCase()}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          markers.push({
-            type: normalizedType,
-            cue: marker.cue,
-            span,
-          });
-          const anchor = makeAnchor({
-            sentenceId,
-            span,
-            text: text.slice(span.start, span.end),
-          });
-          anchorIndex.set(anchor.anchor_hash, anchor);
-        }
-        return markers.length ? markers : undefined;
-      })()
+      const markers: ModalMarker[] = [];
+      const seen = new Set<string>();
+      for (const marker of payload.modal_markers) {
+        if (!marker.type || !marker.cue) continue;
+        const span = findSpan(text, marker.cue);
+        if (!span) continue;
+        const normalizedType = normalizeModalType(marker.type);
+        const key = `${normalizedType}:${span.start}:${span.end}:${marker.cue.toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        markers.push({
+          type: normalizedType,
+          cue: marker.cue,
+          span,
+        });
+        const anchor = makeAnchor({
+          sentenceId,
+          span,
+          text: text.slice(span.start, span.end),
+        });
+        anchorIndex.set(anchor.anchor_hash, anchor);
+      }
+      return markers.length ? markers : undefined;
+    })()
     : undefined;
 
   const anchorList = anchorIndex.size ? sortAnchors(Array.from(anchorIndex.values())) : undefined;
 
   return {
     semantic_roles: semanticRoles,
-    key_phrase: keyPhrase,
+    key_words: keyWords,
     ...classification,
     dependency_light: dependencyLight,
     modal_markers: modalMarkers,
@@ -531,17 +539,17 @@ const coerceDependencyLight = (value: Record<string, unknown>): LLMSentenceDepen
   const headIndexed = typeof value.head_indexed === 'boolean' ? value.head_indexed : undefined;
   const arcs = Array.isArray(value.arcs)
     ? value.arcs
-        .map((arc): LLMSentenceDependencyArc | null => {
-          if (!isRecord(arc)) return null;
-          const head = asNumber(arc.head);
-          const dep = asNumber(arc.dep);
-          const label = asString(arc.label);
-          if (typeof head !== 'number' || typeof dep !== 'number' || !label) {
-            return null;
-          }
-          return { head, dep, label };
-        })
-        .filter((arc): arc is LLMSentenceDependencyArc => arc !== null)
+      .map((arc): LLMSentenceDependencyArc | null => {
+        if (!isRecord(arc)) return null;
+        const head = asNumber(arc.head);
+        const dep = asNumber(arc.dep);
+        const label = asString(arc.label);
+        if (typeof head !== 'number' || typeof dep !== 'number' || !label) {
+          return null;
+        }
+        return { head, dep, label };
+      })
+      .filter((arc): arc is LLMSentenceDependencyArc => arc !== null)
     : undefined;
   return {
     head_indexed: headIndexed,

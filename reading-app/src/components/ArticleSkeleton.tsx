@@ -373,7 +373,6 @@ const ExampleArticle: React.FC = () => {
                   updated.function = partial.roles[0].role;
                 }
                 if (partial.topic_sentence) {
-                  console.log('topic_sentence', partial.topic_sentence);
                   updated.topicSentence = partial.topic_sentence;
                 }
                 if (partial.sentences && partial.sentences.length > 0) {
