@@ -1,25 +1,25 @@
 import type {
-  AnalyzeSubSentenceData,
-  SubSentenceAnalysisData,
-  SubSentenceUnitData,
+  AnalyzeSentenceStructureData,
+  SentenceStructureAnalysisData,
+  SentenceStructureUnitData,
 } from '../../services/envelopes';
 import {
   DefaultLegend,
   type ColorVariant,
   type SemanticRoleName,
   type SemanticTag,
-  type SubSentenceAnalysis,
-  type SubUnit,
+  type SentenceStructureAnalysis,
+  type StructureUnit,
   type SyntacticRole,
-} from '../structure/SubSentence';
+} from '../structure/SentenceStructure';
 
-export interface SubSentenceViewModel {
-  analysis: SubSentenceAnalysis;
+export interface SentenceStructureViewModel {
+  analysis: SentenceStructureAnalysis;
   confidence?: number;
-  unitsById: Map<string, SubUnit>;
+  unitsById: Map<string, StructureUnit>;
 }
 
-export type SubsentenceVM = SubSentenceViewModel;
+export type SentenceStructureVM = SentenceStructureViewModel;
 
 const ROLE_ALIAS: Record<string, SyntacticRole> = {
   subject: 'subject',
@@ -120,13 +120,13 @@ type DensityValue = typeof DENSITY_VALUES[number];
 const HIGHLIGHT_VALUES = ['semantics-first', 'role-first', 'semantic-role', 'mixed'] as const;
 type HighlightValue = typeof HIGHLIGHT_VALUES[number];
 
-export const mapSubSentenceToVM = (
-  data?: AnalyzeSubSentenceData | null,
-): SubsentenceVM | null => {
+export const mapSentenceStructureToVM = (
+  data?: AnalyzeSentenceStructureData | null,
+): SentenceStructureVM | null => {
   if (!data) return null;
 
   const analysis = sanitizeAnalysis(data.analysis);
-  const unitsById = new Map<string, SubUnit>();
+  const unitsById = new Map<string, StructureUnit>();
   collectUnits(analysis.units, unitsById);
 
   const topConfidence = clampConfidence(data.confidence);
@@ -141,13 +141,13 @@ export const mapSubSentenceToVM = (
   };
 };
 
-const sanitizeAnalysis = (analysis?: SubSentenceAnalysisData): SubSentenceAnalysis => {
+const sanitizeAnalysis = (analysis?: SentenceStructureAnalysisData): SentenceStructureAnalysis => {
   const sentenceId = analysis?.sentenceId ?? 'unknown';
   const text = analysis?.text ?? '';
   const units = Array.isArray(analysis?.units)
     ? analysis.units
       .map((unit) => sanitizeUnit(unit))
-      .filter((unit): unit is SubUnit => unit !== null)
+      .filter((unit): unit is StructureUnit => unit !== null)
     : [];
 
   const finalUnits = units.length ? units : [buildFallbackUnit(text || sentenceId)];
@@ -180,7 +180,7 @@ const sanitizeAnalysis = (analysis?: SubSentenceAnalysisData): SubSentenceAnalys
   };
 };
 
-const sanitizeUnit = (unit?: SubSentenceUnitData | null): SubUnit | null => {
+const sanitizeUnit = (unit?: SentenceStructureUnitData | null): StructureUnit | null => {
   if (!unit) return null;
   const id = sanitizeId(unit.id);
   const text = typeof unit.text === 'string' ? unit.text.trim() : '';
@@ -197,7 +197,7 @@ const sanitizeUnit = (unit?: SubSentenceUnitData | null): SubUnit | null => {
   const children = Array.isArray(unit.children)
     ? unit.children
       .map((child) => sanitizeUnit(child))
-      .filter((child): child is SubUnit => child !== null)
+      .filter((child): child is StructureUnit => child !== null)
     : undefined;
 
   const clause = unit.clause ? sanitizeAnalysis(unit.clause) : undefined;
@@ -218,9 +218,9 @@ const sanitizeUnit = (unit?: SubSentenceUnitData | null): SubUnit | null => {
 };
 
 const sanitizeBackbone = (
-  backbone: SubSentenceAnalysisData['backbone'] | undefined,
-  units: SubUnit[],
-): SubSentenceAnalysis['backbone'] | undefined => {
+  backbone: SentenceStructureAnalysisData['backbone'] | undefined,
+  units: StructureUnit[],
+): SentenceStructureAnalysis['backbone'] | undefined => {
   const fromData = backbone ?? {};
   const subjectId = sanitizeId(fromData.subjectId);
   const predicateId = sanitizeId(fromData.predicateId);
@@ -241,8 +241,8 @@ const sanitizeBackbone = (
 };
 
 const sanitizeLegend = (
-  legend: SubSentenceAnalysisData['legend'] | undefined,
-): SubSentenceAnalysis['legend'] | undefined => {
+  legend: SentenceStructureAnalysisData['legend'] | undefined,
+): SentenceStructureAnalysis['legend'] | undefined => {
   if (!legend) return undefined;
   const semanticsToVariant = sanitizeLegendEntries(legend.semanticsToVariant, canonicalSemantics);
   const roleToVariant = sanitizeLegendEntries(legend.roleToVariant, canonicalRole);
@@ -294,8 +294,8 @@ const sanitizeVariantPalette = (
 };
 
 const sanitizeLayoutHint = (
-  hint: SubSentenceAnalysisData['layoutHint'] | undefined,
-): SubSentenceAnalysis['layoutHint'] | undefined => {
+  hint: SentenceStructureAnalysisData['layoutHint'] | undefined,
+): SentenceStructureAnalysis['layoutHint'] | undefined => {
   if (!hint) return undefined;
   const density = canonicalDensity(hint.density);
   const highlightStrategy = canonicalHighlight(hint.highlightStrategy);
@@ -320,8 +320,8 @@ const sanitizeLayoutHint = (
 };
 
 const sanitizeIssues = (
-  issues: SubSentenceAnalysisData['issues'] | undefined,
-): SubSentenceAnalysis['issues'] | undefined => {
+  issues: SentenceStructureAnalysisData['issues'] | undefined,
+): SentenceStructureAnalysis['issues'] | undefined => {
   if (!issues?.length) return undefined;
   const mapped = issues
     .map((issue) => {
@@ -343,8 +343,8 @@ const sanitizeIssues = (
 };
 
 const sanitizeAnnotations = (
-  annotations: SubSentenceAnalysisData['annotations'] | undefined,
-): SubSentenceAnalysis['annotations'] | undefined => {
+  annotations: SentenceStructureAnalysisData['annotations'] | undefined,
+): SentenceStructureAnalysis['annotations'] | undefined => {
   if (!annotations?.length) return undefined;
   const mapped = annotations
     .map((annotation) => {
@@ -371,8 +371,8 @@ const sanitizeMeta = (meta: unknown): Record<string, unknown> | undefined => {
 };
 
 const sanitizeViewHint = (
-  hint: SubSentenceUnitData['viewHint'] | undefined,
-): SubUnit['viewHint'] | undefined => {
+  hint: SentenceStructureUnitData['viewHint'] | undefined,
+): StructureUnit['viewHint'] | undefined => {
   if (!hint) return undefined;
   const variant = canonicalVariant(hint.variant);
   const collapsed = typeof hint.collapsed === 'boolean' ? hint.collapsed : undefined;
@@ -439,7 +439,7 @@ const canonicalHighlight = (value: unknown): HighlightValue | undefined => {
   return HIGHLIGHT_VALUES.includes(key as HighlightValue) ? (key as HighlightValue) : undefined;
 };
 
-const buildFallbackUnit = (value: string): SubUnit => {
+const buildFallbackUnit = (value: string): StructureUnit => {
   const text = value.trim() || 'fragment';
   const id = sanitizeId(text) ?? 'clause-1';
   return {
@@ -451,7 +451,7 @@ const buildFallbackUnit = (value: string): SubUnit => {
   };
 };
 
-const collectUnits = (units: SubUnit[], acc: Map<string, SubUnit>): void => {
+const collectUnits = (units: StructureUnit[], acc: Map<string, StructureUnit>): void => {
   for (const unit of units) {
     acc.set(unit.id, unit);
     if (unit.children) {
@@ -463,7 +463,7 @@ const collectUnits = (units: SubUnit[], acc: Map<string, SubUnit>): void => {
   }
 };
 
-const findUnitByRole = (role: SyntacticRole, units: SubUnit[]): string | undefined => {
+const findUnitByRole = (role: SyntacticRole, units: StructureUnit[]): string | undefined => {
   for (const unit of units) {
     if (unit.role === role) return unit.id;
     if (unit.children) {
@@ -506,4 +506,4 @@ const asLower = (value: unknown): string | undefined => {
   return trimmed ? trimmed.toLowerCase() : undefined;
 };
 
-export default mapSubSentenceToVM;
+export default mapSentenceStructureToVM;

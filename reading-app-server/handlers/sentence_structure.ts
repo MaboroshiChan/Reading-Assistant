@@ -1,25 +1,25 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import type {
-  AnalyzeSubSentenceData,
-  RequestEnvelopeSubsentence,
-  ResponseEnvelopeSubSentence,
-  SubSentenceAnalysisData,
-  SubSentenceUnitData,
+  AnalyzeSentenceStructureData,
+  RequestEnvelopeSentenceStructure,
+  ResponseEnvelopeSentenceStructure,
+  SentenceStructureAnalysisData,
+  SentenceStructureUnitData,
 } from '../../reading-app/src/services/envelopes';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { buildStableCacheKey, hashString } from './shared';
-import { buildMockSubSentenceData } from './mock/subsentenceMock';
+import { buildMockSentenceStructureData } from './mock/sentence_structure_mock';
 import { handlerLog } from './logger';
-import { json as llmJson, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
+import { json as llmJson, extractJsonFromText, type CallReturn } from '../services/llmService';
 
-const CACHE_PREFIX = 'subsentence';
+const CACHE_PREFIX = 'sentence-structure';
 const CACHE_VERSION = 'v1';
-const PROMPT_VERSION = 'subsentence.v1';
-const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'subsentence.txt');
+const PROMPT_VERSION = 'sentence_structure.v1';
+const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence_structure.txt');
 const TASK_ORDER = ['micro_roles', 'cue_interaction', 'contrast_resolution'] as const;
-type SubSentenceTask = typeof TASK_ORDER[number];
+type SentenceStructureTask = typeof TASK_ORDER[number];
 const MAX_CLAUSE_DEPTH = 4;
 const NORMALIZED_RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
 const USE_CACHE = false;
@@ -158,7 +158,7 @@ const UNIT_SOURCES = ['manual', 'model', 'hybrid'] as const;
 type UnitSource = typeof UNIT_SOURCES[number];
 const SOURCE_SET = new Set<UnitSource>(UNIT_SOURCES);
 
-const buildCacheKey = (req: RequestEnvelopeSubsentence): string => {
+const buildCacheKey = (req: RequestEnvelopeSentenceStructure): string => {
   return buildStableCacheKey(CACHE_PREFIX, CACHE_VERSION, {
     payload: req.payload,
     context: req.context ?? {},
@@ -167,12 +167,12 @@ const buildCacheKey = (req: RequestEnvelopeSubsentence): string => {
   });
 };
 
-const buildTasks = (req: RequestEnvelopeSubsentence): SubSentenceTask[] => {
+const buildTasks = (req: RequestEnvelopeSentenceStructure): SentenceStructureTask[] => {
   const requested = req.payload.options?.tasks ?? TASK_ORDER;
-  const normalized = new Set<SubSentenceTask>();
+  const normalized = new Set<SentenceStructureTask>();
   for (const raw of requested) {
-    if (TASK_ORDER.includes(raw as SubSentenceTask)) {
-      normalized.add(raw as SubSentenceTask);
+    if (TASK_ORDER.includes(raw as SentenceStructureTask)) {
+      normalized.add(raw as SentenceStructureTask);
     }
   }
   const ordered = TASK_ORDER.filter((task) => normalized.size === 0 || normalized.has(task));
@@ -188,7 +188,7 @@ const loadPrompt = async (): Promise<string> => {
 };
 
 const extractFragmentText = (
-  req: RequestEnvelopeSubsentence,
+  req: RequestEnvelopeSentenceStructure,
 ): { fragmentText: string; sentenceText?: string } => {
   const span = req.payload.span;
   const meta = (req.meta && typeof req.meta === 'object')
@@ -212,7 +212,7 @@ const extractFragmentText = (
   return { fragmentText, sentenceText };
 };
 
-const formatContext = (req: RequestEnvelopeSubsentence): string | null => {
+const formatContext = (req: RequestEnvelopeSentenceStructure): string | null => {
   const ctx = req.context;
   if (!ctx) return null;
   const lines: string[] = [];
@@ -245,7 +245,7 @@ const formatContext = (req: RequestEnvelopeSubsentence): string | null => {
   return lines.length ? lines.join('\n') : null;
 };
 
-const buildPrompt = async (req: RequestEnvelopeSubsentence): Promise<string> => {
+const buildPrompt = async (req: RequestEnvelopeSentenceStructure): Promise<string> => {
   const basePrompt = (await loadPrompt()).trim();
   const tasks = buildTasks(req);
   const { fragmentText, sentenceText } = extractFragmentText(req);
@@ -277,18 +277,18 @@ const buildPrompt = async (req: RequestEnvelopeSubsentence): Promise<string> => 
   return sections.join('\n');
 };
 
-const buildSubSentenceData = async (
-  req: RequestEnvelopeSubsentence,
+const buildSentenceStructureData = async (
+  req: RequestEnvelopeSentenceStructure,
 ): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
   if (config.useMockLLM) {
-    handlerLog('subsentence', 'building mock payload', {
+    handlerLog('sentence_structure', 'building mock payload', {
       requestId: req.request_id,
       sentenceId: req.payload.sentence_id,
       tasks,
     });
-    const mockData = buildMockSubSentenceData(req);
+    const mockData = buildMockSentenceStructureData(req);
     const text = JSON.stringify(mockData);
     const stream = (async function* () {
       yield text;
@@ -303,14 +303,14 @@ const buildSubSentenceData = async (
     };
   }
 
-  handlerLog('subsentence', 'building LLM payload', {
+  handlerLog('sentence_structure', 'building LLM payload', {
     requestId: req.request_id,
     sentenceId: req.payload.sentence_id,
     promptVersion: PROMPT_VERSION,
     tasks,
   });
   const prompt = await buildPrompt(req);
-  handlerLog('subsentence', 'LLM prompt prepared', {
+  handlerLog('sentence_structure', 'LLM prompt prepared', {
     requestId: req.request_id,
     sentenceId: req.payload.sentence_id,
     promptVersion: PROMPT_VERSION,
@@ -320,12 +320,12 @@ const buildSubSentenceData = async (
   return llmJson(prompt);
 };
 
-export const handleSubSentence = async (
-  req: RequestEnvelopeSubsentence,
+export const handleSentenceStructure = async (
+  req: RequestEnvelopeSentenceStructure,
 ): Promise<CallReturn<string>> => {
-  //console.log("[DEBUG] handleSubSentence starting", req.request_id);
+  //console.log("[DEBUG] handleSentenceStructure starting", req.request_id);
 
-  handlerLog('subsentence', 'request received', {
+  handlerLog('sentence_structure', 'request received', {
     requestId: req.request_id,
     mock: config.useMockLLM,
     promptVersion: PROMPT_VERSION,
@@ -333,9 +333,9 @@ export const handleSubSentence = async (
 
   const cacheKey = USE_CACHE ? buildCacheKey(req) : null;
   if (USE_CACHE && cacheKey) {
-    const cached = cache.get<ResponseEnvelopeSubSentence>(cacheKey);
+    const cached = cache.get<ResponseEnvelopeSentenceStructure>(cacheKey);
     if (cached) {
-      handlerLog('subsentence', 'cache hit', {
+      handlerLog('sentence_structure', 'cache hit', {
         requestId: req.request_id,
         cacheKey,
         promptVersion: PROMPT_VERSION,
@@ -356,7 +356,7 @@ export const handleSubSentence = async (
   }
 
   const started = Date.now();
-  const { data: stream, usage: usagePromise } = await buildSubSentenceData(req);
+  const { data: stream, usage: usagePromise } = await buildSentenceStructureData(req);
 
   const tappedStream = (async function* () {
     let text = '';
@@ -369,17 +369,17 @@ export const handleSubSentence = async (
     // Background processing
     try {
       const usage = await usagePromise;
-      let data: AnalyzeSubSentenceData;
+      let data: AnalyzeSentenceStructureData;
       if (config.useMockLLM) {
-        data = JSON.parse(text) as AnalyzeSubSentenceData;
+        data = JSON.parse(text) as AnalyzeSentenceStructureData;
       } else {
         const object = extractJsonFromText(text);
-        data = mapSubSentenceResponse(object, req, buildTasks(req));
+        data = mapSentenceStructureResponse(object, req, buildTasks(req));
       }
 
-      void persistNormalizedSubSentence(req, data);
+      void persistNormalizedSentenceStructure(req, data);
 
-      const response: ResponseEnvelopeSubSentence = {
+      const response: ResponseEnvelopeSentenceStructure = {
         request_id: req.request_id,
         status: 'ok',
         served_from: 'fresh',
@@ -395,7 +395,7 @@ export const handleSubSentence = async (
         cache.set(cacheKey, response, config.cacheTtlMs);
       }
     } catch (error) {
-      console.warn('[subsentence] failed to process/cache response', error);
+      console.warn('[sentence_structure] failed to process/cache response', error);
     }
   })();
 
@@ -403,18 +403,18 @@ export const handleSubSentence = async (
 };
 
 interface SanitizeContext {
-  req: RequestEnvelopeSubsentence;
-  tasks: readonly SubSentenceTask[];
+  req: RequestEnvelopeSentenceStructure;
+  tasks: readonly SentenceStructureTask[];
   fragmentText: string;
   sentenceText?: string;
   usedIds: Set<string>;
 }
 
-const mapSubSentenceResponse = (
+const mapSentenceStructureResponse = (
   payload: unknown,
-  req: RequestEnvelopeSubsentence,
-  tasks: readonly SubSentenceTask[],
-): AnalyzeSubSentenceData => {
+  req: RequestEnvelopeSentenceStructure,
+  tasks: readonly SentenceStructureTask[],
+): AnalyzeSentenceStructureData => {
   const { fragmentText, sentenceText } = extractFragmentText(req);
   const context: SanitizeContext = {
     req,
@@ -431,7 +431,7 @@ const mapSubSentenceResponse = (
   const analysis = sanitizeAnalysis(rawAnalysis, context, 0, fragmentText);
   const topConfidence = clampConfidence((top as Record<string, unknown>).confidence);
 
-  const data: AnalyzeSubSentenceData = {
+  const data: AnalyzeSentenceStructureData = {
     analysis,
   };
 
@@ -466,7 +466,7 @@ const sanitizeAnalysis = (
   ctx: SanitizeContext,
   depth: number,
   fallbackText: string,
-): SubSentenceAnalysisData => {
+): SentenceStructureAnalysisData => {
   const record = isRecord(raw) ? raw : {};
   const sentenceId =
     asString(record.sentenceId ?? record.sentence_id) ?? ctx.req.payload.sentence_id;
@@ -489,7 +489,7 @@ const sanitizeAnalysis = (
     });
   }
 
-  const analysis: SubSentenceAnalysisData = {
+  const analysis: SentenceStructureAnalysisData = {
     sentenceId,
     text,
     units,
@@ -527,10 +527,10 @@ const sanitizeUnits = (
   depth: number,
   prefix: string,
   parentId?: string,
-): SubSentenceUnitData[] => {
+): SentenceStructureUnitData[] => {
   if (!Array.isArray(rawUnits) || depth >= MAX_CLAUSE_DEPTH) return [];
 
-  const units: SubSentenceUnitData[] = [];
+  const units: SentenceStructureUnitData[] = [];
   for (let index = 0; index < rawUnits.length; index += 1) {
     const unit = sanitizeUnit(
       rawUnits[index],
@@ -548,7 +548,7 @@ const sanitizeUnit = (
   ctx: SanitizeContext,
   depth: number,
   prefix: string,
-): SubSentenceUnitData | null => {
+): SentenceStructureUnitData | null => {
   if (!isRecord(raw)) return null;
   const text = asString(raw.text);
   if (!text) return null;
@@ -559,7 +559,7 @@ const sanitizeUnit = (
   }
   ctx.usedIds.add(id);
 
-  const unit: SubSentenceUnitData = {
+  const unit: SentenceStructureUnitData = {
     id,
     text,
   };
@@ -612,8 +612,8 @@ const sanitizeUnit = (
 
 const sanitizeBackbone = (
   raw: unknown,
-  units: SubSentenceUnitData[],
-): SubSentenceAnalysisData['backbone'] | undefined => {
+  units: SentenceStructureUnitData[],
+): SentenceStructureAnalysisData['backbone'] | undefined => {
   const fromRaw = isRecord(raw)
     ? {
       subjectId: asString(raw.subjectId ?? raw.subject_id),
@@ -636,7 +636,7 @@ const sanitizeBackbone = (
   };
 };
 
-const findUnitByRole = (role: SyntacticRole, units: SubSentenceUnitData[]): string | undefined => {
+const findUnitByRole = (role: SyntacticRole, units: SentenceStructureUnitData[]): string | undefined => {
   for (const unit of units) {
     if (unit.role === role) return unit.id;
     if (unit.children) {
@@ -669,7 +669,7 @@ function normalizeLegacyAnalysis(
       )
       : '');
 
-  const units: SubSentenceUnitData[] = [];
+  const units: SentenceStructureUnitData[] = [];
   let index = 1;
   for (const role of roles) {
     const unit = convertLegacyRole(role, ctx, index, baseText);
@@ -722,14 +722,14 @@ function convertLegacyRole(
   ctx: SanitizeContext,
   index: number,
   fallbackText: string,
-): SubSentenceUnitData | null {
+): SentenceStructureUnitData | null {
   const label = asString(rawRole.role);
   const span = coerceLegacySpan(rawRole.span);
   const text = pickTextForSpan(span, ctx, fallbackText);
   if (!text) return null;
 
   const id = `legacy-${index}`;
-  const unit: SubSentenceUnitData = {
+  const unit: SentenceStructureUnitData = {
     id,
     text,
     source: 'model',
@@ -799,150 +799,93 @@ function pickTextForSpan(
   return approx || fragment;
 }
 
-function deriveBackboneFromUnits(
-  units: SubSentenceUnitData[],
-): SubSentenceAnalysisData['backbone'] | undefined {
-  const queue = [...units];
-  let subjectId: string | undefined;
-  let predicateId: string | undefined;
-  let objectId: string | undefined;
-
-  while (queue.length) {
-    const unit = queue.shift()!;
-    if (!subjectId && unit.role === 'subject') subjectId = unit.id;
-    if (!predicateId && unit.role === 'predicate') predicateId = unit.id;
-    if (!objectId && unit.role === 'object') objectId = unit.id;
-    if (unit.children) queue.push(...unit.children);
-    if (unit.clause) queue.push(...unit.clause.units);
-  }
-
-  if (!subjectId && !predicateId && !objectId) return undefined;
-  return {
-    ...(subjectId ? { subjectId } : {}),
-    ...(predicateId ? { predicateId } : {}),
-    ...(objectId ? { objectId } : {}),
-  };
-}
-
-function clampIndex(value: number, max: number): number {
-  if (!Number.isFinite(value)) return 0;
-  if (value <= 0) return 0;
-  if (value >= max) return max;
-  return Math.floor(value);
-}
-
-async function persistNormalizedSubSentence(
-  req: RequestEnvelopeSubsentence,
-  data: AnalyzeSubSentenceData,
+async function persistNormalizedSentenceStructure(
+  req: RequestEnvelopeSentenceStructure,
+  data: AnalyzeSentenceStructureData,
 ): Promise<void> {
-  const timestamp = new Date().toISOString();
-  const safeStamp = timestamp.replace(/[:.]/g, '-');
-  const filename = `${safeStamp}_subsentence-normalized.json`;
-  const payload = {
-    timestamp,
-    requestId: req.request_id,
-    sentenceId: req.payload.sentence_id,
-    span: req.payload.span,
-    analysis: data.analysis,
-    confidence: data.confidence,
-  };
-
-  await fs.mkdir(NORMALIZED_RESPONSE_DIR, { recursive: true });
-  await fs.writeFile(
-    path.join(NORMALIZED_RESPONSE_DIR, filename),
-    JSON.stringify(payload, null, 2),
-    'utf8',
-  );
+  const dir = NORMALIZED_RESPONSE_DIR;
+  try {
+    await fs.mkdir(dir, { recursive: true });
+    const name = `${Date.now()}_${req.payload.doc_id}_${req.payload.sentence_id}.json`;
+    const target = path.join(dir, name);
+    await fs.writeFile(target, JSON.stringify({ request: req, response: data }, null, 2));
+  } catch (error) {
+    console.warn('[sentence_structure] failed to persist normalization', error);
+  }
 }
 
-const sanitizeId = (value: unknown): string | undefined => {
-  const str = asString(value);
-  if (!str) return undefined;
-  const cleaned = str.replace(/[^A-Za-z0-9._-]/g, '');
+function deriveBackboneFromUnits(
+  units: SentenceStructureUnitData[],
+): SentenceStructureAnalysisData['backbone'] | undefined {
+  const s = units.find((u) => u.role === 'subject')?.id;
+  const p = units.find((u) => u.role === 'predicate')?.id;
+  const o = units.find((u) => u.role === 'object')?.id;
+  if (!s && !p && !o) return undefined;
+  return {
+    ...(s ? { subjectId: s } : {}),
+    ...(p ? { predicateId: p } : {}),
+    ...(o ? { objectId: o } : {}),
+  };
+}
+
+// -----------------------------
+// Utilities & Aliases
+// -----------------------------
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === 'object' && !Array.isArray(v);
+
+const asString = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+const asLower = (v: unknown): string | undefined => (typeof v === 'string' ? v.toLowerCase() : undefined);
+const asNumber = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+
+const asIsoString = (v: unknown): string | undefined => {
+  if (typeof v !== 'string') return undefined;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+};
+
+const clampConfidence = (v: unknown): number | undefined => {
+  const n = asNumber(v);
+  if (n === undefined) return undefined;
+  return Math.max(0, Math.min(1, n));
+};
+
+const clampIndex = (v: number, max: number): number => Math.max(0, Math.min(max, Math.floor(v)));
+
+const sanitizeId = (v: unknown): string | undefined => {
+  const s = asString(v);
+  if (!s) return undefined;
+  const cleaned = s.trim();
   return cleaned.length ? cleaned : undefined;
 };
 
 const makeUniqueId = (used: Set<string>, prefix: string): string => {
-  let index = 1;
-  let candidate = `${prefix}${index}`;
+  let counter = 1;
+  let candidate = `${prefix}${counter}`;
   while (used.has(candidate)) {
-    index += 1;
-    candidate = `${prefix}${index}`;
+    counter += 1;
+    candidate = `${prefix}${counter}`;
   }
   return candidate;
 };
 
-const canonicalRole = (value: unknown): SyntacticRole | undefined => {
-  const key = asLower(value);
-  return key ? ROLE_ALIAS[key] : undefined;
+const canonicalRole = (v: unknown): SyntacticRole | undefined => ROLE_ALIAS[asLower(v) ?? ''];
+const canonicalSemantics = (v: unknown): SemanticTag | undefined => SEMANTIC_ALIAS[asLower(v) ?? ''];
+const canonicalSemRole = (v: unknown): SemanticRoleName | undefined => SEMROLE_ALIAS[asLower(v) ?? ''];
+const canonicalSource = (v: unknown): UnitSource | undefined =>
+  SOURCE_SET.has(asLower(v) as UnitSource) ? (asLower(v) as UnitSource) : undefined;
+
+const sanitizeViewHint = (v: unknown): SentenceStructureUnitData['viewHint'] | undefined => {
+  if (!isRecord(v)) return undefined;
+  const hint: SentenceStructureUnitData['viewHint'] = {};
+  if (typeof v.collapsed === 'boolean') hint.collapsed = v.collapsed;
+  const variant = asString(v.variant);
+  if (variant && VARIANTS.has(variant as ColorVariant)) hint.variant = variant;
+  const label = asString(v.label);
+  if (label) hint.label = label;
+  const order = asNumber(v.order);
+  if (order !== undefined) hint.order = order;
+  return Object.keys(hint).length ? hint : undefined;
 };
-
-const canonicalSemantics = (value: unknown): SemanticTag | undefined => {
-  const key = asLower(value);
-  return key ? SEMANTIC_ALIAS[key] : undefined;
-};
-
-const canonicalSemRole = (value: unknown): SemanticRoleName | undefined => {
-  const key = asLower(value);
-  return key ? SEMROLE_ALIAS[key] : undefined;
-};
-
-const canonicalSource = (value: unknown): UnitSource | undefined => {
-  const key = asLower(value);
-  if (!key) return undefined;
-  if (SOURCE_SET.has(key as UnitSource)) {
-    return key as UnitSource;
-  }
-  if (key.startsWith('model')) return 'model';
-  return undefined;
-};
-
-const canonicalVariant = (value: unknown): ColorVariant | undefined => {
-  const key = asLower(value);
-  return key && VARIANTS.has(key as ColorVariant) ? (key as ColorVariant) : undefined;
-};
-
-const sanitizeViewHint = (value: unknown): SubSentenceUnitData['viewHint'] | undefined => {
-  if (!isRecord(value)) return undefined;
-  const variant = canonicalVariant(value.variant);
-  const collapsed = typeof value.collapsed === 'boolean' ? value.collapsed : undefined;
-  const label = asString(value.label);
-  const order = asNumber(value.order);
-
-  if (!variant && collapsed === undefined && !label && order === undefined) return undefined;
-  return {
-    ...(variant ? { variant } : {}),
-    ...(collapsed !== undefined ? { collapsed } : {}),
-    ...(label ? { label } : {}),
-    ...(typeof order === 'number' ? { order: Math.trunc(order) } : {}),
-  };
-};
-
-const asString = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.trim() ? value.trim() : undefined;
-
-const asLower = (value: unknown): string | undefined => {
-  const str = asString(value);
-  return str ? str.toLowerCase() : undefined;
-};
-
-const asNumber = (value: unknown): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-
-const clampConfidence = (value: unknown): number | undefined => {
-  const num = asNumber(value);
-  if (num === undefined) return undefined;
-  if (num <= 0) return 0;
-  if (num >= 1) return 1;
-  return Number(Math.round(num * 1000) / 1000);
-};
-
-const asIsoString = (value: unknown): string | undefined => {
-  const str = asString(value);
-  if (!str) return undefined;
-  const parsed = Date.parse(str);
-  return Number.isNaN(parsed) ? undefined : str;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;

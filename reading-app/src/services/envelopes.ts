@@ -130,7 +130,7 @@ export type AnalyzeMessageType =
   | 'analyze.skeleton.v1'
   | 'analyze.paragraph.v1'
   | 'analyze.sentence.v1'
-  | 'analyze.subsentence.v1';
+  | 'analyze.sentence-structure.v1';
 
 export type MessageType = AnalyzeMessageType; // extend here in the future
 
@@ -215,7 +215,7 @@ export interface AnalyzeSentencePayload {
   doc_id: string;
   sentence_id: string;
   sentence_text: string;
-  options?: { tasks?: Array<'semantic_roles' | 'discourse_function' | 'dependency_light' | 'modal_markers'> };
+  options?: { tasks?: Array<'semantic_roles' | 'key_words' | 'discourse_function' | 'dependency_light' | 'modal_markers'> };
 }
 
 export interface SentenceRole { role: string; span?: AnchorSpan; anchors?: Anchor[]; confidence?: number }
@@ -233,15 +233,15 @@ export interface AnalyzeSentenceData {
   key_words?: string[];
 }
 
-// 4) analyze.subsentence.v1
-export interface AnalyzeSubSentencePayload {
+// 4) analyze.sentence-structure.v1
+export interface AnalyzeSentenceStructurePayload {
   doc_id: string;
   sentence_id: string;
   span: AnchorSpan; // subspan within sentence_text
   options?: { tasks?: Array<'micro_roles' | 'cue_interaction' | 'contrast_resolution'> };
 }
 
-export interface SubSentenceUnitData {
+export interface SentenceStructureUnitData {
   id: string;
   text: string;
   role?: string;
@@ -249,8 +249,8 @@ export interface SubSentenceUnitData {
   semRole?: string;
   confidence?: number;
   source?: 'manual' | 'model' | 'hybrid';
-  children?: SubSentenceUnitData[];
-  clause?: SubSentenceAnalysisData;
+  children?: SentenceStructureUnitData[];
+  clause?: SentenceStructureAnalysisData;
   meta?: Record<string, unknown>;
   viewHint?: {
     variant?: string;
@@ -260,10 +260,10 @@ export interface SubSentenceUnitData {
   };
 }
 
-export interface SubSentenceAnalysisData {
+export interface SentenceStructureAnalysisData {
   sentenceId: string;
   text: string;
-  units: SubSentenceUnitData[];
+  units: SentenceStructureUnitData[];
   backbone?: {
     subjectId?: string;
     predicateId?: string;
@@ -299,8 +299,8 @@ export interface SubSentenceAnalysisData {
   meta?: Record<string, unknown>;
 }
 
-export interface AnalyzeSubSentenceData {
-  analysis: SubSentenceAnalysisData;
+export interface AnalyzeSentenceStructureData {
+  analysis: SentenceStructureAnalysisData;
   confidence?: number;
 }
 
@@ -339,9 +339,9 @@ export interface RequestEnvelopeSentence extends StandardEnvelopeBase {
   payload: AnalyzeSentencePayload;
 }
 
-export interface RequestEnvelopeSubsentence extends StandardEnvelopeBase {
-  type: 'analyze.subsentence.v1';
-  payload: AnalyzeSubSentencePayload;
+export interface RequestEnvelopeSentenceStructure extends StandardEnvelopeBase {
+  type: 'analyze.sentence-structure.v1';
+  payload: AnalyzeSentenceStructurePayload;
 }
 
 // Union of every request envelope so transports can accept a single type.
@@ -349,7 +349,7 @@ export type RequestEnvelope =
   | RequestEnvelopeSkeleton
   | RequestEnvelopeParagraph
   | RequestEnvelopeSentence
-  | RequestEnvelopeSubsentence;
+  | RequestEnvelopeSentenceStructure;
 
 // Response envelopes
 // Every response echoes back tracking fields so clients can correlate requests.
@@ -380,16 +380,16 @@ export interface ResponseEnvelopeSentence extends ResponseEnvelopeBase {
   frames?: EnvelopeFrame<Partial<AnalyzeSentenceData>>[];
 }
 
-export interface ResponseEnvelopeSubSentence extends ResponseEnvelopeBase {
-  data?: AnalyzeSubSentenceData;
-  frames?: EnvelopeFrame<Partial<AnalyzeSubSentenceData>>[];
+export interface ResponseEnvelopeSentenceStructure extends ResponseEnvelopeBase {
+  data?: AnalyzeSentenceStructureData;
+  frames?: EnvelopeFrame<Partial<AnalyzeSentenceStructureData>>[];
 }
 
 export type ResponseEnvelope =
   | ResponseEnvelopeSkeleton
   | ResponseEnvelopeParagraph
   | ResponseEnvelopeSentence
-  | ResponseEnvelopeSubSentence;
+  | ResponseEnvelopeSentenceStructure;
 
 // -----------------------------
 // Utility guards (optional)
@@ -400,7 +400,7 @@ export const isAnalyzeType = (t: string): t is AnalyzeMessageType =>
   t === 'analyze.skeleton.v1' ||
   t === 'analyze.paragraph.v1' ||
   t === 'analyze.sentence.v1' ||
-  t === 'analyze.subsentence.v1';
+  t === 'analyze.sentence-structure.v1';
 
 // Type guards that help SDK callers branch on response status.
 export const isPartial = (r: ResponseEnvelope): r is ResponseEnvelope & { status: 'partial' } => r.status === 'partial';

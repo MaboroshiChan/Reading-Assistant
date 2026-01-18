@@ -6,7 +6,7 @@ import type { CallReturn } from '../services/llmService';
 import { handleParagraph } from '../handlers/paragraph';
 import { handleSentence } from '../handlers/sentence';
 import { handleSkeleton } from '../handlers/skeleton';
-import { handleSubSentence } from '../handlers/subsentence';
+import { handleSentenceStructure } from '../handlers/sentence_structure';
 import { errorResponse, validateEnvelope } from './validate';
 
 const UNKNOWN_REQUEST_ID = 'unknown';
@@ -46,9 +46,9 @@ const dispatch = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> =>
     result = await handleParagraph(envelope);
   } else if (envelope.type === 'analyze.sentence.v1') {
     result = await handleSentence(envelope);
-  } else if (envelope.type === 'analyze.subsentence.v1') {
-    console.log('handle subsentence');
-    result = await handleSubSentence(envelope);
+  } else if (envelope.type === 'analyze.sentence-structure.v1') {
+    console.log('handle sentence structure');
+    result = await handleSentenceStructure(envelope);
   } else {
     const _exhaustive: never = envelope;
     return errorResponse(

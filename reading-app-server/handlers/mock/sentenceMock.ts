@@ -27,12 +27,13 @@ const modalMap: Record<string, ModalMarker['type']> = {
 
 const filterByTasks = (
   base: AnalyzeSentenceData,
-  tasks?: Array<'semantic_roles' | 'discourse_function' | 'dependency_light' | 'modal_markers'>,
+  tasks?: Array<'semantic_roles' | 'key_words' | 'discourse_function' | 'dependency_light' | 'modal_markers'>,
 ): AnalyzeSentenceData => {
   if (!tasks || tasks.length === 0) return base;
   const requested = new Set(tasks);
   return {
     semantic_roles: requested.has('semantic_roles') ? base.semantic_roles : undefined,
+    key_words: requested.has('key_words') ? base.key_words : undefined,
     discourse_function: requested.has('discourse_function') ? base.discourse_function : undefined,
     dependency_light: requested.has('dependency_light') ? base.dependency_light : undefined,
     modal_markers: requested.has('modal_markers') ? base.modal_markers : undefined,

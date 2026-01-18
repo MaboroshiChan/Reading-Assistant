@@ -49,59 +49,31 @@
 
 /* Dark Mode Overrides removed - handled by variables */
 
-.subsentence-status {
+.sentence-structure-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 8px;
-  font-size: 12px;
-  opacity: 0.85;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  opacity: 0.9;
 }
 
-.subsentence-status--progress {
-  position: relative;
+.sentence-structure-status--loading {
+  color: var(--color-status-blue);
 }
 
-.subsentence-status--progress::after {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: 8px;
-  border-radius: 9999px;
-  background: currentColor;
-  box-shadow:
-    10px 0 0 currentColor,
-    20px 0 0 currentColor;
-  animation: subsentence-dots 1s ease-in-out infinite;
-  vertical-align: middle;
+.sentence-structure-status--loading .sentence-spinner {
+  width: 16px;
+  height: 16px;
+  opacity: 0.8;
 }
 
-@keyframes subsentence-dots {
-  0% {
-    box-shadow:
-      10px 0 0 currentColor,
-      20px 0 0 currentColor;
-    opacity: 0.4;
-  }
-
-  50% {
-    box-shadow:
-      0 0 0 currentColor,
-      10px 0 0 currentColor;
-    opacity: 1;
-  }
-
-  100% {
-    box-shadow:
-      10px 0 0 currentColor,
-      20px 0 0 currentColor;
-    opacity: 0.4;
-  }
-}
-
-.subsentence-status--error {
+.sentence-structure-status--error {
   color: var(--color-status-red);
 }
 
-.subsentence-section {
+.sentence-structure-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -117,14 +89,14 @@
     margin-top 220ms ease;
 }
 
-.subsentence-section.is-open {
+.sentence-structure-section.is-open {
   margin-top: 12px;
   max-height: 1200px;
   opacity: 1;
   transform: translateY(0);
 }
 
-.subsentence-unit-info {
+.sentence-structure-unit-info {
   margin-top: 12px;
   padding-top: 8px;
   border-top: 1px solid var(--color-surface-border);
@@ -133,13 +105,13 @@
   gap: 6px;
 }
 
-.subsentence-unit-info-title {
+.sentence-structure-unit-info-title {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
 }
 
-.subsentence-unit-info-grid {
+.sentence-structure-unit-info-grid {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 4px 12px;
@@ -147,7 +119,7 @@
   opacity: 0.85;
 }
 
-.subsentence-unit-info-grid .label {
+.sentence-structure-unit-info-grid .label {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 10px;

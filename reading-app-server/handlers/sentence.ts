@@ -21,9 +21,9 @@ const CACHE_PREFIX = 'sentence';
 const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'sentence.v5';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
-const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'key_phrase', 'discourse_function', 'dependency_light', 'modal_markers'];
+const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'key_words', 'discourse_function', 'dependency_light', 'modal_markers'];
 
-export type SentenceTask = 'semantic_roles' | 'key_phrase' | 'discourse_function' | 'dependency_light' | 'modal_markers';
+export type SentenceTask = 'semantic_roles' | 'key_words' | 'discourse_function' | 'dependency_light' | 'modal_markers';
 export { PROMPT_VERSION as SENTENCE_PROMPT_VERSION };
 
 interface LLMSentenceRole {
@@ -403,7 +403,7 @@ const mapSentenceResponse = (
     })()
     : undefined;
 
-  const keyWords = shouldInclude('key_phrase') && payload.key_phrase
+  const keyWords = shouldInclude('key_words') && payload.key_phrase
     ? (() => {
       const words: string[] = [];
       // Support both string (legacy/single) and array

@@ -3,7 +3,7 @@
  *
  * Role:
  *  - Thin service layer wrapping NetworkClient to send well-typed Envelope messages
- *  - Provides semantic methods for your app: fetchSkeleton, analyzeParagraph, analyzeSentence, analyzeSubsentence
+ *  - Provides semantic methods for your app: fetchSkeleton, analyzeParagraph, analyzeSentence, analyzeSentenceStructure
  *  - Centralizes default context (locale, client info, prompt_version, quality policy)
  *  - Keeps surface stable even if transport (fetch/WS) changes
  */
@@ -14,15 +14,15 @@ import type {
   ResponseEnvelopeSkeleton,
   ResponseEnvelopeParagraph,
   ResponseEnvelopeSentence,
-  ResponseEnvelopeSubSentence as ResponseEnvelopeSubSentence,
+  ResponseEnvelopeSentenceStructure,
   AnalyzeSkeletonPayload,
   AnalyzeSkeletonData,
   AnalyzeParagraphPayload,
   AnalyzeParagraphData,
   AnalyzeSentencePayload,
   AnalyzeSentenceData,
-  AnalyzeSubSentencePayload as AnalyzeSubSentencePayload,
-  AnalyzeSubSentenceData as AnalyzeSubSentenceData,
+  AnalyzeSentenceStructurePayload,
+  AnalyzeSentenceStructureData,
   StandardContext,
   ApiVersion,
   Priority,
@@ -176,16 +176,16 @@ export class MessageService {
     return this.send<ResponseEnvelopeSentence, Partial<AnalyzeSentenceData>>(env, sendOptions);
   }
 
-  /** Analyze a sub-sentence span within a sentence */
-  async analyzeSubSentence(
-    payload: AnalyzeSubSentencePayload,
+  /** Analyze a sentence structure (clauses, roles, etc.) */
+  async analyzeSentenceStructure(
+    payload: AnalyzeSentenceStructurePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
     meta?: Record<string, unknown>,
-    options?: SendOptions<unknown, Partial<AnalyzeSubSentenceData>>,
-  ): Promise<ResponseEnvelopeSubSentence> {
-    console.log("messageService.analyzeSubSentence called", { payload });
+    options?: SendOptions<unknown, Partial<AnalyzeSentenceStructureData>>,
+  ): Promise<ResponseEnvelopeSentenceStructure> {
+    console.log("messageService.analyzeSentenceStructure called", { payload });
     const envelope: RequestEnvelope = {
-      type: 'analyze.subsentence.v1',
+      type: 'analyze.sentence-structure.v1',
       api_version: this.defaults.apiVersion ?? 'v1',
       request_id: crypto.randomUUID(),
       locale: this.defaults.locale,
@@ -196,8 +196,8 @@ export class MessageService {
       meta,
     } as RequestEnvelope;
 
-    console.log("analyzeSubSentence.sending", envelope);
-    return this.send<ResponseEnvelopeSubSentence, unknown, Partial<AnalyzeSubSentenceData>>(envelope, options);
+    console.log("analyzeSentenceStructure.sending", envelope);
+    return this.send<ResponseEnvelopeSentenceStructure, unknown, Partial<AnalyzeSentenceStructureData>>(envelope, options);
   }
 
   /** Health check helper that proxies through to the underlying NetworkClient. */

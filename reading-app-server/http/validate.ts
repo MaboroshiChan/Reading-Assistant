@@ -2,13 +2,13 @@ import type {
   AnalyzeParagraphPayload,
   AnalyzeSentencePayload,
   AnalyzeSkeletonPayload,
-  AnalyzeSubSentencePayload,
+  AnalyzeSentenceStructurePayload,
   ErrorCode,
   RequestEnvelope,
   RequestEnvelopeParagraph,
   RequestEnvelopeSentence,
   RequestEnvelopeSkeleton,
-  RequestEnvelopeSubsentence,
+  RequestEnvelopeSentenceStructure,
   ResponseEnvelope,
 } from '../../reading-app/src/services/envelopes';
 
@@ -57,9 +57,9 @@ const isSentencePayload = (
   );
 };
 
-const isSubSentencePayload = (
+const isSentenceStructurePayload = (
   payload: unknown,
-): payload is AnalyzeSubSentencePayload => {
+): payload is AnalyzeSentenceStructurePayload => {
   if (!isRecord(payload)) return false;
   if (!isString(payload.doc_id) || !isString(payload.sentence_id)) return false;
   if (!isRecord(payload.span)) return false;
@@ -190,21 +190,21 @@ export const validateEnvelope = (input: unknown): ValidationResult => {
         envelope: input as unknown as RequestEnvelopeSentence,
       };
 
-    case 'analyze.subsentence.v1':
-      if (!isSubSentencePayload(payload)) {
+    case 'analyze.sentence-structure.v1':
+      if (!isSentenceStructurePayload(payload)) {
         return {
           ok: false,
           error: makeError(
             requestId,
             'E.BAD_REQUEST',
             400,
-            'Invalid subsentence payload',
+            'Invalid sentence structure payload',
           ),
         };
       }
       return {
         ok: true,
-        envelope: input as unknown as RequestEnvelopeSubsentence,
+        envelope: input as unknown as RequestEnvelopeSentenceStructure,
       };
 
     default:

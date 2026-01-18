@@ -1,10 +1,10 @@
-.subsentence-container {
+.sentence-structure-container {
   display: inline;
   white-space: normal;
   line-height: 1.7;
 }
 
-.subsentence-chip {
+.sentence-structure-chip {
   display: inline-flex;
   align-items: baseline;
   padding: 2px 4px;
@@ -19,26 +19,26 @@
   vertical-align: middle;
 }
 
-.subsentence-chip--interactive:hover {
+.sentence-structure-chip--interactive:hover {
   background-color: var(--color-surface-hover);
 }
 
-.subsentence-chip--active {
+.sentence-structure-chip--active {
   background-color: hsla(var(--primary-hue), var(--primary-sat), 65%, 0.15);
   box-shadow: 0 0 0 2px hsla(var(--primary-hue), var(--primary-sat), 65%, 0.3);
   border-color: var(--color-primary-dim);
 }
 
-.subsentence-chip--interactive {
+.sentence-structure-chip--interactive {
   cursor: pointer;
 }
 
-.subsentence-space {
+.sentence-structure-space {
   display: inline;
   white-space: pre;
 }
 
-.subsentence-chip--has-children {
+.sentence-structure-chip--has-children {
   flex-direction: column;
   align-items: flex-start;
   padding: 4px 6px;
@@ -46,14 +46,14 @@
   border-color: var(--color-surface-border);
 }
 
-.subsentence-children {
+.sentence-structure-children {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: baseline;
 }
 
-.subsentence-chip-label {
+.sentence-structure-chip-label {
   font-size: 0.65em;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -64,28 +64,28 @@
 }
 
 /* Role Styles - mapped to status colors */
-.subsentence-chip--role-subject {
+.sentence-structure-chip--role-subject {
   /* Blue */
   background-color: var(--color-status-blue-bg);
   border-color: hsla(var(--status-blue-hue), 90%, 65%, 0.25);
   color: var(--color-status-blue);
 }
 
-.subsentence-chip--role-predicate {
+.sentence-structure-chip--role-predicate {
   /* Orange/Yellow */
   background-color: var(--color-status-yellow-bg);
   border-color: hsla(var(--status-yellow-hue), 90%, 65%, 0.25);
   color: var(--color-status-yellow);
 }
 
-.subsentence-chip--role-object {
+.sentence-structure-chip--role-object {
   /* Green */
   background-color: var(--color-status-green-bg);
   border-color: hsla(var(--status-green-hue), 80%, 60%, 0.25);
   color: var(--color-status-green);
 }
 
-.subsentence-chip--role-subclause {
+.sentence-structure-chip--role-subclause {
   /* Violet/Purple (Primary) */
   background-color: hsla(var(--primary-hue), var(--primary-sat), 65%, 0.08);
   border: 1px dashed var(--color-primary-dim);
@@ -100,7 +100,7 @@
   min-height: 1.5em;
 }
 
-.subsentence-info-row {
+.sentence-structure-info-row {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -108,7 +108,7 @@
   line-height: 1.5;
 }
 
-.subsentence-info-key {
+.sentence-structure-info-key {
   font-size: 0.75em;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -116,13 +116,13 @@
   min-width: 65px;
 }
 
-.subsentence-info-value {
+.sentence-structure-info-value {
   opacity: 0.9;
   font-weight: 500;
   text-transform: capitalize;
 }
 
-.subsentence-chain-item {
+.sentence-structure-chain-item {
   position: relative;
   margin-left: calc(var(--depth) * 12px);
   padding-left: 8px;
@@ -130,7 +130,7 @@
   border-left: 2px solid var(--color-surface-border);
 }
 
-.subsentence-chain-item:first-child {
+.sentence-structure-chain-item:first-child {
   margin-top: 0;
   margin-left: 0;
   padding-left: 0;

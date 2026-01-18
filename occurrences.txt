@@ -1,0 +1,24 @@
+/Users/darth_sky/Reading-Assistant/reading-app/dist/assets/index-BF_pWQsH.css
+/Users/darth_sky/Reading-Assistant/reading-app/dist/assets/index-BTah2jd0.js
+/Users/darth_sky/Reading-Assistant/reading-app/tests/analysis/SubSentence.test.ts
+/Users/darth_sky/Reading-Assistant/reading-app/tests/network/ structure.md
+/Users/darth_sky/Reading-Assistant/reading-app/tests/components/SemanticToken.test.tsx
+/Users/darth_sky/Reading-Assistant/reading-app/src/components/sentence/css/Sentence.css
+/Users/darth_sky/Reading-Assistant/reading-app/src/components/sentence/css/Info.css
+/Users/darth_sky/Reading-Assistant/reading-app/src/components/sentence/css/SubSentence.css
+/Users/darth_sky/Reading-Assistant/reading-app/src/components/sentence/Sentence.tsx
+/Users/darth_sky/Reading-Assistant/reading-app/src/components/sentence/HoverCard.tsx
+/Users/darth_sky/Reading-Assistant/reading-app/src/components/sentence/SubSentence.tsx
+/Users/darth_sky/Reading-Assistant/reading-app/src/model/viewModels/mapSubSentenceToVM.ts
+/Users/darth_sky/Reading-Assistant/reading-app/src/model/structure/SubSentence.ts
+/Users/darth_sky/Reading-Assistant/reading-app/src/services/messageService.ts
+/Users/darth_sky/Reading-Assistant/reading-app/src/services/structure.md
+/Users/darth_sky/Reading-Assistant/reading-app/src/services/envelopes.ts
+/Users/darth_sky/Reading-Assistant/reading-app/src/services/streamingNetworkClient.ts
+/Users/darth_sky/Reading-Assistant/reading-app-server/http/router.ts
+/Users/darth_sky/Reading-Assistant/reading-app-server/http/validate.ts
+/Users/darth_sky/Reading-Assistant/reading-app-server/prompts/v1/subsentence.txt
+/Users/darth_sky/Reading-Assistant/reading-app-server/log/prompts.log
+/Users/darth_sky/Reading-Assistant/reading-app-server/structure
+/Users/darth_sky/Reading-Assistant/reading-app-server/handlers/mock/subsentenceMock.ts
+/Users/darth_sky/Reading-Assistant/reading-app-server/handlers/subsentence.ts

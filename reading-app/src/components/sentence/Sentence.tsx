@@ -6,10 +6,10 @@ import { SentenceHoverCard } from "./HoverCard"; // 新增：引入悬浮卡片
 // Network 
 // import { SentenceCardComponent } from "./InfoComponent";
 import mapSentenceToVM, { type SentenceViewModel } from "../../model/viewModels/mapSentenceToVM";
-import mapSubSentenceToVM, { type SubsentenceVM } from "../../model/viewModels/mapSubSentenceToVM";
-import SubSentenceComponent from "./SubSentence";
+import mapSentenceStructureToVM, { type SentenceStructureVM } from "../../model/viewModels/mapSentenceStructureToVM";
+import SentenceStructure from "./SentenceStructure";
 import { streamingMessageService } from "../../services/messageService.instance";
-import type { AnalyzeSubSentenceData, StandardContext } from "../../services/envelopes";
+import type { AnalyzeSentenceStructureData, StandardContext } from "../../services/envelopes";
 import SentenceRelationship from "./RelationshipMap";
 
 const FREEZE_EVENT = "hovercard:freeze";
@@ -56,14 +56,14 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     const [isHovered, setIsHovered] = useState(false);
     const [isFrozen, setIsFrozen] = useState(false);
     const [globalFrozenId, setGlobalFrozenId] = useState<number | null>(null);
-    const subsentenceAbortRef = React.useRef<AbortController | null>(null);
-    const [isLoadingSubsentence, setIsLoadingSubsentence] = useState(false);
-    const [isStreamingSubsentence, setIsStreamingSubsentence] = useState(false);
-    const [subsentenceError, setSubsentenceError] = useState<string | null>(null);
-    const [subsentenceVm, setSubsentenceVm] = useState<SubsentenceVM | null>(null);
+    const sentenceStructureAbortRef = React.useRef<AbortController | null>(null);
+    const [isLoadingSentenceStructure, setIsLoadingSentenceStructure] = useState(false);
+    const [isStreamingSentenceStructure, setIsStreamingSentenceStructure] = useState(false);
+    const [sentenceStructureError, setSentenceStructureError] = useState<string | null>(null);
+    const [sentenceStructureVm, setSentenceStructureVm] = useState<SentenceStructureVM | null>(null);
     const [focusedUnitId, setFocusedUnitId] = useState<string | null>(null);
     const [sentenceVm, setSentenceVm] = useState<SentenceViewModel>(() => mapSentenceToVM(sentence));
-    const [isSubsentenceActive, setIsSubsentenceActive] = useState(false);
+    const [isSentenceStructureActive, setIsSentenceStructureActive] = useState(false);
     const [isRemoteHovered, setIsRemoteHovered] = useState(false);
 
     // 新增：记录鼠标坐标（供 HoverCard 使用）
@@ -74,6 +74,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             const detail = (e as CustomEvent<number | null>).detail ?? null;
             setGlobalFrozenId(detail);
         };
+        setGlobalFrozenId(null);
         window.addEventListener(FREEZE_EVENT, onFreeze as EventListener);
         return () => window.removeEventListener(FREEZE_EVENT, onFreeze as EventListener);
     }, []);
@@ -88,20 +89,20 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     }, [sentence.id, paragraphId]);
 
     React.useEffect(() => () => {
-        if (subsentenceAbortRef.current) {
-            subsentenceAbortRef.current.abort();
-            subsentenceAbortRef.current = null;
+        if (sentenceStructureAbortRef.current) {
+            sentenceStructureAbortRef.current.abort();
+            sentenceStructureAbortRef.current = null;
         }
     }, []);
 
     React.useEffect(() => {
         setSentenceVm(mapSentenceToVM(sentence));
-        setIsSubsentenceActive(false);
-        setSubsentenceVm(null);
+        setIsSentenceStructureActive(false);
+        setSentenceStructureVm(null);
         setFocusedUnitId(null);
-        setSubsentenceError(null);
-        setIsLoadingSubsentence(false);
-        setIsStreamingSubsentence(false);
+        setSentenceStructureError(null);
+        setIsLoadingSentenceStructure(false);
+        setIsStreamingSentenceStructure(false);
     }, [sentence.id, sentence.text, sentence.function, sentence.type, sentence.mood, sentence]);
 
     const isPending = sentence.function === 'Pending';
@@ -169,8 +170,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         onHoverChange?.(sentence.id, false);
         if (!isFrozen) {
             setAnchor(null);
-            if (isSubsentenceActive) {
-                handleStartSubsentence();
+            if (isSentenceStructureActive) {
+                handleStartSentenceStructure();
             }
         }
     };
@@ -189,17 +190,17 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         if (interactionEnabled) return;
         setIsHovered(false);
         setAnchor(null);
-        setSubsentenceError(null);
-        setIsLoadingSubsentence(false);
-        setSubsentenceVm(null);
+        setSentenceStructureError(null);
+        setIsLoadingSentenceStructure(false);
+        setSentenceStructureVm(null);
         setFocusedUnitId(null);
         setIsClicked(false);
         setSentenceVm(mapSentenceToVM(sentence));
-        setIsSubsentenceActive(false);
-        setIsStreamingSubsentence(false);
-        if (subsentenceAbortRef.current) {
-            subsentenceAbortRef.current.abort();
-            subsentenceAbortRef.current = null;
+        setIsSentenceStructureActive(false);
+        setIsStreamingSentenceStructure(false);
+        if (sentenceStructureAbortRef.current) {
+            sentenceStructureAbortRef.current.abort();
+            sentenceStructureAbortRef.current = null;
         }
         setIsFrozen(prev => {
             if (prev) {
@@ -214,35 +215,35 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         window.dispatchEvent(new CustomEvent(HIGHLIGHT_EVENT, { detail }));
     }, [paragraphId]);
 
-    const handleStartSubsentence = useCallback((): void => {
-        if (isSubsentenceActive) {
-            if (subsentenceAbortRef.current) {
-                subsentenceAbortRef.current.abort();
-                subsentenceAbortRef.current = null;
+    const handleStartSentenceStructure = useCallback((): void => {
+        if (isSentenceStructureActive) {
+            if (sentenceStructureAbortRef.current) {
+                sentenceStructureAbortRef.current.abort();
+                sentenceStructureAbortRef.current = null;
             }
-            setSubsentenceError(null);
-            setIsLoadingSubsentence(false);
-            setIsSubsentenceActive(false);
-            setSubsentenceVm(null);
+            setSentenceStructureError(null);
+            setIsLoadingSentenceStructure(false);
+            setIsSentenceStructureActive(false);
+            setSentenceStructureVm(null);
             setFocusedUnitId(null);
-            setIsStreamingSubsentence(false);
+            setIsStreamingSentenceStructure(false);
             return;
         }
 
-        if (subsentenceAbortRef.current) {
-            subsentenceAbortRef.current.abort();
-            subsentenceAbortRef.current = null;
+        if (sentenceStructureAbortRef.current) {
+            sentenceStructureAbortRef.current.abort();
+            sentenceStructureAbortRef.current = null;
         }
         const controller = new AbortController();
-        subsentenceAbortRef.current = controller;
+        sentenceStructureAbortRef.current = controller;
 
-        console.log("Starting subsentence analysis for ID:", sentence.id);
+        console.log("Starting sentence structure analysis for ID:", sentence.id);
 
-        setIsSubsentenceActive(true);
-        setIsLoadingSubsentence(true);
-        setIsStreamingSubsentence(true);
-        setSubsentenceError(null);
-        setSubsentenceVm(null);
+        setIsSentenceStructureActive(true);
+        setIsLoadingSentenceStructure(true);
+        setIsStreamingSentenceStructure(true);
+        setSentenceStructureError(null);
+        setSentenceStructureVm(null);
         setFocusedUnitId(null);
 
 
@@ -267,7 +268,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                     sentence_text: sentence.text,
                     fragment_text: sentence.text.slice(payload.span.start, payload.span.end),
                 };
-                const res = await streamingMessageService.analyzeSubSentence(
+                const res = await streamingMessageService.analyzeSentenceStructure(
                     payload,
                     ctx,
                     meta,
@@ -278,9 +279,9 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                             if (controller.signal.aborted) return;
                             // Ensure we map whatever partial data we have so far
                             if (partialData && typeof partialData === 'object') {
-                                const vm = mapSubSentenceToVM(partialData as AnalyzeSubSentenceData);
+                                const vm = mapSentenceStructureToVM(partialData as AnalyzeSentenceStructureData);
                                 if (vm) {
-                                    setSubsentenceVm(vm);
+                                    setSentenceStructureVm(vm);
                                     // Auto-focus the first unit if not already set, to give user context
                                     setFocusedUnitId(prev => prev ?? vm.analysis.units[0]?.id ?? null);
                                 }
@@ -292,38 +293,38 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 if (controller.signal.aborted) return;
 
                 if (res.status === "error") {
-                    setSubsentenceError(res.error?.message ?? "Failed to load subsentence analysis.");
-                    setSubsentenceVm(null);
+                    setSentenceStructureError(res.error?.message ?? "Failed to load sentence structure analysis.");
+                    setSentenceStructureVm(null);
                     return;
                 }
-                const vm = mapSubSentenceToVM(res.data ?? null);
+                const vm = mapSentenceStructureToVM(res.data ?? null);
                 if (!vm) {
-                    setSubsentenceError("Subsentence analysis response was empty.");
-                    setSubsentenceVm(null);
+                    setSentenceStructureError("Sentence structure analysis response was empty.");
+                    setSentenceStructureVm(null);
                     return;
                 }
-                setSubsentenceVm(vm);
+                setSentenceStructureVm(vm);
                 setFocusedUnitId(vm.analysis.backbone?.subjectId ?? vm.analysis.units[0]?.id ?? null);
-                setSubsentenceError(null);
+                setSentenceStructureError(null);
             } catch (error) {
                 if (isAbortError(error)) {
-                    setSubsentenceError("Subsentence analysis was cancelled or timed out.");
-                    setSubsentenceVm(null);
+                    setSentenceStructureError("Sentence structure analysis was cancelled or timed out.");
+                    setSentenceStructureVm(null);
                     return;
                 }
-                setSubsentenceError(error instanceof Error ? error.message : "Failed to load subsentence analysis.");
-                setSubsentenceVm(null);
+                setSentenceStructureError(error instanceof Error ? error.message : "Failed to load sentence structure analysis.");
+                setSentenceStructureVm(null);
             } finally {
-                if (subsentenceAbortRef.current === controller) {
-                    subsentenceAbortRef.current = null;
+                if (sentenceStructureAbortRef.current === controller) {
+                    sentenceStructureAbortRef.current = null;
                 }
-                setIsLoadingSubsentence(false);
-                setIsStreamingSubsentence(false);
+                setIsLoadingSentenceStructure(false);
+                setIsStreamingSentenceStructure(false);
             }
         };
 
         void run();
-    }, [isSubsentenceActive, sentence]);
+    }, [isSentenceStructureActive, sentence]);
 
     type Variant = "blue" | "green" | "yellow" | "gray";
 
@@ -348,8 +349,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     ]
         .filter(Boolean)
         .join(" ");
-    const shouldShowSubsentence =
-        isSubsentenceActive || isLoadingSubsentence || subsentenceError !== null || subsentenceVm !== null;
+    const shouldShowSentenceStructure =
+        isSentenceStructureActive || isLoadingSentenceStructure || sentenceStructureError !== null || sentenceStructureVm !== null;
 
     const renderContent = () => {
         const keyWords = sentence.key_words;
@@ -403,8 +404,8 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             </span>
 
             <SentenceHoverCard
-                onStartSubSentence={handleStartSubsentence}
-                subSentenceActive={isSubsentenceActive}
+                onStartSentenceStructure={handleStartSentenceStructure}
+                sentenceStructureActive={isSentenceStructureActive}
                 open={
                     interactionEnabled &&
                     (isHovered || isFrozen) &&
@@ -417,44 +418,40 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 <div className="hovercard-content">
                     <div
                         className={[
-                            "subsentence-section",
-                            shouldShowSubsentence ? "is-open" : "",
+                            "sentence-structure-section",
+                            shouldShowSentenceStructure ? "is-open" : "",
                         ]
                             .filter(Boolean)
                             .join(" ")}
                     >
-                        {shouldShowSubsentence && (
+                        {shouldShowSentenceStructure && (
                             <>
-                                <div className="subsentence-title">Subsentence analysis</div>
-                                {isLoadingSubsentence && (
-                                    <div
-                                        className={[
-                                            "subsentence-status",
-                                            isStreamingSubsentence ? "subsentence-status--progress" : "",
-                                        ]
-                                            .filter(Boolean)
-                                            .join(" ")}
-                                    >
-                                        {isStreamingSubsentence
-                                            ? "Preparing subsentence analysis..."
-                                            : "Loading subsentence analysis..."}
+                                <div className="sentence-structure-title">Sentence structure analysis</div>
+                                {isLoadingSentenceStructure && (
+                                    <div className="sentence-structure-status sentence-structure-status--loading">
+                                        <Spinner />
+                                        <span>
+                                            {isStreamingSentenceStructure
+                                                ? "Preparing sentence structure analysis..."
+                                                : "Loading sentence structure analysis..."}
+                                        </span>
                                     </div>
                                 )}
-                                {subsentenceError && (
-                                    <div className="subsentence-status subsentence-status--error">
-                                        {subsentenceError}
+                                {sentenceStructureError && (
+                                    <div className="sentence-structure-status sentence-structure-status--error">
+                                        {sentenceStructureError}
                                     </div>
                                 )}
-                                {subsentenceVm && !isLoadingSubsentence && !subsentenceError && (
-                                    <div className="subsentence-wrapper">
-                                        <SubSentenceComponent
-                                            analysis={subsentenceVm.analysis}
+                                {sentenceStructureVm && !isLoadingSentenceStructure && !sentenceStructureError && (
+                                    <div className="sentence-structure-wrapper">
+                                        <SentenceStructure
+                                            analysis={sentenceStructureVm.analysis}
                                             focusUnitId={focusedUnitId ?? undefined}
                                             onFocusChange={(unitId) => setFocusedUnitId(unitId)}
                                         />
-                                        {typeof subsentenceVm.confidence === "number" && (
-                                            <div className="subsentence-status">
-                                                Confidence: {(subsentenceVm.confidence * 100).toFixed(0)}%
+                                        {typeof sentenceStructureVm.confidence === "number" && (
+                                            <div className="sentence-structure-status">
+                                                Confidence: {(sentenceStructureVm.confidence * 100).toFixed(0)}%
                                             </div>
                                         )}
                                     </div>
