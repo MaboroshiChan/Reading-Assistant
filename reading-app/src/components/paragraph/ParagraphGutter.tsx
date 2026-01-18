@@ -70,19 +70,17 @@ export const ParagraphGutter: React.FC<ParagraphGutterProps> = ({
 
     return (
         <div className="paragraph-gutter-container">
-            <div className="paragraph-gutter-indicator" title={`Paragraph ${id}`}>
-                {indicator}
-            </div>
             <div
-                className={`paragraph-input-bar ${isActive ? 'active' : ''}`}
+                className={`paragraph-gutter-indicator ${isActive ? 'active' : ''}`}
+                title={structureType || `Paragraph ${id}`}
                 onClick={onClick}
-                data-tooltip={structureType || `Paragraph ${id}`}
                 style={{
                     '--gutter-color': structureType ? color : undefined,
-                    '--gutter-color-hover': color,
-                    '--gutter-color-active': color
+                    cursor: 'pointer'
                 } as React.CSSProperties}
-            />
+            >
+                {indicator}
+            </div>
         </div>
     );
 };
