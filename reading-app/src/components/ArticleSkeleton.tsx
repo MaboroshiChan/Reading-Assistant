@@ -128,14 +128,14 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
     onLike && onLike(!isLiked);
   };
 
-  // Generate CSS variables for theming
+  // Generate CSS variables for theming which might override or complement global theme
   const cssVars: CSSProperties = {
     '--accent-color': accentColor,
-    '--bg-color': theme === 'dark' ? '#1a1a1a' : '#ffffff',
-    '--text-color': theme === 'dark' ? '#e0e0e0' : '#333333',
-    '--text-secondary': theme === 'dark' ? '#a0a0a0' : '#666666',
-    '--border-color': theme === 'dark' ? '#333333' : '#e0e0e0',
-    '--font-family': fontFamily === 'serif' ? 'Georgia, serif' : 'Inter, sans-serif'
+    '--bg-color': 'var(--color-bg-base)',
+    '--text-color': 'var(--color-text-main)',
+    '--text-secondary': 'var(--color-text-secondary)',
+    '--border-color': 'var(--color-surface-border)',
+    '--font-family': fontFamily === 'serif' ? 'Georgia, serif' : 'var(--font-base)'
   } as CSSProperties;
 
   return (

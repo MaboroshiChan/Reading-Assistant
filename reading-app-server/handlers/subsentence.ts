@@ -323,7 +323,7 @@ const buildSubSentenceData = async (
 export const handleSubSentence = async (
   req: RequestEnvelopeSubsentence,
 ): Promise<CallReturn<string>> => {
-  console.log("[DEBUG] handleSubSentence starting", req.request_id);
+  //console.log("[DEBUG] handleSubSentence starting", req.request_id);
 
   handlerLog('subsentence', 'request received', {
     requestId: req.request_id,
@@ -361,7 +361,7 @@ export const handleSubSentence = async (
   const tappedStream = (async function* () {
     let text = '';
     for await (const chunk of stream) {
-      console.log("[DEBUG] subsentence chunk:", chunk.slice(0, 50));
+      //console.log("[DEBUG] subsentence chunk:", chunk.slice(0, 50));
       text += chunk;
       yield chunk;
     }

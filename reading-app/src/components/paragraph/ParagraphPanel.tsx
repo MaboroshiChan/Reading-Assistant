@@ -25,7 +25,7 @@ export const ParagraphPanel: React.FC<ParagraphPanelProps> = ({ vm }) => {
                     </div>
                 )}
                 {vm.topicSentence && (
-                    <div style={{ marginTop: '8px' }}>
+                    <div className="paragraph-section">
                         <span className="paragraph-label">Topic Sentence ({vm.topicSentence.is_implicit ? 'Implicit' : 'Explicit'}):</span>
                         {vm.topicSentence.text}
                     </div>

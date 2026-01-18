@@ -38,37 +38,37 @@ export const RELATION_CONFIG: Record<string, RelationConfig> = {
     'contrast': {
         label: 'Contrast',
         icon: Icons.Contrast,
-        color: 'var(--relation-contrast-color, #ef4444)',
+        color: 'var(--color-status-red)',
         description: 'Introduces an opposing idea'
     },
     'rebuttal': {
         label: 'Rebuttal',
         icon: Icons.Contrast,
-        color: 'var(--relation-rebuttal-color, #ef4444)',
+        color: 'var(--color-status-red)',
         description: 'Rejects or counter-argues a claim'
     },
     'conclusion': {
         label: 'Conclusion',
         icon: Icons.Conclusion,
-        color: 'var(--relation-conclusion-color, #22c55e)',
+        color: 'var(--color-status-green)',
         description: 'Summarizes or concludes the thought'
     },
     'justification': {
         label: 'Justification',
         icon: Icons.Justification,
-        color: 'var(--relation-justification-color, #3b82f6)',
+        color: 'var(--color-status-blue)', // Using Blue for "Support/Reason"
         description: 'Provides reason or support'
     },
     'elaboration': {
         label: 'Elaboration',
         icon: Icons.Expansion,
-        color: 'var(--relation-elaboration-color, #8b5cf6)',
+        color: 'var(--color-primary)', // Using Primary (Violet)
         description: 'Expands on details'
     },
     'expansion': {
         label: 'Expansion',
         icon: Icons.Expansion,
-        color: 'var(--relation-expansion-color, #8b5cf6)',
+        color: 'var(--color-primary)',
         description: 'Adds more information'
     }
 };
@@ -78,7 +78,7 @@ export const getRelationConfig = (type: string): RelationConfig => {
     return RELATION_CONFIG[key] ?? {
         label: type,
         icon: Icons.Default,
-        color: 'var(--relation-default-color, #9ca3af)',
+        color: 'var(--color-text-secondary)',
         description: 'Related idea'
     };
 };

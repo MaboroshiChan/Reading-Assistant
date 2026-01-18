@@ -20,13 +20,13 @@
 }
 
 .subsentence-chip--interactive:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--color-surface-hover);
 }
 
 .subsentence-chip--active {
-  background-color: rgba(99, 102, 241, 0.15);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
-  border-color: rgba(99, 102, 241, 0.4);
+  background-color: hsla(var(--primary-hue), var(--primary-sat), 65%, 0.15);
+  box-shadow: 0 0 0 2px hsla(var(--primary-hue), var(--primary-sat), 65%, 0.3);
+  border-color: var(--color-primary-dim);
 }
 
 .subsentence-chip--interactive {
@@ -42,8 +42,8 @@
   flex-direction: column;
   align-items: flex-start;
   padding: 4px 6px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-color: rgba(0, 0, 0, 0.06);
+  background-color: var(--color-bg-subtle);
+  border-color: var(--color-surface-border);
 }
 
 .subsentence-children {
@@ -63,47 +63,40 @@
   user-select: none;
 }
 
-/* Role Styles */
+/* Role Styles - mapped to status colors */
 .subsentence-chip--role-subject {
-  background-color: rgba(59, 130, 246, 0.12);
-  border-color: rgba(59, 130, 246, 0.25);
+  /* Blue */
+  background-color: var(--color-status-blue-bg);
+  border-color: hsla(var(--status-blue-hue), 90%, 65%, 0.25);
+  color: var(--color-status-blue);
 }
 
 .subsentence-chip--role-predicate {
-  background-color: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.25);
+  /* Orange/Yellow */
+  background-color: var(--color-status-yellow-bg);
+  border-color: hsla(var(--status-yellow-hue), 90%, 65%, 0.25);
+  color: var(--color-status-yellow);
 }
 
 .subsentence-chip--role-object {
-  background-color: rgba(16, 185, 129, 0.12);
-  border-color: rgba(16, 185, 129, 0.25);
+  /* Green */
+  background-color: var(--color-status-green-bg);
+  border-color: hsla(var(--status-green-hue), 80%, 60%, 0.25);
+  color: var(--color-status-green);
 }
 
 .subsentence-chip--role-subclause {
-  background-color: rgba(139, 92, 246, 0.08);
-  border: 1px dashed rgba(139, 92, 246, 0.3);
+  /* Violet/Purple (Primary) */
+  background-color: hsla(var(--primary-hue), var(--primary-sat), 65%, 0.08);
+  border: 1px dashed var(--color-primary-dim);
 }
 
-/* Dark Mode Adjustments */
-@media (prefers-color-scheme: dark) {
-  .subsentence-chip--interactive:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-  
-  .subsentence-chip--has-children {
-    background-color: rgba(255, 255, 255, 0.03);
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .semantic.role {
-    border-top-color: rgba(255, 255, 255, 0.1);
-  }
-}
+/* Dark Mode Adjustments removed - handled by variables */
 
 .semantic.role {
   margin-top: 12px;
   padding-top: 8px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid var(--color-surface-border);
   min-height: 1.5em;
 }
 
@@ -134,13 +127,7 @@
   margin-left: calc(var(--depth) * 12px);
   padding-left: 8px;
   margin-top: 8px;
-  border-left: 2px solid rgba(0, 0, 0, 0.06);
-}
-
-@media (prefers-color-scheme: dark) {
-  .subsentence-chain-item {
-    border-left-color: rgba(255, 255, 255, 0.1);
-  }
+  border-left: 2px solid var(--color-surface-border);
 }
 
 .subsentence-chain-item:first-child {

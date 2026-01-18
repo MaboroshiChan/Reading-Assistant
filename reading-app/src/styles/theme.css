@@ -1,0 +1,97 @@
+/* 
+  Modern Design System - Rich Aesthetic 
+  Using HSL for better alpha transparency manipulation
+*/
+
+:root {
+    /* --- Palette: Primary (Indigo/Violet) --- */
+    --primary-hue: 250;
+    --primary-sat: 95%;
+    --primary-lig: 65%;
+    --color-primary: hsl(var(--primary-hue), var(--primary-sat), var(--primary-lig));
+    --color-primary-dim: hsl(var(--primary-hue), var(--primary-sat), 85%);
+    --color-primary-dark: hsl(var(--primary-hue), var(--primary-sat), 45%);
+
+    /* --- Palette: Backgrounds & Surfaces --- */
+    --bg-hue: 240;
+    --bg-sat: 10%;
+
+    /* Base Background */
+    --color-bg-base: hsl(var(--bg-hue), var(--bg-sat), 12%);
+    /* Dark charcoal/blue tint */
+    --color-bg-subtle: hsl(var(--bg-hue), var(--bg-sat), 16%);
+
+    /* Surfaces (Cards, Popovers) */
+    --color-surface: hsl(var(--bg-hue), var(--bg-sat), 18%);
+    --color-surface-hover: hsl(var(--bg-hue), var(--bg-sat), 22%);
+    --color-surface-active: hsl(var(--bg-hue), var(--bg-sat), 25%);
+    --color-surface-border: hsla(var(--bg-hue), 20%, 80%, 0.12);
+
+    /* --- Palette: Text --- */
+    --color-text-main: hsl(0, 0%, 98%);
+    --color-text-secondary: hsl(240, 5%, 75%);
+    --color-text-muted: hsl(240, 5%, 55%);
+
+    /* --- Roles: Status Colors --- */
+    /* Blue (Transition/Info) */
+    --status-blue-hue: 215;
+    --color-status-blue: hsl(var(--status-blue-hue), 90%, 65%);
+    --color-status-blue-bg: hsla(var(--status-blue-hue), 90%, 65%, 0.15);
+
+    /* Green (Success/Declarative) */
+    --status-green-hue: 150;
+    --color-status-green: hsl(var(--status-green-hue), 80%, 60%);
+    --color-status-green-bg: hsla(var(--status-green-hue), 80%, 60%, 0.15);
+
+    /* Yellow (Warning/Indicative) */
+    --status-yellow-hue: 40;
+    --color-status-yellow: hsl(var(--status-yellow-hue), 90%, 65%);
+    --color-status-yellow-bg: hsla(var(--status-yellow-hue), 90%, 65%, 0.15);
+
+    /* Red (Error/Danger) */
+    --status-red-hue: 350;
+    --color-status-red: hsl(var(--status-red-hue), 90%, 65%);
+    --color-status-red-bg: hsla(var(--status-red-hue), 90%, 65%, 0.15);
+
+    /* Gray (Neutral/Premise) */
+    --status-gray-hue: 240;
+    --color-status-gray: hsl(var(--status-gray-hue), 10%, 75%);
+    --color-status-gray-bg: hsla(var(--status-gray-hue), 10%, 75%, 0.15);
+
+    /* --- Rich Effects --- */
+    --glass-bg: hsla(var(--bg-hue), var(--bg-sat), 18%, 0.7);
+    --glass-border: hsla(0, 0%, 100%, 0.1);
+    --glass-blur: blur(12px);
+
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 16px 32px -4px rgba(0, 0, 0, 0.45);
+    --shadow-glow-primary: 0 0 15px hsla(var(--primary-hue), var(--primary-sat), 60%, 0.3);
+
+    /* --- Typography --- */
+    --font-base: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Light Mode Overrides */
+@media (prefers-color-scheme: light) {
+    :root {
+        --color-bg-base: hsl(0, 0%, 98%);
+        --color-bg-subtle: hsl(240, 10%, 94%);
+
+        --color-surface: #ffffff;
+        --color-surface-hover: #f7f7fc;
+        --color-surface-active: #ececf5;
+        --color-surface-border: hsla(240, 20%, 20%, 0.08);
+
+        --color-text-main: hsl(240, 20%, 15%);
+        --color-text-secondary: hsl(240, 10%, 45%);
+        --color-text-muted: hsl(240, 10%, 65%);
+
+        --glass-bg: hsla(0, 0%, 100%, 0.8);
+        --glass-border: hsla(240, 20%, 20%, 0.06);
+
+        --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.08);
+        --shadow-lg: 0 16px 32px -8px rgba(0, 0, 0, 0.12);
+    }
+}

@@ -10,13 +10,13 @@ export interface ParagraphGutterProps {
 }
 
 const getGutterColor = (type?: string) => {
-    if (!type) return 'rgba(0, 0, 0, 0.05)';
+    if (!type) return 'var(--color-surface-border)';
     const t = type.toLowerCase();
-    if (t.includes('contrast')) return '#ef4444'; // Red
-    if (t.includes('parallel')) return '#3b82f6'; // Blue
-    if (t.includes('progression') || t.includes('sequence')) return '#f59e0b'; // Amber
-    if (t.includes('causal')) return '#8b5cf6'; // Purple
-    return '#10b981'; // Green default
+    if (t.includes('contrast')) return 'var(--color-status-red)';
+    if (t.includes('parallel')) return 'var(--color-status-blue)';
+    if (t.includes('progression') || t.includes('sequence')) return 'var(--color-status-yellow)';
+    if (t.includes('causal')) return 'var(--color-primary)';
+    return 'var(--color-status-green)';
 };
 
 const Spinner = () => (
