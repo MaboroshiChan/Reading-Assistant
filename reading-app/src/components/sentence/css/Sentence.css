@@ -19,9 +19,10 @@
 
 /* hover 效果 */
 .sentence.hovered {
-  background-color: var(--color-status-blue-bg);
-  box-shadow: 0 0 0 3px hsla(var(--status-blue-hue), 90%, 65%, 0.1);
-  border-color: hsla(var(--status-blue-hue), 90%, 65%, 0.3);
+  background-color: var(--color-status-yellow);
+  color: black;
+  box-shadow: 0 0 0 3px hsla(var(--status-yellow-hue), 90%, 65%, 0.3);
+  border-color: hsla(var(--status-yellow-hue), 90%, 65%, 0.5);
 }
 
 /* 点击状态 */
@@ -175,11 +176,7 @@
 .sentence-key-phrase {
   font-weight: bold;
   color: var(--color-status-red);
-  transition: text-shadow 0.2s ease, color 0.2s ease;
-}
-
-.sentence-key-phrase:hover {
-  text-shadow: 0 0 8px hsla(var(--status-red-hue), 90%, 65%, 0.6);
+  transition: color 0.2s ease;
 }
 
 /* Tag Variants - updated to use shared variables */
