@@ -30,7 +30,7 @@ interface SentenceComponentProps {
     onToggleFocus?: (id: number, isFocused: boolean) => void;
     onHoverChange?: (id: number, isHovered: boolean) => void;
     interactionEnabled?: boolean;
-    isBridgeHighlighted?: boolean;
+    bridgeHighlightColor?: string;
     isTopicSentence?: boolean;
 }
 
@@ -48,7 +48,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     onToggleFocus,
     onHoverChange,
     interactionEnabled = true,
-    isBridgeHighlighted = false,
+    bridgeHighlightColor,
     isTopicSentence = false,
 }) => {
     /**
@@ -349,7 +349,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         isPending ? "pending" : "",
         interactionEnabled && (isRemoteHovered || (isHovered && !blocked)) ? "hovered" : "",
         interactionEnabled && isClicked ? "clicked" : "",
-        interactionEnabled && isBridgeHighlighted ? "bridge-highlighted" : "",
+        interactionEnabled && !!bridgeHighlightColor ? "bridge-highlighted" : "",
         isTopicSentence ? "topic-sentence-explicit" : "",
     ]
         .filter(Boolean)
@@ -395,6 +395,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 onMouseMove={handleMouseMove}
                 className={className}
                 data-sentence-id={sentence.id}
+                style={{ '--formatted-highlight-color': bridgeHighlightColor } as React.CSSProperties}
             >
                 <span className="sentence-indicator" contentEditable={false}>
                     {isPending ? (

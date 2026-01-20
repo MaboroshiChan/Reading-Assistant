@@ -6,6 +6,8 @@ interface SentenceBridgeProps {
     type: string;
     isActive: boolean;
     onClick: (e: React.MouseEvent) => void;
+    onMouseEnter?: (e: React.MouseEvent) => void;
+    onMouseLeave?: (e: React.MouseEvent) => void;
 }
 
 /**
@@ -13,7 +15,7 @@ interface SentenceBridgeProps {
  *
  * @param props - Component properties.
  */
-export const SentenceBridge: React.FC<SentenceBridgeProps> = ({ type, isActive, onClick }) => {
+export const SentenceBridge: React.FC<SentenceBridgeProps> = ({ type, isActive, onClick, onMouseEnter, onMouseLeave }) => {
     const config = useMemo(() => getRelationConfig(type), [type]);
 
     return (
@@ -21,6 +23,8 @@ export const SentenceBridge: React.FC<SentenceBridgeProps> = ({ type, isActive, 
             <button
                 className={`sentence-bridge ${isActive ? 'active' : ''}`}
                 onClick={onClick}
+                onMouseEnter={onMouseEnter}
+                onMouseLeave={onMouseLeave}
                 aria-label={`Relationship: ${config.label}`}
                 title={isActive ? undefined : `Relationship: ${config.label}`}
                 style={{ '--bridge-color': config.color } as React.CSSProperties}

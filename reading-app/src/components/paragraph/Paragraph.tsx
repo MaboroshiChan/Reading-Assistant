@@ -5,6 +5,7 @@ import SentenceComponent from "../sentence/Sentence";
 import mapParagraphToVM from "../../model/viewModels/mapParagraphToVM";
 import { ParagraphGutter } from "./ParagraphGutter";
 import { ParagraphPanel } from "./ParagraphPanel";
+import { getRelationConfig } from "../sentence/Relations";
 
 // Import helper to avoid top-level import issues if not yet defined in file
 import { SentenceBridge as ImportedSentenceBridge } from "../sentence/Bridge";
@@ -22,6 +23,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
 
   // isClicked now serves as "isActive" for showing the panel
   const [isClicked, setIsClicked] = useState(false);
+  const [hoveredBridgeId, setHoveredBridgeId] = useState<string | null>(null);
   const paragraphVm = useMemo(() => mapParagraphToVM(paragraph), [paragraph]);
 
   // Debugging Topic Sentence Data
@@ -68,6 +70,14 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
   const handleBridgeClick = useCallback((bridgeId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setActiveBridgeId(prev => prev === bridgeId ? null : bridgeId);
+  }, []);
+
+  const handleBridgeMouseEnter = useCallback((bridgeId: string, e: React.MouseEvent) => {
+    setHoveredBridgeId(bridgeId);
+  }, []);
+
+  const handleBridgeMouseLeave = useCallback((e: React.MouseEvent) => {
+    setHoveredBridgeId(null);
   }, []);
 
   const className = [
@@ -137,6 +147,8 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
                     type={relToPrev.type}
                     isActive={isActive}
                     onClick={(e) => handleBridgeClick(bridgeId, e)}
+                    onMouseEnter={(e) => handleBridgeMouseEnter(bridgeId, e)}
+                    onMouseLeave={handleBridgeMouseLeave}
                   />
                 );
               }
@@ -150,9 +162,21 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
             const relFromNext = nextSentence?.relation && nextSentence.relation.targetSentenceId === sentence.id;
             const bridgeAfterId = relFromNext ? `${sentence.id}-${nextSentence!.id}` : null;
 
-            const isBridgeHighlighted =
-              (bridgeBeforeId !== null && activeBridgeId === bridgeBeforeId) ||
-              (bridgeAfterId !== null && activeBridgeId === bridgeAfterId);
+            const effectiveBridgeId = activeBridgeId || hoveredBridgeId;
+
+            let bridgeHighlightColor: string | undefined;
+
+            if (effectiveBridgeId) {
+              if (bridgeBeforeId === effectiveBridgeId && sentence.relation) {
+                // Highlighting caused by the bridge BEFORE this sentence (relation from this -> prev)
+                // This sentence is the "second" part of the relation
+                bridgeHighlightColor = getRelationConfig(sentence.relation.type).colors.sentence_second;
+              } else if (bridgeAfterId === effectiveBridgeId && nextSentence?.relation) {
+                // Highlighting caused by the bridge AFTER this sentence (relation from next -> this)
+                // This sentence is the "first" part of the relation
+                bridgeHighlightColor = getRelationConfig(nextSentence.relation.type).colors.sentence_first;
+              }
+            }
 
             // Check for explicit topic sentence
             const normalize = (s: string) => s.trim().toLowerCase().replace(/[^\w\s]|_/g, "").replace(/\s+/g, " ");
@@ -168,7 +192,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
                   paragraphId={paragraph.id}
                   sentence={sentence}
                   interactionEnabled={isInteractive}
-                  isBridgeHighlighted={isBridgeHighlighted}
+                  bridgeHighlightColor={bridgeHighlightColor}
                   isTopicSentence={!!isTopicSentence}
                 />
               </React.Fragment>

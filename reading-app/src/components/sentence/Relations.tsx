@@ -5,6 +5,10 @@ export interface RelationConfig {
     icon: React.ReactNode;
     color: string; // CSS variable or color string
     description?: string;
+    colors: {
+        sentence_first: string;
+        sentence_second: string;
+    }
 }
 
 // Reusable SVG definitions or components
@@ -39,37 +43,61 @@ export const RELATION_CONFIG: Record<string, RelationConfig> = {
         label: 'Contrast',
         icon: Icons.Contrast,
         color: 'var(--color-status-red)',
-        description: 'Introduces an opposing idea'
+        description: 'Introduces an opposing idea',
+        colors: {
+            sentence_first: 'var(--color-status-green)',
+            sentence_second: 'var(--color-status-red)',
+        }
     },
     'rebuttal': {
         label: 'Rebuttal',
         icon: Icons.Contrast,
         color: 'var(--color-status-red)',
-        description: 'Rejects or counter-argues a claim'
+        description: 'Rejects or counter-argues a claim',
+        colors: {
+            sentence_first: 'var(--color-status-green)',
+            sentence_second: 'var(--color-status-red)',
+        }
     },
     'conclusion': {
         label: 'Conclusion',
         icon: Icons.Conclusion,
         color: 'var(--color-status-green)',
-        description: 'Summarizes or concludes the thought'
+        description: 'Summarizes or concludes the thought',
+        colors: {
+            sentence_first: 'var(--color-status-green)',
+            sentence_second: 'var(--color-status-green)',
+        }
     },
     'justification': {
         label: 'Justification',
         icon: Icons.Justification,
         color: 'var(--color-status-blue)', // Using Blue for "Support/Reason"
-        description: 'Provides reason or support'
+        description: 'Provides reason or support',
+        colors: {
+            sentence_first: 'var(--color-status-blue)',
+            sentence_second: 'var(--color-status-blue)',
+        }
     },
     'elaboration': {
         label: 'Elaboration',
         icon: Icons.Expansion,
         color: 'var(--color-primary)', // Using Primary (Violet)
-        description: 'Expands on details'
+        description: 'Expands on details',
+        colors: {
+            sentence_first: 'var(--color-primary)',
+            sentence_second: 'var(--color-primary)',
+        }
     },
     'expansion': {
         label: 'Expansion',
         icon: Icons.Expansion,
         color: 'var(--color-primary)',
-        description: 'Adds more information'
+        description: 'Adds more information',
+        colors: {
+            sentence_first: 'var(--color-primary)',
+            sentence_second: 'var(--color-primary)',
+        }
     }
 };
 
@@ -85,6 +113,10 @@ export const getRelationConfig = (type: string): RelationConfig => {
         label: type,
         icon: Icons.Default,
         color: 'var(--color-text-secondary)',
-        description: 'Related idea'
+        description: 'Related idea',
+        colors: {
+            sentence_first: 'var(--color-text-secondary)',
+            sentence_second: 'var(--color-text-secondary)',
+        }
     };
 };

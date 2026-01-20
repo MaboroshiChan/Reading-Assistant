@@ -35,10 +35,13 @@
 }
 
 /* New: Bridge Highlighted State */
+/* New: Bridge Highlighted State */
 .sentence.component.bridge-highlighted {
-  background-color: var(--color-status-green-bg);
-  /* Green tint matching bridge */
-  box-shadow: 0 0 0 1px hsla(var(--status-green-hue), 80%, 60%, 0.2);
+  /* Solid background style */
+  background-color: var(--formatted-highlight-color, var(--color-status-green));
+  border-color: var(--formatted-highlight-color, var(--color-status-green));
+  color: black;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* 让文字更平滑 */
