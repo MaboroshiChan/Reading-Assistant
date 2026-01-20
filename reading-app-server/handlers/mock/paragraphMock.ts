@@ -17,6 +17,13 @@ import {
   PARAGRAPH_PROMPT_VERSION,
 } from '../paragraph';
 
+/**
+ * Filters the mock results to only include requested task data.
+ *
+ * @param base - The full mock response.
+ * @param tasks - List of requested tasks.
+ * @returns The filtered response.
+ */
 const filterByTasks = (
   base: AnalyzeParagraphData,
   tasks?: Array<'roles' | 'rhetoric' | 'claims' | 'summary'>,
@@ -33,6 +40,12 @@ const filterByTasks = (
   };
 };
 
+/**
+ * Generates mock paragraph analysis data.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to mock AnalyzeParagraphData.
+ */
 export const buildMockParagraphData = async (
   req: RequestEnvelopeParagraph,
 ): Promise<AnalyzeParagraphData> => {

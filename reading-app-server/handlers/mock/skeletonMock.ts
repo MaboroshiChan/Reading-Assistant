@@ -6,6 +6,12 @@ import type {
 } from '../../../reading-app/src/services/envelopes';
 import { hashString, splitIntoSentences, summarize } from '../shared';
 
+/**
+ * Generates mock skeleton data (paragraphs and sentences) for a document.
+ *
+ * @param req - The request envelope.
+ * @returns Mock AnalyzeSkeletonData.
+ */
 export const buildMockSkeletonData = (
   req: RequestEnvelopeSkeleton,
 ): AnalyzeSkeletonData => {

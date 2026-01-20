@@ -7,6 +7,13 @@ import type {
 
 const createUnitId = (prefix: string, index: number): string => `${prefix}-${index.toString(36)}`;
 
+/**
+ * Generates mock sentence structure analysis data.
+ * Useful for frontend development without an active LLM backend.
+ *
+ * @param req - The request envelope.
+ * @returns A mock AnalyzeSentenceStructureData object.
+ */
 export const buildMockSentenceStructureData = (
   req: RequestEnvelopeSentenceStructure,
 ): AnalyzeSentenceStructureData => {

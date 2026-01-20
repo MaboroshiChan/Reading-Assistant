@@ -25,6 +25,13 @@ const modalMap: Record<string, ModalMarker['type']> = {
   would: 'volition',
 };
 
+/**
+ * Filters the mock results to only include requested task data.
+ *
+ * @param base - The full mock response.
+ * @param tasks - List of requested tasks.
+ * @returns The filtered response.
+ */
 const filterByTasks = (
   base: AnalyzeSentenceData,
   tasks?: Array<'semantic_roles' | 'key_words' | 'discourse_function' | 'dependency_light' | 'modal_markers'>,
@@ -42,6 +49,12 @@ const filterByTasks = (
   };
 };
 
+/**
+ * Generates mock sentence analysis data.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to mock AnalyzeSentenceData.
+ */
 export const buildMockSentenceData = async (
   req: RequestEnvelopeSentence,
 ): Promise<AnalyzeSentenceData> => {

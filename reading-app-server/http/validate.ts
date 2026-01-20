@@ -20,6 +20,7 @@ const isString = (value: unknown): value is string => typeof value === 'string';
 const isNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
+/** Type guard for Skeleton analysis payload. */
 const isSkeletonPayload = (
   payload: unknown,
 ): payload is AnalyzeSkeletonPayload => {
@@ -35,6 +36,7 @@ const isSkeletonPayload = (
   );
 };
 
+/** Type guard for Paragraph analysis payload. */
 const isParagraphPayload = (
   payload: unknown,
 ): payload is AnalyzeParagraphPayload => {
@@ -46,6 +48,7 @@ const isParagraphPayload = (
   );
 };
 
+/** Type guard for Sentence analysis payload. */
 const isSentencePayload = (
   payload: unknown,
 ): payload is AnalyzeSentencePayload => {
@@ -57,6 +60,7 @@ const isSentencePayload = (
   );
 };
 
+/** Type guard for Sentence Structure analysis payload. */
 const isSentenceStructurePayload = (
   payload: unknown,
 ): payload is AnalyzeSentenceStructurePayload => {
@@ -67,6 +71,15 @@ const isSentenceStructurePayload = (
   return isNumber(start) && isNumber(end) && start >= 0 && end >= start;
 };
 
+/**
+ * Helper to construct a ResponseEnvelope error.
+ *
+ * @param requestId - The request context ID.
+ * @param code - Error category code.
+ * @param http - HTTP status code.
+ * @param message - Human-readable error message.
+ * @returns A ResponseEnvelope with error status.
+ */
 const makeError = (
   requestId: string,
   code: ErrorCode,
@@ -87,6 +100,12 @@ export type ValidationResult =
   | { ok: true; envelope: RequestEnvelope }
   | { ok: false; error: ResponseEnvelope };
 
+/**
+ * Validates a raw input object against the RequestEnvelope structure and specific payload type schemas.
+ *
+ * @param input - The raw object to validate.
+ * @returns A ValidationResult indicating success (with envelope) or failure (with error).
+ */
 export const validateEnvelope = (input: unknown): ValidationResult => {
   if (!isRecord(input)) {
     return {
