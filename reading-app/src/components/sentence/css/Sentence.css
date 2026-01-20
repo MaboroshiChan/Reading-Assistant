@@ -28,9 +28,10 @@
 /* 点击状态 */
 .sentence.clicked,
 .sentence.component.clicked {
-  background-color: hsla(var(--primary-hue), var(--primary-sat), 65%, 0.15);
-  box-shadow: 0 0 0 4px hsla(var(--primary-hue), var(--primary-sat), 65%, 0.1);
-  border-color: var(--color-primary-dim);
+  background-color: var(--color-status-yellow);
+  color: black;
+  box-shadow: 0 0 0 4px hsla(var(--status-yellow-hue), 90%, 65%, 0.4);
+  border-color: hsla(var(--status-yellow-hue), 90%, 65%, 0.6);
 }
 
 /* New: Bridge Highlighted State */
