@@ -9,6 +9,12 @@ interface SentenceStructureProps {
     onHoverUnit?: (unitId: string | null) => void;
 }
 
+/**
+ * Recursively finds the deepest text unit at the end of a branch.
+ *
+ * @param unit - The unit to search.
+ * @returns The text content of the last leaf unit.
+ */
 const getLastText = (unit: StructureUnit): string => {
     if (unit.children && unit.children.length > 0) {
         return getLastText(unit.children[unit.children.length - 1]);
@@ -16,6 +22,12 @@ const getLastText = (unit: StructureUnit): string => {
     return unit.text ?? "";
 };
 
+/**
+ * Checks if a space should be added after a text fragment.
+ *
+ * @param text - The text fragment to check.
+ * @returns True if a space is appropriate.
+ */
 const shouldAddSpace = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return false;
@@ -23,6 +35,13 @@ const shouldAddSpace = (text: string) => {
     return !",.;:!?".includes(lastChar);
 };
 
+/**
+ * Finds the lineage of units leading to a specific unit ID.
+ *
+ * @param units - The list of units to search.
+ * @param id - The target unit ID.
+ * @returns An array of units forming the chain.
+ */
 const findUnitChain = (units: StructureUnit[], id: string): StructureUnit[] => {
     for (const unit of units) {
         if (unit.id === id) return [unit];
@@ -34,6 +53,11 @@ const findUnitChain = (units: StructureUnit[], id: string): StructureUnit[] => {
     return [];
 };
 
+/**
+ * Renders an interactive visualization of a sentence's internal logical structure.
+ *
+ * @param props - Component properties.
+ */
 const SentenceStructure: React.FC<SentenceStructureProps> = ({
     analysis,
     focusUnitId,

@@ -16,6 +16,12 @@ interface SentenceHoverCardProps {
 }
 
 
+/**
+ * A floating card that displays sentence analysis.
+ * Automatically positions itself relative to the mouse or fingerprint.
+ *
+ * @param props - Component properties including anchor point and visibility.
+ */
 export const SentenceHoverCard: React.FC<SentenceHoverCardProps> = ({
   open,
   anchor,

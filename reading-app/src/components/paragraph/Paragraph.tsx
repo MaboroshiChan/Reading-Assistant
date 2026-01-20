@@ -13,6 +13,11 @@ interface ParagraphComponentProps {
   paragraph: Paragraph;
 }
 
+/**
+ * Renders a full paragraph with its gutter, analysis panel, and constituent sentences.
+ *
+ * @param props - Component properties containing the paragraph data.
+ */
 export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
 
   // isClicked now serves as "isActive" for showing the panel

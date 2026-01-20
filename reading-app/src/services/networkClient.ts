@@ -24,6 +24,7 @@ import type {
 // Utility: IDs & timing
 // -----------------------------
 
+/** Generates a unique request ID. */
 const randomId = (): string => {
   const cr = (globalThis as { crypto?: Crypto }).crypto;
   if (cr && typeof cr.randomUUID === 'function') {
@@ -32,13 +33,16 @@ const randomId = (): string => {
   return `req_${Math.random().toString(36).slice(2)}_${Date.now()}`;
 };
 
+/** Utility for async delays. */
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+/** Returns current ISO timestamp. */
 const nowIso = () => new Date().toISOString();
 
 // -----------------------------
 // Errors & predicates
 // -----------------------------
 
+/** Core network error class for transport failures. */
 export class NetworkError extends Error {
   readonly cause?: unknown;
   readonly http?: number;
@@ -52,6 +56,13 @@ export class NetworkError extends Error {
 
 const RETRIABLE_HTTP = new Set([408, 429, 500, 502, 503, 504]);
 
+/**
+ * Determines if a request should be retried based on HTTP status or error payload.
+ *
+ * @param http - HTTP status code.
+ * @param ee - Optional error payload from the envelope.
+ * @returns True if retriable.
+ */
 function isRetriable(http?: number, ee?: EnvelopeError): boolean {
   if (ee?.retriable) return true;
   if (http && RETRIABLE_HTTP.has(http)) return true;
@@ -85,6 +96,10 @@ export interface SendOptions<TFrame = unknown, TPartial = unknown> {
 // NetworkClient implementation
 // -----------------------------
 
+/**
+ * Low-level transport client for sending and receiving Envelope messages over HTTP.
+ * Supports retries, timeouts, and streaming.
+ */
 export class NetworkClient {
   private readonly baseUrl: string;
   private readonly apiPath: string;
@@ -107,6 +122,13 @@ export class NetworkClient {
 
   /**
    * Send a single Envelope to the service. Supports retries and optional streaming (NDJSON/SSE).
+   */
+  /**
+   * Sends an envelope message to the configured /msg endpoint.
+   *
+   * @param envelope - The request data.
+   * @param options - Transport, timeout, and streaming options.
+   * @returns The response data.
    */
   async send<
     TRes extends ResponseEnvelope,
@@ -260,12 +282,14 @@ export class NetworkClient {
   // Internals
   // -----------------------------
 
+  /** Retrieves the authorization header using the configured supplier. */
   private async resolveAuthHeader(): Promise<string | null> {
     if (!this.getAuthToken) return null;
     const value = typeof this.getAuthToken === 'function' ? await this.getAuthToken() : this.getAuthToken;
     return value ? `Bearer ${value}` : null;
   }
 
+  /** Implements exponential backoff with jitter. */
   private async backoff(attempt: number): Promise<void> {
     const exp = Math.min(8, 2 ** (attempt + 1));
     const jitter = Math.random() + 0.5; // 0.5—1.5x

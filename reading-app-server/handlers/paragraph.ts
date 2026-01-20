@@ -63,6 +63,12 @@ interface LLMParagraphResponse {
   confidence?: number;
 }
 
+/**
+ * Builds a cache key for paragraph analysis requests.
+ *
+ * @param req - The request envelope.
+ * @returns A stable cache key string.
+ */
 const buildCacheKey = (req: RequestEnvelopeParagraph): string => {
   return buildStableCacheKey(CACHE_PREFIX, CACHE_VERSION, {
     payload: req.payload,
@@ -74,12 +80,23 @@ const buildCacheKey = (req: RequestEnvelopeParagraph): string => {
 
 let cachedParagraphPrompt: string | null = null;
 
+/**
+ * Loads the paragraph analysis prompt from the filesystem, with caching.
+ *
+ * @returns The prompt text.
+ */
 const loadParagraphPrompt = async (): Promise<string> => {
   if (cachedParagraphPrompt) return cachedParagraphPrompt;
   cachedParagraphPrompt = await fs.readFile(PROMPT_PATH, 'utf8');
   return cachedParagraphPrompt;
 };
 
+/**
+ * Determines and orders the analysis tasks for a paragraph.
+ *
+ * @param req - The request envelope.
+ * @returns An ordered array of tasks.
+ */
 const buildTasks = (req: RequestEnvelopeParagraph): ParagraphTask[] => {
   const requested = req.payload.options?.tasks ?? TASK_ORDER;
   const normalized = new Set<ParagraphTask>();
@@ -91,6 +108,12 @@ const buildTasks = (req: RequestEnvelopeParagraph): ParagraphTask[] => {
   return ordered.length ? ordered : [...TASK_ORDER];
 };
 
+/**
+ * Formats paragraph-level context (hierarchy, neighbors, entities) for the prompt.
+ *
+ * @param req - The request envelope.
+ * @returns A formatted context string or null.
+ */
 const formatContext = (req: RequestEnvelopeParagraph): string | null => {
   const ctx = req.context;
   if (!ctx) return null;
@@ -127,6 +150,12 @@ const formatContext = (req: RequestEnvelopeParagraph): string | null => {
   return lines.join('\n');
 };
 
+/**
+ * Builds the full LLM prompt for paragraph analysis.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the prompt string.
+ */
 const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
   const basePrompt = (await loadParagraphPrompt()).trim();
   const tasks = buildTasks(req);
@@ -157,6 +186,12 @@ const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
   return sections.join('\n');
 };
 
+/**
+ * Orchestrates paragraph data collection from LLM or mock source.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the call results.
+ */
 const buildParagraphData = async (
   req: RequestEnvelopeParagraph,
 ): Promise<CallReturn<string>> => {
@@ -202,6 +237,12 @@ const buildParagraphData = async (
   return llmJson(prompt);
 };
 
+/**
+ * The main handler for paragraph analysis requests.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the streaming response.
+ */
 export const handleParagraph = async (
   req: RequestEnvelopeParagraph,
 ): Promise<CallReturn<string>> => {
@@ -277,6 +318,12 @@ export const handleParagraph = async (
 
 export { buildPrompt as buildParagraphPrompt, buildTasks as buildParagraphTasks };
 
+/**
+ * Coerces the raw LLM JSON response into a typed LLMParagraphResponse object.
+ *
+ * @param value - The raw JSON payload.
+ * @returns A typed object with potential defaults.
+ */
 const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
   if (!isRecord(value)) return {};
   return {
@@ -306,6 +353,13 @@ const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
   };
 };
 
+/**
+ * Maps the coerced LLM response into the final AnalyzeParagraphData structure.
+ *
+ * @param payload - The typed LLM response payload.
+ * @param req - The original request envelope.
+ * @returns The final sanitized analysis data.
+ */
 const mapParagraphResponse = (
   payload: LLMParagraphResponse,
   req: RequestEnvelopeParagraph,
@@ -456,6 +510,14 @@ const mapParagraphResponse = (
   };
 };
 
+/**
+ * Helper to create an Anchor from a raw span and text context.
+ *
+ * @param anchor - The raw anchor data with start/end positions.
+ * @param paragraphText - The full text of the paragraph for snippet extraction.
+ * @param paragraphId - The ID of the paragraph.
+ * @returns An Anchor object or null if the span is invalid.
+ */
 const anchorFromSpan = (
   anchor: LLMParagraphAnchor,
   paragraphText: string,
@@ -475,6 +537,14 @@ const anchorFromSpan = (
   });
 };
 
+/**
+ * Validates and normalizes span indices within a maximum length.
+ *
+ * @param start - The raw start index.
+ * @param end - The raw end index.
+ * @param maxLength - The maximum allowed length.
+ * @returns A validated span object or null.
+ */
 const normalizeSpan = (
   start: number,
   end: number,
@@ -494,15 +564,19 @@ const normalizeSpan = (
   return { start: s, end: e };
 };
 
+/** Checks if a value is a plain object. */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+/** Casts unknown to trimmed string or undefined. */
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
 
+/** Casts unknown to finite number or undefined. */
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
+/** Validates and returns a number between 0 and 1. */
 const asConfidence = (value: unknown): number | undefined => {
   const num = asNumber(value);
   if (typeof num !== 'number') return undefined;
@@ -510,6 +584,7 @@ const asConfidence = (value: unknown): number | undefined => {
   return num;
 };
 
+/** Coerces a raw anchor object. */
 const coerceAnchor = (value: unknown): LLMParagraphAnchor | null => {
   if (!isRecord(value)) return null;
   const start = asNumber(value.start);
@@ -520,6 +595,7 @@ const coerceAnchor = (value: unknown): LLMParagraphAnchor | null => {
   return { start, end, sentence_id: sentenceId };
 };
 
+/** Coerces an array of raw anchors. */
 const coerceAnchorArray = (value: unknown): LLMParagraphAnchor[] => {
   if (!Array.isArray(value)) return [];
   const output: LLMParagraphAnchor[] = [];
@@ -530,6 +606,7 @@ const coerceAnchorArray = (value: unknown): LLMParagraphAnchor[] => {
   return output;
 };
 
+/** Coerces a raw role object. */
 const coerceRole = (value: unknown): LLMParagraphRole | null => {
   if (!isRecord(value)) return null;
   const role = asString(value.role);
@@ -541,6 +618,7 @@ const coerceRole = (value: unknown): LLMParagraphRole | null => {
   };
 };
 
+/** Coerces a raw rhetoric object. */
 const coerceRhetoric = (value: unknown): LLMParagraphRhetoric | null => {
   if (!isRecord(value)) return null;
   const label = asString(value.label);
@@ -552,6 +630,7 @@ const coerceRhetoric = (value: unknown): LLMParagraphRhetoric | null => {
   };
 };
 
+/** Coerces a raw claim object. */
 const coerceClaim = (value: unknown): LLMParagraphClaim | null => {
   if (!isRecord(value)) return null;
   const text = asString(value.text);
@@ -569,12 +648,14 @@ const coerceClaim = (value: unknown): LLMParagraphClaim | null => {
   };
 };
 
+/** Normalizes polarity values. */
 const normalizePolarity = (value: unknown): 'pos' | 'neg' | 'nu' => {
   const str = asString(value);
   if (str === 'pos' || str === 'neg' || str === 'nu') return str;
   return 'nu';
 };
 
+/** Normalizes support values. */
 const normalizeSupport = (value: unknown): 'strong' | 'weak' | 'unspecified' => {
   const str = asString(value);
   if (str === 'strong' || str === 'weak' || str === 'unspecified') return str;

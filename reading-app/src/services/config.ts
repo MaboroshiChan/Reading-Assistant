@@ -9,6 +9,13 @@ interface Config {
     renderMode: boolean;
 }
 
+/**
+ * Retrieves an environment variable, supporting both Vite and Webpack/CRA styles.
+ *
+ * @param key - The environment variable name.
+ * @param defaultValue - Fallback if not found.
+ * @returns The resolved value or default.
+ */
 const getEnv = (key: string, defaultValue: string = ""): string => {
     // Support for Vite (import.meta.env)
     try {

@@ -12,6 +12,13 @@ export interface ParagraphViewModel {
   topicSentence?: { is_implicit: boolean; text: string };
 }
 
+/**
+ * Maps a Paragraph model and its (optional) analysis result to a ViewModel.
+ *
+ * @param paragraph - The base paragraph model.
+ * @param analysis - The optional deep analysis data.
+ * @returns A UI-friendly view model.
+ */
 export const mapParagraphToVM = (
   paragraph: Paragraph,
   analysis?: AnalyzeParagraphData | null,

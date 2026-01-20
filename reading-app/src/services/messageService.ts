@@ -45,8 +45,22 @@ export interface MessageServiceDefaults {
   defaultCacheHint?: CacheHint;            // default 'prefer'
 }
 
+/**
+ * Simple fallback utility.
+ *
+ * @param v - The value to check.
+ * @param fb - The fallback value.
+ * @returns The value if defined, otherwise the fallback.
+ */
 const ensure = <T>(v: T | undefined, fb: T): T => (v === undefined ? fb : v);
 
+/**
+ * Merges default service context with request-specific context.
+ *
+ * @param base - The base context from the request.
+ * @param defaults - The service-wide defaults.
+ * @returns A complete standard context.
+ */
 function buildContext(base: Partial<StandardContext> | undefined, defaults?: MessageServiceDefaults): StandardContext | undefined {
   if (!base && !defaults?.promptVersion && !defaults?.modelTier) return base as StandardContext | undefined;
   const quality_policy: StandardContext['quality_policy'] = {
@@ -65,6 +79,10 @@ function buildContext(base: Partial<StandardContext> | undefined, defaults?: Mes
 // Service
 // -----------------------------
 
+/**
+ * High-level service for sending well-typed messages to the backend.
+ * Handles context merging and default payload fields.
+ */
 export class MessageService {
   private readonly client: NetworkClient;
   private readonly defaults: MessageServiceDefaults;
@@ -74,15 +92,24 @@ export class MessageService {
     this.defaults = defaults;
   }
 
+  /** Access the underlying network client. */
   getClient(): NetworkClient {
     return this.client;
   }
 
+  /** Access the default configuration. */
   getDefaults(): MessageServiceDefaults {
     return this.defaults;
   }
 
   /** Generic sender (escape hatch) */
+  /**
+   * Internal generic sender that applies defaults and handles streaming detection.
+   *
+   * @param envelope - The request envelope to send.
+   * @param sendOptions - Transport and callback options.
+   * @returns The response envelope.
+   */
   async send<TRes extends ResponseEnvelope, TFrame = unknown, TPartial = unknown>(
     envelope: RequestEnvelope,
     sendOptions?: SendOptions<TFrame, TPartial>,
@@ -117,6 +144,14 @@ export class MessageService {
   /**
    * Run global lightweight preprocessing (skeleton) for a document
    */
+  /**
+   * Fetches the document skeleton (initial paragraph/sentence metadata).
+   *
+   * @param payload - Analysis scope.
+   * @param ctx - Optional context override.
+   * @param sendOptions - Optional transport/callback options.
+   * @returns Document skeleton response.
+   */
   async fetchSkeleton(
     payload: AnalyzeSkeletonPayload,
     ctx?: Partial<StandardContext>,
@@ -137,6 +172,14 @@ export class MessageService {
   }
 
   /** Analyze a paragraph on click */
+  /**
+   * Triggers deep analysis of a specific paragraph.
+   *
+   * @param payload - Paragraph target.
+   * @param ctx - Required document context.
+   * @param sendOptions - Optional transport/callback options.
+   * @returns Paragraph analysis response.
+   */
   async analyzeParagraph(
     payload: AnalyzeParagraphPayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
@@ -157,6 +200,14 @@ export class MessageService {
   }
 
   /** Analyze a sentence on click */
+  /**
+   * Triggers deep analysis of a specific sentence (logic, purpose, etc.).
+   *
+   * @param payload - Sentence target.
+   * @param ctx - Required document context.
+   * @param sendOptions - Optional transport/callback options.
+   * @returns Sentence analysis response.
+   */
   async analyzeSentence(
     payload: AnalyzeSentencePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },
@@ -177,6 +228,16 @@ export class MessageService {
   }
 
   /** Analyze a sentence structure (clauses, roles, etc.) */
+  /**
+   * Triggers structural analysis of a sentence (syntax tree, roles).
+   * Supports streaming partial results.
+   *
+   * @param payload - Sentence target and tasks.
+   * @param ctx - Required document context.
+   * @param meta - Optional extra metadata.
+   * @param options - Transport and callback options.
+   * @returns Sentence structure response.
+   */
   async analyzeSentenceStructure(
     payload: AnalyzeSentenceStructurePayload,
     ctx: Partial<StandardContext> & { doc: StandardContext['doc'] },

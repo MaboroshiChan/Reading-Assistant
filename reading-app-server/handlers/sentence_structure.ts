@@ -158,6 +158,12 @@ const UNIT_SOURCES = ['manual', 'model', 'hybrid'] as const;
 type UnitSource = typeof UNIT_SOURCES[number];
 const SOURCE_SET = new Set<UnitSource>(UNIT_SOURCES);
 
+/**
+ * Builds a cache key for sentence structure analysis requests.
+ *
+ * @param req - The request envelope.
+ * @returns A stable cache key.
+ */
 const buildCacheKey = (req: RequestEnvelopeSentenceStructure): string => {
   return buildStableCacheKey(CACHE_PREFIX, CACHE_VERSION, {
     payload: req.payload,
@@ -167,6 +173,12 @@ const buildCacheKey = (req: RequestEnvelopeSentenceStructure): string => {
   });
 };
 
+/**
+ * Determines and orders the analysis tasks to be performed.
+ *
+ * @param req - The request envelope containing optional task preferences.
+ * @returns An ordered array of tasks.
+ */
 const buildTasks = (req: RequestEnvelopeSentenceStructure): SentenceStructureTask[] => {
   const requested = req.payload.options?.tasks ?? TASK_ORDER;
   const normalized = new Set<SentenceStructureTask>();
@@ -181,12 +193,23 @@ const buildTasks = (req: RequestEnvelopeSentenceStructure): SentenceStructureTas
 
 let cachedPrompt: string | null = null;
 
+/**
+ * Loads the sentence structure prompt from the filesystem, with caching.
+ *
+ * @returns The prompt text.
+ */
 const loadPrompt = async (): Promise<string> => {
   if (cachedPrompt) return cachedPrompt;
   cachedPrompt = await fs.readFile(PROMPT_PATH, 'utf8');
   return cachedPrompt;
 };
 
+/**
+ * Extracts or derives the text fragment to be analyzed from the request metadata and span.
+ *
+ * @param req - The request envelope.
+ * @returns An object containing the fragment text and optionally the full sentence text.
+ */
 const extractFragmentText = (
   req: RequestEnvelopeSentenceStructure,
 ): { fragmentText: string; sentenceText?: string } => {
@@ -212,6 +235,12 @@ const extractFragmentText = (
   return { fragmentText, sentenceText };
 };
 
+/**
+ * Formats contextual information (hierarchy, neighbors, entities) into a string for the LLM prompt.
+ *
+ * @param req - The request envelope.
+ * @returns A formatted context string or null if no context is available.
+ */
 const formatContext = (req: RequestEnvelopeSentenceStructure): string | null => {
   const ctx = req.context;
   if (!ctx) return null;
@@ -277,6 +306,13 @@ const buildPrompt = async (req: RequestEnvelopeSentenceStructure): Promise<strin
   return sections.join('\n');
 };
 
+/**
+ * Orchestrates the data collection for sentence structure analysis,
+ * either by calling the LLM or using mock data.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the LLM call return (stream and usage).
+ */
 const buildSentenceStructureData = async (
   req: RequestEnvelopeSentenceStructure,
 ): Promise<CallReturn<string>> => {
@@ -320,6 +356,13 @@ const buildSentenceStructureData = async (
   return llmJson(prompt);
 };
 
+/**
+ * The main handler for sentence structure analysis requests.
+ * Handles caching, LLM interaction, and background result persistence.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the streaming response.
+ */
 export const handleSentenceStructure = async (
   req: RequestEnvelopeSentenceStructure,
 ): Promise<CallReturn<string>> => {
@@ -410,6 +453,14 @@ interface SanitizeContext {
   usedIds: Set<string>;
 }
 
+/**
+ * Maps and sanitizes the raw LLM response into the final AnalyzeSentenceStructureData structure.
+ *
+ * @param payload - The raw JSON payload from the LLM.
+ * @param req - The original request envelope.
+ * @param tasks - The list of tasks that were requested.
+ * @returns The sanitized analysis data.
+ */
 const mapSentenceStructureResponse = (
   payload: unknown,
   req: RequestEnvelopeSentenceStructure,
@@ -461,6 +512,15 @@ const mapSentenceStructureResponse = (
   return data;
 };
 
+/**
+ * Recursively sanitizes an analysis object.
+ *
+ * @param raw - The raw analysis data.
+ * @param ctx - The sanitization context.
+ * @param depth - The current recursion depth.
+ * @param fallbackText - Text to use if no text is provided in the raw data.
+ * @returns A sanitized SentenceStructureAnalysisData object.
+ */
 const sanitizeAnalysis = (
   raw: unknown,
   ctx: SanitizeContext,
@@ -521,6 +581,16 @@ const sanitizeAnalysis = (
   return analysis;
 };
 
+/**
+ * Sanitizes an array of structure units.
+ *
+ * @param rawUnits - The raw units array.
+ * @param ctx - The sanitization context.
+ * @param depth - The current recursion depth.
+ * @param prefix - Prefix for ID generation.
+ * @param parentId - Optional ID of the parent unit.
+ * @returns An array of sanitized unit data.
+ */
 const sanitizeUnits = (
   rawUnits: unknown,
   ctx: SanitizeContext,
@@ -543,6 +613,15 @@ const sanitizeUnits = (
   return units;
 };
 
+/**
+ * Sanitizes a single structure unit, including its role, semantics, and recursive children/clauses.
+ *
+ * @param raw - The raw unit data.
+ * @param ctx - The sanitization context.
+ * @param depth - The current recursion depth.
+ * @param prefix - Prefix for ID generation if needed.
+ * @returns A sanitized unit object or null if invalid.
+ */
 const sanitizeUnit = (
   raw: unknown,
   ctx: SanitizeContext,
@@ -610,6 +689,13 @@ const sanitizeUnit = (
   return unit;
 };
 
+/**
+ * Sanitizes or derives the backbone (subject-predicate-object) structure from units.
+ *
+ * @param raw - The raw backbone data.
+ * @param units - The list of units to search if explicit IDs are missing.
+ * @returns A sanitized backbone object or undefined.
+ */
 const sanitizeBackbone = (
   raw: unknown,
   units: SentenceStructureUnitData[],
@@ -636,6 +722,13 @@ const sanitizeBackbone = (
   };
 };
 
+/**
+ * Recursively finds the first unit with a specific syntactic role.
+ *
+ * @param role - The role to find.
+ * @param units - The list of units to search.
+ * @returns The found unit ID or undefined.
+ */
 const findUnitByRole = (role: SyntacticRole, units: SentenceStructureUnitData[]): string | undefined => {
   for (const unit of units) {
     if (unit.role === role) return unit.id;
@@ -651,6 +744,14 @@ const findUnitByRole = (role: SyntacticRole, units: SentenceStructureUnitData[])
   return undefined;
 };
 
+/**
+ * Detects legacy response formats and maps them to the current internal model.
+ *
+ * @param top - The top-level response object.
+ * @param raw - The raw analysis part.
+ * @param ctx - The sanitization context.
+ * @returns A normalized analysis object.
+ */
 function normalizeLegacyAnalysis(
   top: Record<string, unknown>,
   raw: Record<string, unknown>,
@@ -702,6 +803,13 @@ function normalizeLegacyAnalysis(
 
 type LegacyRole = Record<string, unknown>;
 
+/**
+ * Extracts legacy "semantic_roles" or "anchors" from the raw response.
+ *
+ * @param top - The top-level response object.
+ * @param raw - The raw analysis part.
+ * @returns An array of legacy role objects.
+ */
 function extractLegacyRoles(
   top: Record<string, unknown>,
   raw: Record<string, unknown>,
@@ -717,6 +825,15 @@ function extractLegacyRoles(
   return source.filter((item): item is LegacyRole => isRecord(item));
 }
 
+/**
+ * Converts a single legacy role entry into a modern structure unit.
+ *
+ * @param rawRole - The legacy role data.
+ * @param ctx - The sanitization context.
+ * @param index - Index for ID generation.
+ * @param fallbackText - Fallback text if no text is found for the span.
+ * @returns A modern unit object or null.
+ */
 function convertLegacyRole(
   rawRole: LegacyRole,
   ctx: SanitizeContext,
@@ -751,6 +868,12 @@ function convertLegacyRole(
   return unit;
 }
 
+/**
+ * Coerces and validates a legacy span object.
+ *
+ * @param span - The raw span data.
+ * @returns A valid span object or null.
+ */
 function coerceLegacySpan(span: unknown): { start: number; end: number } | null {
   if (!isRecord(span)) return null;
   const start = asNumber(span.start);
@@ -762,6 +885,14 @@ function coerceLegacySpan(span: unknown): { start: number; end: number } | null 
   return { start: s, end: e };
 }
 
+/**
+ * Selects the best text snippet for a given span, considering context and fallback.
+ *
+ * @param span - The span to get text for.
+ * @param ctx - The sanitization context.
+ * @param fallback - Fallback text if snippet extraction fails.
+ * @returns The extracted or fallback text.
+ */
 function pickTextForSpan(
   span: { start: number; end: number } | null,
   ctx: SanitizeContext,
@@ -799,6 +930,12 @@ function pickTextForSpan(
   return approx || fragment;
 }
 
+/**
+ * Persists the normalized analysis to the filesystem for debugging and dataset collection.
+ *
+ * @param req - The original request envelope.
+ * @param data - The normalized analysis data.
+ */
 async function persistNormalizedSentenceStructure(
   req: RequestEnvelopeSentenceStructure,
   data: AnalyzeSentenceStructureData,
@@ -814,6 +951,12 @@ async function persistNormalizedSentenceStructure(
   }
 }
 
+/**
+ * Derives the backbone structure by searching for units with subject/predicate/object roles.
+ *
+ * @param units - The list of units to search.
+ * @returns The derived backbone object or undefined.
+ */
 function deriveBackboneFromUnits(
   units: SentenceStructureUnitData[],
 ): SentenceStructureAnalysisData['backbone'] | undefined {
@@ -832,28 +975,36 @@ function deriveBackboneFromUnits(
 // Utilities & Aliases
 // -----------------------------
 
+/** Checks if a value is a plain object (not null, not array). */
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 
+/** Casts unknown to string or undefined. */
 const asString = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+/** Casts unknown to lowercase string or undefined. */
 const asLower = (v: unknown): string | undefined => (typeof v === 'string' ? v.toLowerCase() : undefined);
+/** Casts unknown to finite number or undefined. */
 const asNumber = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 
+/** Validates and converts unknown to ISO date string or undefined. */
 const asIsoString = (v: unknown): string | undefined => {
   if (typeof v !== 'string') return undefined;
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 };
 
+/** Clamps a value between 0 and 1. */
 const clampConfidence = (v: unknown): number | undefined => {
   const n = asNumber(v);
   if (n === undefined) return undefined;
   return Math.max(0, Math.min(1, n));
 };
 
+/** Clamps an index between 0 and max. */
 const clampIndex = (v: number, max: number): number => Math.max(0, Math.min(max, Math.floor(v)));
 
+/** Sanitizes an ID string. */
 const sanitizeId = (v: unknown): string | undefined => {
   const s = asString(v);
   if (!s) return undefined;
@@ -861,6 +1012,7 @@ const sanitizeId = (v: unknown): string | undefined => {
   return cleaned.length ? cleaned : undefined;
 };
 
+/** Generates a unique ID within a given set. */
 const makeUniqueId = (used: Set<string>, prefix: string): string => {
   let counter = 1;
   let candidate = `${prefix}${counter}`;
@@ -871,12 +1023,17 @@ const makeUniqueId = (used: Set<string>, prefix: string): string => {
   return candidate;
 };
 
+/** Normalizes a syntactic role. */
 const canonicalRole = (v: unknown): SyntacticRole | undefined => ROLE_ALIAS[asLower(v) ?? ''];
+/** Normalizes a semantic tag. */
 const canonicalSemantics = (v: unknown): SemanticTag | undefined => SEMANTIC_ALIAS[asLower(v) ?? ''];
+/** Normalizes a semantic role name. */
 const canonicalSemRole = (v: unknown): SemanticRoleName | undefined => SEMROLE_ALIAS[asLower(v) ?? ''];
+/** Validates a data source. */
 const canonicalSource = (v: unknown): UnitSource | undefined =>
   SOURCE_SET.has(asLower(v) as UnitSource) ? (asLower(v) as UnitSource) : undefined;
 
+/** Sanitizes layout/view hints. */
 const sanitizeViewHint = (v: unknown): SentenceStructureUnitData['viewHint'] | undefined => {
   if (!isRecord(v)) return undefined;
   const hint: SentenceStructureUnitData['viewHint'] = {};

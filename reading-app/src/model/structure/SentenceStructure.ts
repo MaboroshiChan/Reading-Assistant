@@ -182,7 +182,14 @@ export const DefaultLegend: Required<NonNullable<SentenceStructureAnalysis["lege
   variantPalette: DefaultVariantPalette,
 };
 
-/** —— 小工具：根据单元选择颜色变体（语义优先，其次句法，再次语义角色） —— */
+/**
+ * Determines the visual theme variant for a structural unit based on its metadata.
+ * Priority: Semantics > Syntactic Role > Semantic Role.
+ *
+ * @param u - The structural unit to style.
+ * @param legend - Optional custom mapping legend.
+ * @returns A color variant name.
+ */
 export function chooseVariant(
   u: StructureUnit,
   legend: SentenceStructureAnalysis["legend"] = DefaultLegend
@@ -194,12 +201,13 @@ export function chooseVariant(
   return "gray";
 }
 
-/** —— 运行时类型守卫（在接第三方数据时很有用） —— */
+/** Type guard for StructureUnit. */
 export function isStructureUnit(x: unknown): x is StructureUnit {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return !!x && typeof x === "object" && typeof (x as any).id === "string" && typeof (x as any).text === "string";
 }
 
+/** Type guard for SentenceStructureAnalysis. */
 export function isSentenceStructureAnalysis(x: unknown): x is SentenceStructureAnalysis {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return !!x && typeof x === "object" && typeof (x as any).sentenceId === "string" &&

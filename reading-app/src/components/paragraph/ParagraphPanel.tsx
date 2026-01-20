@@ -6,6 +6,11 @@ interface ParagraphPanelProps {
     vm: ParagraphViewModel;
 }
 
+/**
+ * Renders an analysis panel displaying paragraph metadata like central idea and structure.
+ *
+ * @param props - Component properties containing the paragraph view model.
+ */
 export const ParagraphPanel: React.FC<ParagraphPanelProps> = ({ vm }) => {
     return (
         <div className="paragraph-panel">

@@ -1,5 +1,6 @@
 import type { Sentence } from "./Sentence";
 
+/** Represents a text paragraph with state and analysis results. */
 export default interface Paragraph {
   id: number;
   sentences: Sentence[];
@@ -18,6 +19,13 @@ export default interface Paragraph {
   topicSentence?: { is_implicit: boolean; text: string };
 }
 
+/**
+ * Creates a Paragraph model from raw text by performing local sentence splitting.
+ *
+ * @param text - The raw paragraph text.
+ * @param id - The unique ID for this paragraph.
+ * @returns A new Paragraph object with initial pending state.
+ */
 export const preprocessingFromText = (text: string, id: number): Paragraph => {
   let rawSentences: string[] = [];
 

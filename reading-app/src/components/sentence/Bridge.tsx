@@ -8,6 +8,11 @@ interface SentenceBridgeProps {
     onClick: (e: React.MouseEvent) => void;
 }
 
+/**
+ * Renders a clickable "bridge" between two sentences that represents their logical relationship.
+ *
+ * @param props - Component properties.
+ */
 export const SentenceBridge: React.FC<SentenceBridgeProps> = ({ type, isActive, onClick }) => {
     const config = useMemo(() => getRelationConfig(type), [type]);
 

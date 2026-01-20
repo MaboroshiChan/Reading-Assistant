@@ -50,7 +50,13 @@ export interface CompleteResult {
 // Public API
 // -----------------------------
 
-/** Plain-text completion */
+/**
+ * Performs a plain-text completion using the LLM.
+ *
+ * @param prompt - The full text prompt for the LLM.
+ * @param opts - Configuration options for the completion.
+ * @returns A promise resolving to a CompleteResult (text and usage).
+ */
 export async function complete(prompt: string, opts: LLMOptions = {}): Promise<CompleteResult> {
   const { data, usage } = await callLLM({
     prompt,
@@ -70,7 +76,13 @@ export async function complete(prompt: string, opts: LLMOptions = {}): Promise<C
   return { text, usage: await usage };
 }
 
-/** JSON-structured completion. If you pass a validator, it will be applied before returning. */
+/**
+ * Performs a JSON-structured completion using the LLM.
+ *
+ * @param prompt - The full text prompt for the LLM.
+ * @param opts - Configuration options for the completion.
+ * @returns A promise resolving to a CallReturn (stream and usage).
+ */
 export async function json(prompt: string, opts: LLMOptions = {}): Promise<CallReturn<string>> {
   return callLLM({
     prompt,
@@ -101,6 +113,12 @@ const LOG_DIR = path.join(__dirname, '..', 'log');
 const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
 const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
 
+/**
+ * Calls the appropriate LLM implementation (real or mock) based on configuration.
+ *
+ * @param args - Arguments for the LLM call.
+ * @returns A promise resolving to a CallReturn with streaming data and usage.
+ */
 async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
   await logPromptIfDebug(args);
 
@@ -167,6 +185,11 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
   }
 }
 
+/**
+ * Logs the LLM prompt to the filesystem if debug mode is enabled.
+ *
+ * @param args - Arguments for the LLM call.
+ */
 async function logPromptIfDebug(args: CallArgs): Promise<void> {
   if (!config.debugMode) return;
   const timestamp = new Date().toISOString();
@@ -191,6 +214,12 @@ async function logPromptIfDebug(args: CallArgs): Promise<void> {
   }
 }
 
+/**
+ * Simulates an LLM call for testing or development.
+ *
+ * @param args - Arguments for the LLM call.
+ * @returns A promise resolving to a CallReturn with mock data.
+ */
 async function callMockLLM(args: CallArgs): Promise<CallReturn<string>> {
   if (args.signal?.aborted) {
     throw new Error('Mock LLM call aborted');
@@ -221,6 +250,12 @@ async function callMockLLM(args: CallArgs): Promise<CallReturn<string>> {
   return { data, usage: Promise.resolve(usage) };
 }
 
+/**
+ * Persists the LLM response to a JSON file in the resource directory for debugging and auditing.
+ *
+ * @param args - The original call arguments.
+ * @param text - The raw text response from the LLM.
+ */
 async function persistLLMResponse(args: CallArgs, text: string): Promise<void> {
   try {
     await fs.mkdir(RESPONSE_DIR, { recursive: true });
@@ -249,7 +284,12 @@ async function persistLLMResponse(args: CallArgs, text: string): Promise<void> {
   }
 }
 
-// Extract JSON value (object) from text output
+/**
+ * Extracts a JSON object from a text string, handling potential markdown code fences.
+ *
+ * @param text - The raw text containing JSON.
+ * @returns The parsed JSON object or an empty object if parsing fails.
+ */
 export function extractJsonFromText(text: string): unknown {
   const trimmed = text.trim();
   if (!trimmed) return {};
@@ -263,22 +303,47 @@ export function extractJsonFromText(text: string): unknown {
   }
 }
 
+/**
+ * Removes markdown code fences from a string.
+ *
+ * @param s - The string to unwrap.
+ * @returns The unwrapped content or null if no fence is found.
+ */
 function unwrapCodeFence(s: string): string | null {
   const fence = /^```[a-zA-Z]*\n([\s\S]*?)\n```$/;
   const m = s.match(fence);
   return m ? m[1] : null;
 }
 
+/**
+ * Normalizes an unknown error into a standard Error object.
+ *
+ * @param error - The unknown error.
+ * @returns A standard Error object.
+ */
 function normalizeError(error: unknown): Error {
   if (error instanceof Error) return error;
   return new Error('Unknown LLM client error');
 }
 
+/**
+ * Truncates a string to a maximum length, adding an ellipsis if necessary.
+ *
+ * @param text - The string to truncate.
+ * @param maxLen - The maximum allowed length.
+ * @returns The truncated string.
+ */
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return `${text.slice(0, maxLen - 3)}...`;
 }
 
+/**
+ * Attempts to extract JSON from a prompt string, used for mock LLM simulations.
+ *
+ * @param prompt - The prompt containing a potential JSON block.
+ * @returns The parsed JSON or null.
+ */
 function extractJsonFromPrompt(prompt: string): unknown | null {
   const fenceMatch = prompt.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenceMatch ? fenceMatch[1] : findFirstJsonBlock(prompt);
@@ -290,6 +355,12 @@ function extractJsonFromPrompt(prompt: string): unknown | null {
   }
 }
 
+/**
+ * Finds the first balanced curly-brace block in a string.
+ *
+ * @param prompt - The string to search.
+ * @returns The first JSON-like block or null.
+ */
 function findFirstJsonBlock(prompt: string): string | null {
   const firstBrace = prompt.indexOf('{');
   if (firstBrace === -1) return null;

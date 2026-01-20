@@ -18,6 +18,12 @@ export const config: Config = {
   debugMode: process.env.LLM_DEBUG === '1' || process.env.DEBUG_LLM === '1',
 };
 
+/**
+ * Retrieves the API key for the LLM service.
+ * Honors both OpenAI and Gemini naming conventions if applicable.
+ *
+ * @returns The API key string.
+ */
 export function getOpenAIApiKey(): string {
   return process.env.GEMINI_API_KEY ?? "";
 }

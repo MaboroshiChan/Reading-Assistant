@@ -37,6 +37,11 @@ interface SentenceComponentProps {
 // 鼠标坐标类型
 type Point = { x: number; y: number };
 
+/**
+ * Renders a single sentence with interaction support, including hover cards for deep analysis.
+ *
+ * @param props - Component properties including sentence data and interaction flags.
+ */
 export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     paragraphId,
     sentence,
@@ -521,6 +526,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
     );
 };
 
+/** Loading spinner for the sentence indicator. */
 const Spinner = () => (
     <svg className="sentence-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle className="sentence-spinner-circle" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -528,6 +534,7 @@ const Spinner = () => (
     </svg>
 );
 
+/** Success checkmark for the sentence indicator. */
 const CheckMark = () => (
     <svg className="sentence-check" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />

@@ -73,6 +73,12 @@ export const RELATION_CONFIG: Record<string, RelationConfig> = {
     }
 };
 
+/**
+ * Retrieves the configuration for a specific sentence-to-sentence relation type.
+ *
+ * @param type - The relation type string.
+ * @returns The configuration object.
+ */
 export const getRelationConfig = (type: string): RelationConfig => {
     const key = type.toLowerCase();
     return RELATION_CONFIG[key] ?? {

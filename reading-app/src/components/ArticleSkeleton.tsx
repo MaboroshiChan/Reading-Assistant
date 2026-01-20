@@ -9,6 +9,9 @@ import config from '../services/config';
 import { streamingMessageService } from '../services/messageService.instance';
 
 
+/**
+ * A demo component that renders an example article using ParagraphData.
+ */
 const ExampleParagraph: React.FC = () => {
 
   const article: Paragraph[] = exampleArticle as Paragraph[];
@@ -68,6 +71,12 @@ export interface ArticleFrameworkProps {
   SidebarComponent?: React.ComponentType;
 }
 
+/**
+ * Fetches article content from a file path.
+ *
+ * @param filePath - The path to the article file.
+ * @returns A promise resolving to the article text or an error message.
+ */
 export const loadArticleFromFile = async (filePath: string): Promise<string> => {
   try {
     const response = await fetch(filePath);
@@ -83,6 +92,12 @@ export const loadArticleFromFile = async (filePath: string): Promise<string> => 
 }
 
 // Article Framework/Skeleton Component
+/**
+ * The core layout component for the reading assistant.
+ * Provides a structured container for titles, metadata, and content.
+ *
+ * @param props - Layout and content configuration.
+ */
 const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
   // Core content props
   title,
@@ -297,6 +312,9 @@ export type FontFamilyType = 'serif' | 'sans-serif';
 
 
 // Example usage component
+/**
+ * A full-page example component demonstrating the ArticleFramework with streaming analysis.
+ */
 const ExampleArticle: React.FC = () => {
   const [rawParagraphs, setRawParagraphs] = useState<string[]>([]);
   const [analyzedData, setAnalyzedData] = useState<Paragraph[]>([]);

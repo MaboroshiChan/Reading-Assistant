@@ -16,6 +16,11 @@ interface SentenceRelationshipProps {
  * The Block and Arrow Rhetorical Map is a visual tool that treats sentences or ideas as functional "blocks"
  * connected by arrows that define their logical relationship (such as causality, contrast, or elaboration).
  */
+/**
+ * Renders a visual rhetorical map showing connections between sentences.
+ *
+ * @param props - IDs and relation types for the current, previous, and next sentences.
+ */
 const SentenceRelationship: React.FC<SentenceRelationshipProps> = ({
     prev_id,
     next_id,

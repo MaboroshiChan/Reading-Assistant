@@ -9,6 +9,12 @@ export interface ParagraphGutterProps {
     onClick: (e: React.MouseEvent) => void;
 }
 
+/**
+ * Maps a paragraph structure type to a specific theme color.
+ *
+ * @param type - The structure type string (e.g., "Contrast", "Causal").
+ * @returns A CSS variable name or color value.
+ */
 const getGutterColor = (type?: string) => {
     if (!type) return 'var(--color-surface-border)';
     const t = type.toLowerCase();
@@ -19,6 +25,7 @@ const getGutterColor = (type?: string) => {
     return 'var(--color-status-green)';
 };
 
+/** Loading spinner for the gutter indicator. */
 const Spinner = () => (
     <svg className="paragraph-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle className="paragraph-spinner-circle" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -26,12 +33,18 @@ const Spinner = () => (
     </svg>
 );
 
+/** Success checkmark for the gutter indicator. */
 const CheckMark = () => (
     <svg className="paragraph-check" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
     </svg>
 );
 
+/**
+ * Renders the vertical gutter for a paragraph, showing its status and structure type.
+ *
+ * @param props - Component properties.
+ */
 export const ParagraphGutter: React.FC<ParagraphGutterProps> = ({
     id,
     structureType,
