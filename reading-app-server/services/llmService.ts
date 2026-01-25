@@ -62,7 +62,7 @@ export async function complete(prompt: string, opts: LLMOptions = {}): Promise<C
     prompt,
     responseAs: 'text',
     model: opts.model ?? config.model,
-    temperature: opts.temperature,
+    temperature: opts.temperature ?? config.temperature,
     maxOutputTokens: opts.maxOutputTokens,
     timeoutMs: opts.timeoutMs ?? config.timeoutMs,
     signal: opts.signal,
@@ -88,7 +88,7 @@ export async function json(prompt: string, opts: LLMOptions = {}): Promise<CallR
     prompt,
     responseAs: 'json',
     model: opts.model ?? config.model,
-    temperature: opts.temperature,
+    temperature: opts.temperature ?? config.temperature,
     maxOutputTokens: opts.maxOutputTokens,
     timeoutMs: opts.timeoutMs ?? config.timeoutMs,
     signal: opts.signal,
@@ -136,6 +136,7 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
       throw new Error('Missing GEMINI_API_KEY environment variable');
     }
     const genAI = new GoogleGenerativeAI(apiKey);
+    console.log(`LLM model is ${args.model}`);
     const model = genAI.getGenerativeModel({
       model: args.model,
       generationConfig: {

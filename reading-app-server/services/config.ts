@@ -6,6 +6,8 @@ export interface Config {
   cacheTtlMs: number;
   useMockLLM: boolean;
   debugMode: boolean;
+  thinking: boolean;
+  temperature: number;
 }
 
 export const config: Config = {
@@ -16,6 +18,8 @@ export const config: Config = {
   cacheTtlMs: 7 * 24 * 3600_000,
   useMockLLM: process.env.MOCK_LLM === '1' || process.env.NODE_ENV === 'test',
   debugMode: process.env.LLM_DEBUG === '1' || process.env.DEBUG_LLM === '1',
+  thinking: false, // process.env.LLM_THINKING === '1',
+  temperature: 0.1,
 };
 
 /**

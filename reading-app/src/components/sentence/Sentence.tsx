@@ -367,7 +367,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
         const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         // Join all key words with | for regex
-        const pattern = new RegExp(`(${keyWords.map(escapeRegExp).join('|')})`, 'g');
+        const pattern = new RegExp(`\\b(${keyWords.map(escapeRegExp).join('|')})\\b`, 'g');
         const parts = sentence.text.split(pattern);
 
         return parts.map((part, index) => {
