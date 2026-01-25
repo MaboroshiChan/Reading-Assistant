@@ -33,7 +33,7 @@ export interface SyntaxNode {
 }
 
 /** —— 句内最小分析单元（可递归 & 可承载从句） —— */
-export interface SubUnit {
+export interface StructureUnit {
   id: string;
   text: string;                  // 和 start/end 对齐的切片文本；对子树可为拼接文本
   role?: SyntacticRole;          // 句法角色
@@ -43,10 +43,10 @@ export interface SubUnit {
   /** 与原句的位置信息（可选但强烈建议，有利于“原文切片高亮”） */
 
   /** 递归：如果这是一个从句壳（role === "clause" 或 semantics 指示），则承载完整从句分析 */
-  clause?: SubSentenceAnalysis;
+  clause?: SentenceStructureAnalysis;
 
   /** 结构递归：短语/从句内部的进一步分解 */
-  children?: SubUnit[];
+  children?: StructureUnit[];
 
   /** 质量与来源 */
   confidence?: number;           // 0~1
@@ -65,10 +65,10 @@ export interface SubUnit {
 }
 
 /** —— 顶层：一句话的子结构与语义分析容器 —— */
-export interface SubSentenceAnalysis {
+export interface SentenceStructureAnalysis {
   sentenceId: string;
   text: string;                  // 原句完整文本（用于对齐 & 备用渲染）
-  units: SubUnit[];              // 渲染/交互的主要数据入口（通常一层或数层骨干）
+  units: StructureUnit[];              // 渲染/交互的主要数据入口（通常一层或数层骨干）
 
   /** 主干位（便于消费端快速定位，不必每次从 units 里找） */
   backbone?: {
@@ -124,13 +124,13 @@ export interface SubSentenceAnalysis {
 
 /** —— 推荐的默认颜色映射（与黑底 UI 协调） —— */
 export const DefaultVariantPalette: Record<ColorVariant, { bg: string; fg: string; dot: string }> = {
-  blue:   { bg: "rgba(123,168,255,0.24)", fg: "#dde6ff", dot: "#84a9ff" },
-  green:  { bg: "rgba(103,232,185,0.22)", fg: "#d2f5ea", dot: "#34d399" },
+  blue: { bg: "rgba(123,168,255,0.24)", fg: "#dde6ff", dot: "#84a9ff" },
+  green: { bg: "rgba(103,232,185,0.22)", fg: "#d2f5ea", dot: "#34d399" },
   yellow: { bg: "rgba(253,224,138,0.24)", fg: "#fef3c7", dot: "#facc15" },
-  gray:   { bg: "rgba(226,232,240,0.18)", fg: "#e2e8f0", dot: "#94a3b8" },
+  gray: { bg: "rgba(226,232,240,0.18)", fg: "#e2e8f0", dot: "#94a3b8" },
 };
 
-export const DefaultLegend: Required<NonNullable<SubSentenceAnalysis["legend"]>> = {
+export const DefaultLegend: Required<NonNullable<SentenceStructureAnalysis["legend"]>> = {
   semanticsToVariant: {
     cause: "green",
     result: "green",
@@ -182,10 +182,17 @@ export const DefaultLegend: Required<NonNullable<SubSentenceAnalysis["legend"]>>
   variantPalette: DefaultVariantPalette,
 };
 
-/** —— 小工具：根据单元选择颜色变体（语义优先，其次句法，再次语义角色） —— */
+/**
+ * Determines the visual theme variant for a structural unit based on its metadata.
+ * Priority: Semantics > Syntactic Role > Semantic Role.
+ *
+ * @param u - The structural unit to style.
+ * @param legend - Optional custom mapping legend.
+ * @returns A color variant name.
+ */
 export function chooseVariant(
-  u: SubUnit,
-  legend: SubSentenceAnalysis["legend"] = DefaultLegend
+  u: StructureUnit,
+  legend: SentenceStructureAnalysis["legend"] = DefaultLegend
 ): ColorVariant {
   const L = { ...DefaultLegend, ...(legend ?? {}) };
   if (u.semantics && L.semanticsToVariant?.[u.semantics]) return L.semanticsToVariant[u.semantics]!;
@@ -194,15 +201,16 @@ export function chooseVariant(
   return "gray";
 }
 
-/** —— 运行时类型守卫（在接第三方数据时很有用） —— */
-export function isSubUnit(x: unknown): x is SubUnit {
+/** Type guard for StructureUnit. */
+export function isStructureUnit(x: unknown): x is StructureUnit {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return !!x && typeof x === "object" && typeof (x as any).id === "string" && typeof (x as any).text === "string";
 }
 
-export function isSubSentenceAnalysis(x: unknown): x is SubSentenceAnalysis {
+/** Type guard for SentenceStructureAnalysis. */
+export function isSentenceStructureAnalysis(x: unknown): x is SentenceStructureAnalysis {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return !!x && typeof x === "object" && typeof (x as any).sentenceId === "string" &&
-         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         typeof (x as any).text === "string" && Array.isArray((x as any).units);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    typeof (x as any).text === "string" && Array.isArray((x as any).units);
 }

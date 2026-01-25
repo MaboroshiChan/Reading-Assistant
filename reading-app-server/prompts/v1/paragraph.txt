@@ -22,7 +22,7 @@ are not requested in the task list):
       "type": "string",
       "mood": "string",
       "purpose": "string",
-      "key_phrase": "string",
+      "key_words": ["string"],
       "relation": {
         "type": "string",
         "targetSentenceId": 0
@@ -37,17 +37,36 @@ are not requested in the task list):
       "entity_links": ["optional-id"]
     }
   ],
+  "topic_sentence": {
+    "is_implicit": boolean,
+    "text": "string"
+  }
   "confidence": 0.0
 }
-```
 General instructions:
 - Keep prose concise: summary ≤ 2 sentences.
-- key_phrase is the most semantically significant text_piece in each sentence.
+- key_words is the most semantically significant text_piece in each sentence.
+  - Key words include the predicate with its modifiers (e.g., "runs", "runs fast", "is eradicated", "did not say").
+  - Key words include subclause markers (e.g., "that", "which", "who", "because", "since", "although", "while", "if", "unless", "whether", "how", "why", "when", "where", "as"). 
+  - Key words include connectors (e.g., "and", "or", "because").
+  - Key words include negation words (e.g., "not", "nothing", "doesn't", "don't", "isn't").
+  - Key words include infinitives with its modifiers (e.g., "to run", "to be run").
+  - Key words include adverbs that modify the whole sentence (e.g., "However", "Only", "Furthermore").
+  - Key words include modal verbs (e.g., "can", "could", "should", "will", "would").
+  - Key words should not include nouns and its modifiers.
+  - Usually it is short (1-3 words). Don't include entire clauses.
+  - every sentenece contains at least one key_word.
 - `roles` describe major participant roles (topic, evidence, counterpoint, etc.).
 - `sentences` must contain one object per sentence in the paragraph, preserving order.
 - `rhetoric` captures discourse labels (statement, question, contrast, concession).
 - `claims` are factual or opinionated assertions with polarity and support.
 - `relation` describes logical connection to another sentence (targetSentenceId is 1-based).
+- `topic_sentence` is the main topic of the paragraph.
+  - `is_implicit` is true if the topic sentence is not explicitly stated.
+  - `text` is the topic sentence text. It should be direct copy from the paragraph if it is explicit. Otherwise, it should be inferred from the paragraph.
+  - every paragraph has a topic sentence, either explicit or implicit.
+  - a topic sentence can be a conclusion came after setup.
+  - a topic sentence can be the first sentence. 
 - Confidence scores are floats between 0 and 1.
 - When a section is not requested, omit that key entirely.
 - If unsure about a value, omit the field instead of guessing.

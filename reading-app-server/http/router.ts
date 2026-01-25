@@ -6,11 +6,17 @@ import type { CallReturn } from '../services/llmService';
 import { handleParagraph } from '../handlers/paragraph';
 import { handleSentence } from '../handlers/sentence';
 import { handleSkeleton } from '../handlers/skeleton';
-import { handleSubSentence } from '../handlers/subsentence';
+import { handleSentenceStructure } from '../handlers/sentence_structure';
 import { errorResponse, validateEnvelope } from './validate';
 
 const UNKNOWN_REQUEST_ID = 'unknown';
 
+/**
+ * Parses the raw request body into a JSON object.
+ *
+ * @param raw - The raw body string.
+ * @returns Object with either the parsed value or a ResponseEnvelope error.
+ */
 const parseBody = (raw: string): { ok: true; value: unknown } | { ok: false; error: ResponseEnvelope } => {
   if (!raw || raw.trim() === '') {
     return {
@@ -38,6 +44,12 @@ const parseBody = (raw: string): { ok: true; value: unknown } | { ok: false; err
   }
 };
 
+/**
+ * Dispatches an envelope to the appropriate feature handler based on its type.
+ *
+ * @param envelope - The validated request envelope.
+ * @returns A promise resolving to the response envelope (often streaming).
+ */
 const dispatch = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> => {
   let result: CallReturn<string>;
   if (envelope.type === 'analyze.skeleton.v1') {
@@ -46,9 +58,9 @@ const dispatch = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> =>
     result = await handleParagraph(envelope);
   } else if (envelope.type === 'analyze.sentence.v1') {
     result = await handleSentence(envelope);
-  } else if (envelope.type === 'analyze.subsentence.v1') {
-    console.log('handle subsentence');
-    result = await handleSubSentence(envelope);
+  } else if (envelope.type === 'analyze.sentence-structure.v1') {
+    console.log('handle sentence structure');
+    result = await handleSentenceStructure(envelope);
   } else {
     const _exhaustive: never = envelope;
     return errorResponse(
@@ -71,6 +83,12 @@ const dispatch = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> =>
   } as ResponseEnvelope;
 };
 
+/**
+ * High-level handler for non-streaming messages (though the result may still be a stream).
+ *
+ * @param raw - The raw request body.
+ * @returns A promise resolving to the response envelope.
+ */
 export const handleMsg = async (raw: string): Promise<ResponseEnvelope> => {
   const parsed = parseBody(raw);
   if (!parsed.ok) return parsed.error;
@@ -91,6 +109,12 @@ export const handleMsg = async (raw: string): Promise<ResponseEnvelope> => {
   }
 };
 
+/**
+ * High-level handler for streaming messages.
+ *
+ * @param raw - The raw request body.
+ * @returns A promise resolving to the response envelope.
+ */
 export const handleStream = async (raw: string): Promise<ResponseEnvelope> => {
   const parsed = parseBody(raw);
   if (!parsed.ok) return parsed.error;

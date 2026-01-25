@@ -20,7 +20,7 @@ import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'paragraph';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'paragraph.v1';
+const PROMPT_VERSION = 'paragraph.v1.1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
 const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims'];
 
@@ -59,9 +59,16 @@ interface LLMParagraphResponse {
   rhetoric?: LLMParagraphRhetoric[];
   claims?: LLMParagraphClaim[];
   anchors?: LLMParagraphAnchor[];
+  topic_sentence?: { is_implicit: boolean; text: string };
   confidence?: number;
 }
 
+/**
+ * Builds a cache key for paragraph analysis requests.
+ *
+ * @param req - The request envelope.
+ * @returns A stable cache key string.
+ */
 const buildCacheKey = (req: RequestEnvelopeParagraph): string => {
   return buildStableCacheKey(CACHE_PREFIX, CACHE_VERSION, {
     payload: req.payload,
@@ -73,12 +80,23 @@ const buildCacheKey = (req: RequestEnvelopeParagraph): string => {
 
 let cachedParagraphPrompt: string | null = null;
 
+/**
+ * Loads the paragraph analysis prompt from the filesystem, with caching.
+ *
+ * @returns The prompt text.
+ */
 const loadParagraphPrompt = async (): Promise<string> => {
   if (cachedParagraphPrompt) return cachedParagraphPrompt;
   cachedParagraphPrompt = await fs.readFile(PROMPT_PATH, 'utf8');
   return cachedParagraphPrompt;
 };
 
+/**
+ * Determines and orders the analysis tasks for a paragraph.
+ *
+ * @param req - The request envelope.
+ * @returns An ordered array of tasks.
+ */
 const buildTasks = (req: RequestEnvelopeParagraph): ParagraphTask[] => {
   const requested = req.payload.options?.tasks ?? TASK_ORDER;
   const normalized = new Set<ParagraphTask>();
@@ -90,6 +108,12 @@ const buildTasks = (req: RequestEnvelopeParagraph): ParagraphTask[] => {
   return ordered.length ? ordered : [...TASK_ORDER];
 };
 
+/**
+ * Formats paragraph-level context (hierarchy, neighbors, entities) for the prompt.
+ *
+ * @param req - The request envelope.
+ * @returns A formatted context string or null.
+ */
 const formatContext = (req: RequestEnvelopeParagraph): string | null => {
   const ctx = req.context;
   if (!ctx) return null;
@@ -126,6 +150,12 @@ const formatContext = (req: RequestEnvelopeParagraph): string | null => {
   return lines.join('\n');
 };
 
+/**
+ * Builds the full LLM prompt for paragraph analysis.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the prompt string.
+ */
 const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
   const basePrompt = (await loadParagraphPrompt()).trim();
   const tasks = buildTasks(req);
@@ -156,6 +186,12 @@ const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
   return sections.join('\n');
 };
 
+/**
+ * Orchestrates paragraph data collection from LLM or mock source.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the call results.
+ */
 const buildParagraphData = async (
   req: RequestEnvelopeParagraph,
 ): Promise<CallReturn<string>> => {
@@ -201,6 +237,12 @@ const buildParagraphData = async (
   return llmJson(prompt);
 };
 
+/**
+ * The main handler for paragraph analysis requests.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the streaming response.
+ */
 export const handleParagraph = async (
   req: RequestEnvelopeParagraph,
 ): Promise<CallReturn<string>> => {
@@ -276,32 +318,48 @@ export const handleParagraph = async (
 
 export { buildPrompt as buildParagraphPrompt, buildTasks as buildParagraphTasks };
 
+/**
+ * Coerces the raw LLM JSON response into a typed LLMParagraphResponse object.
+ *
+ * @param value - The raw JSON payload.
+ * @returns A typed object with potential defaults.
+ */
 const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
   if (!isRecord(value)) return {};
   return {
     summary: asString(value.summary),
     roles: Array.isArray(value.roles)
       ? value.roles
-          .map(coerceRole)
-          .filter((role): role is LLMParagraphRole => role !== null)
+        .map(coerceRole)
+        .filter((role): role is LLMParagraphRole => role !== null)
       : undefined,
     rhetoric: Array.isArray(value.rhetoric)
       ? value.rhetoric
-          .map(coerceRhetoric)
-          .filter((item): item is LLMParagraphRhetoric => item !== null)
+        .map(coerceRhetoric)
+        .filter((item): item is LLMParagraphRhetoric => item !== null)
       : undefined,
     claims: Array.isArray(value.claims)
       ? value.claims
-          .map(coerceClaim)
-          .filter((item): item is LLMParagraphClaim => item !== null)
+        .map(coerceClaim)
+        .filter((item): item is LLMParagraphClaim => item !== null)
       : undefined,
     anchors: Array.isArray(value.anchors)
       ? coerceAnchorArray(value.anchors)
+      : undefined,
+    topic_sentence: isRecord(value.topic_sentence) && typeof value.topic_sentence.text === 'string' && typeof value.topic_sentence.is_implicit === 'boolean'
+      ? { is_implicit: value.topic_sentence.is_implicit, text: value.topic_sentence.text }
       : undefined,
     confidence: asConfidence(value.confidence),
   };
 };
 
+/**
+ * Maps the coerced LLM response into the final AnalyzeParagraphData structure.
+ *
+ * @param payload - The typed LLM response payload.
+ * @param req - The original request envelope.
+ * @returns The final sanitized analysis data.
+ */
 const mapParagraphResponse = (
   payload: LLMParagraphResponse,
   req: RequestEnvelopeParagraph,
@@ -317,10 +375,10 @@ const mapParagraphResponse = (
   const baseAnchor =
     text.length > 0
       ? makeAnchor({
-          paragraphId,
-          span: { start: 0, end: text.length },
-          text,
-        })
+        paragraphId,
+        span: { start: 0, end: text.length },
+        text,
+      })
       : null;
 
   if (baseAnchor) {
@@ -354,81 +412,81 @@ const mapParagraphResponse = (
 
   const roles = shouldInclude('roles') && payload.roles
     ? (() => {
-        const items = payload.roles
-          .map((role) => {
-            const anchors = collectAnchors(role.anchors);
-            if (!role.role) return null;
-            return {
-              role: role.role,
-              anchors,
-              confidence: role.confidence,
-            };
-          })
-          .filter((role): role is { role: string; anchors: Anchor[]; confidence: number | undefined } => role !== null)
-          .map((role) => ({
+      const items = payload.roles
+        .map((role) => {
+          const anchors = collectAnchors(role.anchors);
+          if (!role.role) return null;
+          return {
             role: role.role,
-            anchors: role.anchors,
+            anchors,
             confidence: role.confidence,
-          }));
-        return items.length ? items : undefined;
-      })()
+          };
+        })
+        .filter((role): role is { role: string; anchors: Anchor[]; confidence: number | undefined } => role !== null)
+        .map((role) => ({
+          role: role.role,
+          anchors: role.anchors,
+          confidence: role.confidence,
+        }));
+      return items.length ? items : undefined;
+    })()
     : undefined;
 
   const rhetoric = shouldInclude('rhetoric') && payload.rhetoric
     ? (() => {
-        const items = payload.rhetoric
-          .map((item) => {
-            const label = item.label;
-            if (!label) return null;
-            return {
-              label,
-              evidence_anchors: collectAnchors(item.evidence_anchors),
-              confidence: item.confidence,
-            };
-          })
-          .filter(
-            (entry): entry is {
-              label: string;
-              evidence_anchors: Anchor[];
-              confidence: number | undefined;
-            } => entry !== null,
-          )
-          .map((entry) => ({
-            label: entry.label,
-            evidence_anchors: entry.evidence_anchors.length ? entry.evidence_anchors : undefined,
-            confidence: entry.confidence,
-          }));
-        return items.length ? items : undefined;
-      })()
+      const items = payload.rhetoric
+        .map((item) => {
+          const label = item.label;
+          if (!label) return null;
+          return {
+            label,
+            evidence_anchors: collectAnchors(item.evidence_anchors),
+            confidence: item.confidence,
+          };
+        })
+        .filter(
+          (entry): entry is {
+            label: string;
+            evidence_anchors: Anchor[];
+            confidence: number | undefined;
+          } => entry !== null,
+        )
+        .map((entry) => ({
+          label: entry.label,
+          evidence_anchors: entry.evidence_anchors.length ? entry.evidence_anchors : undefined,
+          confidence: entry.confidence,
+        }));
+      return items.length ? items : undefined;
+    })()
     : undefined;
 
   const claims = shouldInclude('claims') && payload.claims
     ? (() => {
-        const items = payload.claims
-          .map((claim) => {
-            const textValue = claim.text;
-            if (!textValue) return null;
-            const anchors = collectAnchors(claim.anchors, true);
-            const entityLinks = claim.entity_links?.filter((id) => typeof id === 'string' && id.trim());
-            return {
-              text: textValue,
-              polarity: normalizePolarity(claim.polarity),
-              support: normalizeSupport(claim.support),
-              anchors,
-              entity_links: entityLinks && entityLinks.length ? entityLinks : undefined,
-            };
-          })
-          .filter(
-            (entry): entry is {
-              text: string;
-              polarity: 'pos' | 'neg' | 'nu';
-              support: 'strong' | 'weak' | 'unspecified';
-              anchors: Anchor[];
-              entity_links: string[] | undefined;
-            } => entry !== null,
-          );
-        return items.length ? items : undefined;
-      })()
+      const items = payload.claims
+        .map((claim) => {
+          const textValue = claim.text;
+          if (!textValue) return null;
+          const anchors = collectAnchors(claim.anchors, true);
+          const entityLinks = claim.entity_links?.filter((id) => typeof id === 'string' && id.trim());
+          return {
+            text: textValue,
+            polarity: normalizePolarity(claim.polarity),
+            support: normalizeSupport(claim.support),
+            anchors,
+            entity_links: entityLinks && entityLinks.length ? entityLinks : undefined,
+          };
+        })
+        .filter(
+          (entry): entry is {
+            text: string;
+            polarity: 'pos' | 'neg' | 'nu';
+            support: 'strong' | 'weak' | 'unspecified';
+            anchors: Anchor[];
+            entity_links: string[] | undefined;
+          } => entry !== null,
+        );
+      return items.length ? items : undefined;
+    })()
     : undefined;
 
   if (payload.anchors) {
@@ -447,10 +505,19 @@ const mapParagraphResponse = (
     rhetoric,
     claims,
     anchors: anchorList,
+    topic_sentence: payload.topic_sentence,
     confidence: payload.confidence,
   };
 };
 
+/**
+ * Helper to create an Anchor from a raw span and text context.
+ *
+ * @param anchor - The raw anchor data with start/end positions.
+ * @param paragraphText - The full text of the paragraph for snippet extraction.
+ * @param paragraphId - The ID of the paragraph.
+ * @returns An Anchor object or null if the span is invalid.
+ */
 const anchorFromSpan = (
   anchor: LLMParagraphAnchor,
   paragraphText: string,
@@ -470,6 +537,14 @@ const anchorFromSpan = (
   });
 };
 
+/**
+ * Validates and normalizes span indices within a maximum length.
+ *
+ * @param start - The raw start index.
+ * @param end - The raw end index.
+ * @param maxLength - The maximum allowed length.
+ * @returns A validated span object or null.
+ */
 const normalizeSpan = (
   start: number,
   end: number,
@@ -489,15 +564,19 @@ const normalizeSpan = (
   return { start: s, end: e };
 };
 
+/** Checks if a value is a plain object. */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+/** Casts unknown to trimmed string or undefined. */
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
 
+/** Casts unknown to finite number or undefined. */
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
+/** Validates and returns a number between 0 and 1. */
 const asConfidence = (value: unknown): number | undefined => {
   const num = asNumber(value);
   if (typeof num !== 'number') return undefined;
@@ -505,6 +584,7 @@ const asConfidence = (value: unknown): number | undefined => {
   return num;
 };
 
+/** Coerces a raw anchor object. */
 const coerceAnchor = (value: unknown): LLMParagraphAnchor | null => {
   if (!isRecord(value)) return null;
   const start = asNumber(value.start);
@@ -515,6 +595,7 @@ const coerceAnchor = (value: unknown): LLMParagraphAnchor | null => {
   return { start, end, sentence_id: sentenceId };
 };
 
+/** Coerces an array of raw anchors. */
 const coerceAnchorArray = (value: unknown): LLMParagraphAnchor[] => {
   if (!Array.isArray(value)) return [];
   const output: LLMParagraphAnchor[] = [];
@@ -525,6 +606,7 @@ const coerceAnchorArray = (value: unknown): LLMParagraphAnchor[] => {
   return output;
 };
 
+/** Coerces a raw role object. */
 const coerceRole = (value: unknown): LLMParagraphRole | null => {
   if (!isRecord(value)) return null;
   const role = asString(value.role);
@@ -536,6 +618,7 @@ const coerceRole = (value: unknown): LLMParagraphRole | null => {
   };
 };
 
+/** Coerces a raw rhetoric object. */
 const coerceRhetoric = (value: unknown): LLMParagraphRhetoric | null => {
   if (!isRecord(value)) return null;
   const label = asString(value.label);
@@ -547,6 +630,7 @@ const coerceRhetoric = (value: unknown): LLMParagraphRhetoric | null => {
   };
 };
 
+/** Coerces a raw claim object. */
 const coerceClaim = (value: unknown): LLMParagraphClaim | null => {
   if (!isRecord(value)) return null;
   const text = asString(value.text);
@@ -558,18 +642,20 @@ const coerceClaim = (value: unknown): LLMParagraphClaim | null => {
     anchors: coerceAnchorArray(value.anchors),
     entity_links: Array.isArray(value.entity_links)
       ? value.entity_links
-          .map(asString)
-          .filter((id): id is string => typeof id === 'string')
+        .map(asString)
+        .filter((id): id is string => typeof id === 'string')
       : undefined,
   };
 };
 
+/** Normalizes polarity values. */
 const normalizePolarity = (value: unknown): 'pos' | 'neg' | 'nu' => {
   const str = asString(value);
   if (str === 'pos' || str === 'neg' || str === 'nu') return str;
   return 'nu';
 };
 
+/** Normalizes support values. */
 const normalizeSupport = (value: unknown): 'strong' | 'weak' | 'unspecified' => {
   const str = asString(value);
   if (str === 'strong' || str === 'weak' || str === 'unspecified') return str;

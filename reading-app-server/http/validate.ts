@@ -2,13 +2,13 @@ import type {
   AnalyzeParagraphPayload,
   AnalyzeSentencePayload,
   AnalyzeSkeletonPayload,
-  AnalyzeSubSentencePayload,
+  AnalyzeSentenceStructurePayload,
   ErrorCode,
   RequestEnvelope,
   RequestEnvelopeParagraph,
   RequestEnvelopeSentence,
   RequestEnvelopeSkeleton,
-  RequestEnvelopeSubsentence,
+  RequestEnvelopeSentenceStructure,
   ResponseEnvelope,
 } from '../../reading-app/src/services/envelopes';
 
@@ -20,6 +20,7 @@ const isString = (value: unknown): value is string => typeof value === 'string';
 const isNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
+/** Type guard for Skeleton analysis payload. */
 const isSkeletonPayload = (
   payload: unknown,
 ): payload is AnalyzeSkeletonPayload => {
@@ -35,6 +36,7 @@ const isSkeletonPayload = (
   );
 };
 
+/** Type guard for Paragraph analysis payload. */
 const isParagraphPayload = (
   payload: unknown,
 ): payload is AnalyzeParagraphPayload => {
@@ -46,6 +48,7 @@ const isParagraphPayload = (
   );
 };
 
+/** Type guard for Sentence analysis payload. */
 const isSentencePayload = (
   payload: unknown,
 ): payload is AnalyzeSentencePayload => {
@@ -57,9 +60,10 @@ const isSentencePayload = (
   );
 };
 
-const isSubSentencePayload = (
+/** Type guard for Sentence Structure analysis payload. */
+const isSentenceStructurePayload = (
   payload: unknown,
-): payload is AnalyzeSubSentencePayload => {
+): payload is AnalyzeSentenceStructurePayload => {
   if (!isRecord(payload)) return false;
   if (!isString(payload.doc_id) || !isString(payload.sentence_id)) return false;
   if (!isRecord(payload.span)) return false;
@@ -67,6 +71,15 @@ const isSubSentencePayload = (
   return isNumber(start) && isNumber(end) && start >= 0 && end >= start;
 };
 
+/**
+ * Helper to construct a ResponseEnvelope error.
+ *
+ * @param requestId - The request context ID.
+ * @param code - Error category code.
+ * @param http - HTTP status code.
+ * @param message - Human-readable error message.
+ * @returns A ResponseEnvelope with error status.
+ */
 const makeError = (
   requestId: string,
   code: ErrorCode,
@@ -87,6 +100,12 @@ export type ValidationResult =
   | { ok: true; envelope: RequestEnvelope }
   | { ok: false; error: ResponseEnvelope };
 
+/**
+ * Validates a raw input object against the RequestEnvelope structure and specific payload type schemas.
+ *
+ * @param input - The raw object to validate.
+ * @returns A ValidationResult indicating success (with envelope) or failure (with error).
+ */
 export const validateEnvelope = (input: unknown): ValidationResult => {
   if (!isRecord(input)) {
     return {
@@ -190,21 +209,21 @@ export const validateEnvelope = (input: unknown): ValidationResult => {
         envelope: input as unknown as RequestEnvelopeSentence,
       };
 
-    case 'analyze.subsentence.v1':
-      if (!isSubSentencePayload(payload)) {
+    case 'analyze.sentence-structure.v1':
+      if (!isSentenceStructurePayload(payload)) {
         return {
           ok: false,
           error: makeError(
             requestId,
             'E.BAD_REQUEST',
             400,
-            'Invalid subsentence payload',
+            'Invalid sentence structure payload',
           ),
         };
       }
       return {
         ok: true,
-        envelope: input as unknown as RequestEnvelopeSubsentence,
+        envelope: input as unknown as RequestEnvelopeSentenceStructure,
       };
 
     default:

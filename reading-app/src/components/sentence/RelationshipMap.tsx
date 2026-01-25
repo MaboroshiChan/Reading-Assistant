@@ -1,6 +1,6 @@
 // SentenceRelationship.tsx
 import React from 'react';
-import './css/SentenceRelationship.css';
+import './css/RelationshipMap.css';
 
 
 interface SentenceRelationshipProps {
@@ -16,6 +16,11 @@ interface SentenceRelationshipProps {
  * The Block and Arrow Rhetorical Map is a visual tool that treats sentences or ideas as functional "blocks"
  * connected by arrows that define their logical relationship (such as causality, contrast, or elaboration).
  */
+/**
+ * Renders a visual rhetorical map showing connections between sentences.
+ *
+ * @param props - IDs and relation types for the current, previous, and next sentences.
+ */
 const SentenceRelationship: React.FC<SentenceRelationshipProps> = ({
     prev_id,
     next_id,
@@ -28,7 +33,7 @@ const SentenceRelationship: React.FC<SentenceRelationshipProps> = ({
         <div className='sentence-relationship'>
             {prev && (
                 <>
-                    <div 
+                    <div
                         className='node other'
                         onMouseEnter={() => onHoverSentence?.(prev_id)}
                         onMouseLeave={() => onHoverSentence?.(null)}
@@ -38,8 +43,8 @@ const SentenceRelationship: React.FC<SentenceRelationshipProps> = ({
                     </div>
                 </>
             )}
-            
-            <div 
+
+            <div
                 className='node current'
                 onMouseEnter={() => onHoverSentence?.(current_id)}
                 onMouseLeave={() => onHoverSentence?.(null)}
@@ -50,7 +55,7 @@ const SentenceRelationship: React.FC<SentenceRelationshipProps> = ({
                     <div className='connector'>
                         <span className='connector-label'>{next}</span>
                     </div>
-                    <div 
+                    <div
                         className='node other'
                         onMouseEnter={() => onHoverSentence?.(next_id)}
                         onMouseLeave={() => onHoverSentence?.(null)}

@@ -4,6 +4,10 @@ import { ExampleArticle } from './components/ArticleSkeleton';
 import messageService from './services/messageService.instance';
 // import {SentenceCardComponent} from './components/InfoComponent';
 
+/**
+ * Main application entry point component.
+ * Performs server health check and renders the main article view.
+ */
 const App: React.FC = () => {
   const [pingStatus, setPingStatus] = React.useState<'pending' | 'ok' | 'error'>('pending');
 

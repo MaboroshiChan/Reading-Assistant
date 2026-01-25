@@ -1,14 +1,17 @@
 import React, { useState, type ReactNode, type CSSProperties, useEffect } from 'react';
 import './css/ArticleSkeleton.css';
 import './css/Highlighted.css';
-import type Paragraph  from '../model/structure/Paragraph';
+import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
-import { ParagraphComponent } from './ParagraphComponent';
+import { ParagraphComponent } from './paragraph/Paragraph';
 import exampleArticle from '../../../resource/examples/example-article.json';
 import config from '../services/config';
 import { streamingMessageService } from '../services/messageService.instance';
 
 
+/**
+ * A demo component that renders an example article using ParagraphData.
+ */
 const ExampleParagraph: React.FC = () => {
 
   const article: Paragraph[] = exampleArticle as Paragraph[];
@@ -16,14 +19,14 @@ const ExampleParagraph: React.FC = () => {
   return (
     <div>
       {article.map(p => (
-        <ParagraphComponent paragraph={p}/>
+        <ParagraphComponent paragraph={p} />
       ))}
     </div>
   );
 };
 
 
-if(config.renderMode) {
+if (config.renderMode) {
   console.log('render mode on');
 }
 else {
@@ -68,6 +71,12 @@ export interface ArticleFrameworkProps {
   SidebarComponent?: React.ComponentType;
 }
 
+/**
+ * Fetches article content from a file path.
+ *
+ * @param filePath - The path to the article file.
+ * @returns A promise resolving to the article text or an error message.
+ */
 export const loadArticleFromFile = async (filePath: string): Promise<string> => {
   try {
     const response = await fetch(filePath);
@@ -83,6 +92,12 @@ export const loadArticleFromFile = async (filePath: string): Promise<string> => 
 }
 
 // Article Framework/Skeleton Component
+/**
+ * The core layout component for the reading assistant.
+ * Provides a structured container for titles, metadata, and content.
+ *
+ * @param props - Layout and content configuration.
+ */
 const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
   // Core content props
   title,
@@ -128,14 +143,14 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
     onLike && onLike(!isLiked);
   };
 
-  // Generate CSS variables for theming
+  // Generate CSS variables for theming which might override or complement global theme
   const cssVars: CSSProperties = {
     '--accent-color': accentColor,
-    '--bg-color': theme === 'dark' ? '#1a1a1a' : '#ffffff',
-    '--text-color': theme === 'dark' ? '#e0e0e0' : '#333333',
-    '--text-secondary': theme === 'dark' ? '#a0a0a0' : '#666666',
-    '--border-color': theme === 'dark' ? '#333333' : '#e0e0e0',
-    '--font-family': fontFamily === 'serif' ? 'Georgia, serif' : 'Inter, sans-serif'
+    '--bg-color': 'var(--color-bg-base)',
+    '--text-color': 'var(--color-text-main)',
+    '--text-secondary': 'var(--color-text-secondary)',
+    '--border-color': 'var(--color-surface-border)',
+    '--font-family': fontFamily === 'serif' ? 'Georgia, serif' : 'var(--font-base)'
   } as CSSProperties;
 
   return (
@@ -297,6 +312,9 @@ export type FontFamilyType = 'serif' | 'sans-serif';
 
 
 // Example usage component
+/**
+ * A full-page example component demonstrating the ArticleFramework with streaming analysis.
+ */
 const ExampleArticle: React.FC = () => {
   const [rawParagraphs, setRawParagraphs] = useState<string[]>([]);
   const [analyzedData, setAnalyzedData] = useState<Paragraph[]>([]);
@@ -352,17 +370,17 @@ const ExampleArticle: React.FC = () => {
             paragraph_id: String(p.id),
             paragraph_text: p.sentences.map(s => s.text).join(' '),
             options: {
-              tasks: ['roles', 'rhetoric', 'summary','claims']
+              tasks: ['roles', 'rhetoric', 'summary', 'claims']
             }
           },
           { doc: { doc_id: 'demo-doc', content_hash: 'demo-hash' } },
           {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onPartial: (partial: any) => {
-               // console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
+              // console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
               setAnalyzedData(prev => prev.map(item => {
                 if (item.id !== p.id) return item;
-                
+
                 // Immutable update of the paragraph
                 const updated = { ...item };
                 if (partial.summary) updated.centralIdea = partial.summary;
@@ -371,6 +389,9 @@ const ExampleArticle: React.FC = () => {
                 }
                 if (partial.roles && partial.roles.length > 0) {
                   updated.function = partial.roles[0].role;
+                }
+                if (partial.topic_sentence) {
+                  updated.topicSentence = partial.topic_sentence;
                 }
                 if (partial.sentences && partial.sentences.length > 0) {
                   updated.sentences = updated.sentences.map((s, i) => {

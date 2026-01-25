@@ -1,21 +1,33 @@
 import React, { useCallback, Fragment, useMemo, useState } from "react";
-import type { SubSentenceAnalysis, SubUnit } from "../model/structure/SubSentence";
-import "./css/SubSentence.css";
+import type { SentenceStructureAnalysis, StructureUnit } from "../../model/structure/SentenceStructure";
+import "./css/SentenceStructure.css";
 
-interface SubSentenceComponentProps {
-    analysis: SubSentenceAnalysis;
+interface SentenceStructureProps {
+    analysis: SentenceStructureAnalysis;
     focusUnitId?: string;
     onFocusChange?: (unitId: string) => void;
     onHoverUnit?: (unitId: string | null) => void;
 }
 
-const getLastText = (unit: SubUnit): string => {
+/**
+ * Recursively finds the deepest text unit at the end of a branch.
+ *
+ * @param unit - The unit to search.
+ * @returns The text content of the last leaf unit.
+ */
+const getLastText = (unit: StructureUnit): string => {
     if (unit.children && unit.children.length > 0) {
         return getLastText(unit.children[unit.children.length - 1]);
     }
     return unit.text ?? "";
 };
 
+/**
+ * Checks if a space should be added after a text fragment.
+ *
+ * @param text - The text fragment to check.
+ * @returns True if a space is appropriate.
+ */
 const shouldAddSpace = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return false;
@@ -23,7 +35,14 @@ const shouldAddSpace = (text: string) => {
     return !",.;:!?".includes(lastChar);
 };
 
-const findUnitChain = (units: SubUnit[], id: string): SubUnit[] => {
+/**
+ * Finds the lineage of units leading to a specific unit ID.
+ *
+ * @param units - The list of units to search.
+ * @param id - The target unit ID.
+ * @returns An array of units forming the chain.
+ */
+const findUnitChain = (units: StructureUnit[], id: string): StructureUnit[] => {
     for (const unit of units) {
         if (unit.id === id) return [unit];
         if (unit.children) {
@@ -34,7 +53,12 @@ const findUnitChain = (units: SubUnit[], id: string): SubUnit[] => {
     return [];
 };
 
-const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
+/**
+ * Renders an interactive visualization of a sentence's internal logical structure.
+ *
+ * @param props - Component properties.
+ */
+const SentenceStructure: React.FC<SentenceStructureProps> = ({
     analysis,
     focusUnitId,
     onFocusChange,
@@ -61,7 +85,7 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
         }
     }, [onFocusChange]);
 
-    const getUnitRole = useCallback((unit: SubUnit): string | undefined => {
+    const getUnitRole = useCallback((unit: StructureUnit): string | undefined => {
         let role: string | undefined = unit?.role;
 
         if (!role && analysis.backbone) {
@@ -73,17 +97,17 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
     }, [analysis.backbone]);
 
     const renderUnits = useCallback(
-        (units: SubUnit[]): React.ReactNode =>
-            units.map((unit: SubUnit, index: number) => {
+        (units: StructureUnit[]): React.ReactNode =>
+            units.map((unit: StructureUnit, index: number) => {
                 const isInteractive = Boolean(onFocusChange);
                 const isFocused = focusUnitId === unit.id;
                 const role = getUnitRole(unit);
                 const className = [
-                    "subsentence-chip",
-                    isInteractive ? "subsentence-chip--interactive" : "",
-                    isFocused ? "subsentence-chip--active" : "",
-                    unit.children && unit.children.length ? "subsentence-chip--has-children" : "",
-                    role ? `subsentence-chip--role-${role}` : "",
+                    "sentence-structure-chip",
+                    isInteractive ? "sentence-structure-chip--interactive" : "",
+                    isFocused ? "sentence-structure-chip--active" : "",
+                    unit.children && unit.children.length ? "sentence-structure-chip--has-children" : "",
+                    role ? `sentence-structure-chip--role-${role}` : "",
                 ]
                     .filter(Boolean)
                     .join(" ");
@@ -117,11 +141,11 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                             {hasChildren ? (
                                 <>
                                     {unit.viewHint?.label && (
-                                        <span className="subsentence-chip-label">
+                                        <span className="sentence-structure-chip-label">
                                             {unit.viewHint.label}
                                         </span>
                                     )}
-                                    <span className="subsentence-children">
+                                    <span className="sentence-structure-children">
                                         {renderUnits(unit.children!)}
                                     </span>
                                 </>
@@ -129,7 +153,7 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                                 unit.text
                             )}
                         </span>
-                        {addSpace ? <span className="subsentence-space"> </span> : null}
+                        {addSpace ? <span className="sentence-structure-space"> </span> : null}
                     </Fragment>
                 );
             }),
@@ -137,10 +161,10 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
     );
 
     return (
-        <div className="subsentence-analysis">
+        <div className="sentence-structure-analysis">
             <span
-                data-subsentence-id={analysis.sentenceId}
-                className="subsentence-container"
+                data-sentence-id={analysis.sentenceId}
+                className="sentence-structure-container"
                 onMouseLeave={() => handleHover(null)}
             >
                 {renderUnits(analysis.units)}
@@ -149,18 +173,18 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
                 {displayChain.map((unit, index) => (
                     <div
                         key={unit.id}
-                        className="subsentence-chain-item"
+                        className="sentence-structure-chain-item"
                         style={{ "--depth": index } as React.CSSProperties}
                     >
-                        <div className="subsentence-info-panel">
-                            <div className="subsentence-info-row">
-                                <span className="subsentence-info-key">Role</span>
-                                <span className="subsentence-info-value role-value">{unit.role}</span>
+                        <div className="sentence-structure-info-panel">
+                            <div className="sentence-structure-info-row">
+                                <span className="sentence-structure-info-key">Role</span>
+                                <span className="sentence-structure-info-value role-value">{unit.role}</span>
                             </div>
                             {(unit).semantics && (
-                                <div className="subsentence-info-row">
-                                    <span className="subsentence-info-key">Semantics</span>
-                                    <span className="subsentence-info-value">{(unit).semantics}</span>
+                                <div className="sentence-structure-info-row">
+                                    <span className="sentence-structure-info-key">Semantics</span>
+                                    <span className="sentence-structure-info-value">{(unit).semantics}</span>
                                 </div>
                             )}
                         </div>
@@ -171,4 +195,4 @@ const SubSentenceComponent: React.FC<SubSentenceComponentProps> = ({
     );
 };
 
-export default SubSentenceComponent;
+export default SentenceStructure;

@@ -1,0 +1,138 @@
+.sentence-structure-container {
+  display: inline;
+  white-space: normal;
+  line-height: 1.7;
+}
+
+.sentence-structure-chip {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 2px 4px;
+  margin: 0 1px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.1s ease;
+  vertical-align: middle;
+}
+
+.sentence-structure-chip--interactive:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.sentence-structure-chip--active {
+  background-color: hsla(var(--primary-hue), var(--primary-sat), 65%, 0.15);
+  box-shadow: 0 0 0 2px hsla(var(--primary-hue), var(--primary-sat), 65%, 0.3);
+  border-color: var(--color-primary-dim);
+}
+
+.sentence-structure-chip--interactive {
+  cursor: pointer;
+}
+
+.sentence-structure-space {
+  display: inline;
+  white-space: pre;
+}
+
+.sentence-structure-chip--has-children {
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 4px 6px;
+  background-color: var(--color-bg-subtle);
+  border-color: var(--color-surface-border);
+}
+
+.sentence-structure-children {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.sentence-structure-chip-label {
+  font-size: 0.65em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  opacity: 0.5;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+  user-select: none;
+}
+
+/* Role Styles - mapped to status colors */
+.sentence-structure-chip--role-subject {
+  /* Blue */
+  background-color: var(--color-status-blue-bg);
+  border-color: hsla(var(--status-blue-hue), 90%, 65%, 0.25);
+  color: var(--color-status-blue);
+}
+
+.sentence-structure-chip--role-predicate {
+  /* Orange/Yellow */
+  background-color: var(--color-status-yellow-bg);
+  border-color: hsla(var(--status-yellow-hue), 90%, 65%, 0.25);
+  color: var(--color-status-yellow);
+}
+
+.sentence-structure-chip--role-object {
+  /* Green */
+  background-color: var(--color-status-green-bg);
+  border-color: hsla(var(--status-green-hue), 80%, 60%, 0.25);
+  color: var(--color-status-green);
+}
+
+.sentence-structure-chip--role-subclause {
+  /* Violet/Purple (Primary) */
+  background-color: hsla(var(--primary-hue), var(--primary-sat), 65%, 0.08);
+  border: 1px dashed var(--color-primary-dim);
+}
+
+/* Dark Mode Adjustments removed - handled by variables */
+
+.semantic.role {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-surface-border);
+  min-height: 1.5em;
+}
+
+.sentence-structure-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.sentence-structure-info-key {
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.5;
+  min-width: 65px;
+}
+
+.sentence-structure-info-value {
+  opacity: 0.9;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.sentence-structure-chain-item {
+  position: relative;
+  margin-left: calc(var(--depth) * 12px);
+  padding-left: 8px;
+  margin-top: 8px;
+  border-left: 2px solid var(--color-surface-border);
+}
+
+.sentence-structure-chain-item:first-child {
+  margin-top: 0;
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+}

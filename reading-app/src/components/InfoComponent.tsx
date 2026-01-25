@@ -5,9 +5,15 @@ import type { SentenceViewModel } from "../model/viewModels/mapSentenceToVM";
 import './css/Info.css';
 
 interface InfoProps<T> {
-    info: T;
+  info: T;
 }
 
+/**
+ * Renders a detailed information card for a sentence, including paraphrase and analysis.
+ *
+ * @param props - The sentence view model.
+ * @deprecated Use newer hover card components instead.
+ */
 export const SentenceCardComponent = ({ info }: InfoProps<SentenceViewModel>) => {
   const { id, text, paraphrase, roleLabel, structureLabel, mood } = info;
 
@@ -17,7 +23,7 @@ export const SentenceCardComponent = ({ info }: InfoProps<SentenceViewModel>) =>
       const value = map[label] ?? "";
       if (value) await navigator.clipboard.writeText(value);
     } catch {
-        // 忽略错误
+      // 忽略错误
     }
   };
 
@@ -63,7 +69,12 @@ export const SentenceCardComponent = ({ info }: InfoProps<SentenceViewModel>) =>
   );
 };
 
+/**
+ * Renders an information card for a paragraph.
+ *
+ * @param props - The paragraph view model.
+ */
 export const ParagraphCardComponent = (props: InfoProps<ParagraphViewModel>) => {
 
-  console.log('ParagraphCardComponent props:', props);  
+  console.log('ParagraphCardComponent props:', props);
 }

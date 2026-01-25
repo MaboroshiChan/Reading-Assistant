@@ -12,12 +12,24 @@ import type { CallReturn } from '../services/llmService';
 
 const CACHE_PREFIX = 'skeleton';
 
+/**
+ * Builds a cache key for skeleton analysis requests.
+ *
+ * @param req - The request envelope.
+ * @returns A stable cache key string.
+ */
 const buildCacheKey = (req: RequestEnvelopeSkeleton): string => {
   const payloadKey = hashString(JSON.stringify(req.payload));
   const contextKey = hashString(JSON.stringify(req.context ?? {}));
   return `${CACHE_PREFIX}:${payloadKey}:${contextKey}`;
 };
 
+/**
+ * Orchestrates skeleton data collection. Currently defaults to mock data.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the call results.
+ */
 const buildSkeletonData = async (
   req: RequestEnvelopeSkeleton,
 ): Promise<CallReturn<string>> => {
@@ -55,6 +67,12 @@ const buildSkeletonData = async (
   };
 };
 
+/**
+ * The main handler for skeleton analysis requests.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the streaming response.
+ */
 export const handleSkeleton = async (
   req: RequestEnvelopeSkeleton,
 ): Promise<CallReturn<string>> => {

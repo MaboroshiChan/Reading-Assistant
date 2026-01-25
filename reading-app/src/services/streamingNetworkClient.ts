@@ -1,6 +1,9 @@
 import NetworkClient, { type SendOptions } from './networkClient';
 import type { RequestEnvelope, ResponseEnvelope } from './envelopes';
 
+/**
+ * Specialized network client that supports partial JSON streaming for real-time UI updates.
+ */
 export default class StreamingNetworkClient extends NetworkClient {
   private _baseUrl: string;
   private _apiPath: string;
@@ -14,6 +17,14 @@ export default class StreamingNetworkClient extends NetworkClient {
     this._defaultHeaders = config.defaultHeaders || {};
   }
 
+  /**
+   * Sends an envelope with streaming support.
+   * If onPartial is provided, it attempts to parse and emit incomplete JSON chunks.
+   *
+   * @param envelope - The request data.
+   * @param options - Transport and streaming callbacks.
+   * @returns The final assembled response.
+   */
   override async send<TRes extends ResponseEnvelope, TReq extends RequestEnvelope, TFrame = unknown, TPartial = unknown>(
     envelope: TReq,
     options?: SendOptions<TFrame, TPartial>
@@ -99,7 +110,10 @@ export default class StreamingNetworkClient extends NetworkClient {
 
 /**
  * Heuristic to close open JSON structures (objects, arrays, strings)
- * so that a partial JSON string can be parsed.
+ * so that a partial JSON string can be parsed as a valid (though incomplete) object.
+ *
+ * @param input - The partial JSON string.
+ * @returns A string with matched closing brackets and quotes.
  */
 function fixJson(input: string): string {
   let inString = false;

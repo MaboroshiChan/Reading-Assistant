@@ -1,5 +1,6 @@
 import type { Sentence } from "./Sentence";
 
+/** Represents a text paragraph with state and analysis results. */
 export default interface Paragraph {
   id: number;
   sentences: Sentence[];
@@ -13,8 +14,18 @@ export default interface Paragraph {
 
   /** 可选：段落整体功能，如“引入”、“论证”、“结论”等 */
   function?: 'Introduction' | 'Premise' | 'Conclusion' | 'Evidence' | string;
+
+  /** Topic Sentence data */
+  topicSentence?: { is_implicit: boolean; text: string };
 }
 
+/**
+ * Creates a Paragraph model from raw text by performing local sentence splitting.
+ *
+ * @param text - The raw paragraph text.
+ * @param id - The unique ID for this paragraph.
+ * @returns A new Paragraph object with initial pending state.
+ */
 export const preprocessingFromText = (text: string, id: number): Paragraph => {
   let rawSentences: string[] = [];
 

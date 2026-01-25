@@ -21,9 +21,9 @@ const CACHE_PREFIX = 'sentence';
 const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'sentence.v5';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
-const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'key_phrase', 'discourse_function', 'dependency_light', 'modal_markers'];
+const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'key_words', 'discourse_function', 'dependency_light', 'modal_markers'];
 
-export type SentenceTask = 'semantic_roles' | 'key_phrase' | 'discourse_function' | 'dependency_light' | 'modal_markers';
+export type SentenceTask = 'semantic_roles' | 'key_words' | 'discourse_function' | 'dependency_light' | 'modal_markers';
 export { PROMPT_VERSION as SENTENCE_PROMPT_VERSION };
 
 interface LLMSentenceRole {
@@ -50,7 +50,7 @@ interface LLMSentenceDependencyLight {
 
 interface LLMSentenceResponse {
   semantic_roles?: LLMSentenceRole[];
-  key_phrase?: string;
+  key_phrase?: string | string[];
   function?: string;
   type?: string;
   mood?: string;
@@ -98,6 +98,12 @@ const MODAL_TYPE_CANONICAL: Record<string, ModalMarker['type']> = {
   want: 'volition',
 };
 
+/**
+ * Normalizes a role label using aliases if available.
+ *
+ * @param value - The raw role label.
+ * @returns The canonical role label.
+ */
 const normalizeRoleLabel = (value: string): string => {
   const key = value.trim().toLowerCase();
   const candidate = ROLE_ALIAS[key] ?? key;
@@ -105,16 +111,22 @@ const normalizeRoleLabel = (value: string): string => {
 };
 
 /**
- * TODO: Write description 
- * The purpose of this function is to ...
- * @param value 
- * @returns TODO
+ * Maps a modal verb or cue to its canonical modal type.
+ *
+ * @param value - The raw modal cue or type string.
+ * @returns The canonical ModalMarker type.
  */
 const normalizeModalType = (value: string): ModalMarker['type'] => {
   const key = value.trim().toLowerCase();
   return MODAL_TYPE_CANONICAL[key] ?? (key || 'unknown');
 };
 
+/**
+ * Builds a cache key for sentence analysis requests.
+ *
+ * @param req - The request envelope.
+ * @returns A stable cache key string.
+ */
 const buildCacheKey = (req: RequestEnvelopeSentence): string => {
   return buildStableCacheKey(CACHE_PREFIX, CACHE_VERSION, {
     payload: req.payload,
@@ -126,12 +138,23 @@ const buildCacheKey = (req: RequestEnvelopeSentence): string => {
 
 let cachedSentencePrompt: string | null = null;
 
+/**
+ * Loads the sentence analysis prompt from the filesystem, with caching.
+ *
+ * @returns The prompt text.
+ */
 const loadSentencePrompt = async (): Promise<string> => {
   if (cachedSentencePrompt) return cachedSentencePrompt;
   cachedSentencePrompt = await fs.readFile(PROMPT_PATH, 'utf8');
   return cachedSentencePrompt;
 };
 
+/**
+ * Determines and orders the analysis tasks to be performed.
+ *
+ * @param req - The request envelope containing optional task preferences.
+ * @returns An ordered array of tasks.
+ */
 const buildTasks = (req: RequestEnvelopeSentence): SentenceTask[] => {
   const requested = req.payload.options?.tasks ?? TASK_ORDER;
   const normalized = new Set<SentenceTask>();
@@ -143,6 +166,12 @@ const buildTasks = (req: RequestEnvelopeSentence): SentenceTask[] => {
   return ordered.length ? ordered : [...TASK_ORDER];
 };
 
+/**
+ * Formats contextual information (hierarchy, neighbors, entities) into a string for the LLM prompt.
+ *
+ * @param req - The request envelope.
+ * @returns A formatted context string or null if no context is available.
+ */
 const formatContext = (req: RequestEnvelopeSentence): string | null => {
   const ctx = req.context;
   if (!ctx) return null;
@@ -179,6 +208,12 @@ const formatContext = (req: RequestEnvelopeSentence): string | null => {
   return lines.join('\n');
 };
 
+/**
+ * Builds the full LLM prompt for sentence analysis.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the prompt string.
+ */
 const buildPrompt = async (req: RequestEnvelopeSentence): Promise<string> => {
   const basePrompt = (await loadSentencePrompt()).trim();
   const tasks = buildTasks(req);
@@ -210,6 +245,13 @@ const buildPrompt = async (req: RequestEnvelopeSentence): Promise<string> => {
   return sections.join('\n');
 };
 
+/**
+ * Orchestrates the data collection for sentence analysis,
+ * either by calling the LLM or using mock data.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the LLM call return (stream and usage).
+ */
 const buildSentenceData = async (
   req: RequestEnvelopeSentence,
 ): Promise<CallReturn<string>> => {
@@ -256,6 +298,13 @@ const buildSentenceData = async (
   return llmJson(prompt);
 };
 
+/**
+ * The main handler for sentence analysis requests.
+ * Handles caching, LLM interaction, and result mapping.
+ *
+ * @param req - The request envelope.
+ * @returns A promise resolving to the streaming response.
+ */
 export const handleSentence = async (
   req: RequestEnvelopeSentence,
 ): Promise<CallReturn<string>> => {
@@ -330,15 +379,21 @@ export const handleSentence = async (
 
 export { buildPrompt as buildSentencePrompt, buildTasks as buildSentenceTasks };
 
+/**
+ * Coerces the raw LLM JSON response into a typed LLMSentenceResponse object.
+ *
+ * @param value - The raw JSON payload.
+ * @returns A typed object with potential defaults.
+ */
 const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
   if (!isRecord(value)) return {};
   return {
     semantic_roles: Array.isArray(value.semantic_roles)
       ? value.semantic_roles
-          .map(coerceRole)
-          .filter((role): role is LLMSentenceRole => role !== null)
+        .map(coerceRole)
+        .filter((role): role is LLMSentenceRole => role !== null)
       : undefined,
-    key_phrase: asString(value.key_phrase),
+    key_phrase: value.key_phrase as (string | string[]),
     function: asString(value.function),
     type: asString(value.type),
     mood: asString(value.mood),
@@ -348,13 +403,20 @@ const coerceSentenceResponse = (value: unknown): LLMSentenceResponse => {
       : undefined,
     modal_markers: Array.isArray(value.modal_markers)
       ? value.modal_markers
-          .map(coerceModalMarker)
-          .filter((marker): marker is LLMSentenceModalMarker => marker !== null)
+        .map(coerceModalMarker)
+        .filter((marker): marker is LLMSentenceModalMarker => marker !== null)
       : undefined,
     confidence: asConfidence(value.confidence),
   };
 };
 
+/**
+ * Maps the coerced LLM response into the final AnalyzeSentenceData structure.
+ *
+ * @param payload - The typed LLM response payload.
+ * @param req - The original request envelope.
+ * @returns The final sanitized analysis data.
+ */
 const mapSentenceResponse = (
   payload: LLMSentenceResponse,
   req: RequestEnvelopeSentence,
@@ -370,10 +432,10 @@ const mapSentenceResponse = (
   const baseAnchor =
     text.length > 0
       ? makeAnchor({
-          sentenceId,
-          span: { start: 0, end: text.length },
-          text,
-        })
+        sentenceId,
+        span: { start: 0, end: text.length },
+        text,
+      })
       : null;
 
   if (baseAnchor) {
@@ -382,37 +444,45 @@ const mapSentenceResponse = (
 
   const semanticRoles = shouldInclude('semantic_roles') && payload.semantic_roles
     ? (() => {
-        const roles: SentenceRole[] = [];
-        for (const role of payload.semantic_roles) {
-          if (!role.role || !role.text) continue;
-          const span = findSpan(text, role.text);
-          const anchors = span ? [makeAnchor({ sentenceId, span, text: role.text })] : undefined;
+      const roles: SentenceRole[] = [];
+      for (const role of payload.semantic_roles) {
+        if (!role.role || !role.text) continue;
+        const span = findSpan(text, role.text);
+        const anchors = span ? [makeAnchor({ sentenceId, span, text: role.text })] : undefined;
 
-          if (anchors) {
-            for (const a of anchors) anchorIndex.set(a.anchor_hash, a);
-          }
-
-          roles.push({
-            role: normalizeRoleLabel(role.role),
-            span: span ?? undefined,
-            anchors,
-            confidence: role.confidence,
-          });
+        if (anchors) {
+          for (const a of anchors) anchorIndex.set(a.anchor_hash, a);
         }
-        return roles.length ? roles : undefined;
-      })()
+
+        roles.push({
+          role: normalizeRoleLabel(role.role),
+          span: span ?? undefined,
+          anchors,
+          confidence: role.confidence,
+        });
+      }
+      return roles.length ? roles : undefined;
+    })()
     : undefined;
 
-  const keyPhrase = shouldInclude('key_phrase') && payload.key_phrase
+  const keyWords = shouldInclude('key_words') && payload.key_phrase
     ? (() => {
-        const phrase = payload.key_phrase;
+      const words: string[] = [];
+      // Support both string (legacy/single) and array
+      const raw = payload.key_phrase;
+      const candidates = Array.isArray(raw) ? raw : [raw];
+
+      for (const phrase of candidates) {
+        if (!phrase || typeof phrase !== 'string') continue;
+        words.push(phrase);
         const span = findSpan(text, phrase);
         if (span) {
           const anchor = makeAnchor({ sentenceId, span, text: phrase });
           anchorIndex.set(anchor.anchor_hash, anchor);
         }
-        return phrase;
-      })()
+      }
+      return words.length ? words : undefined;
+    })()
     : undefined;
 
   // Map 'discourse_function' task to the new classification fields
@@ -429,37 +499,37 @@ const mapSentenceResponse = (
 
   const modalMarkers = shouldInclude('modal_markers') && payload.modal_markers
     ? (() => {
-        const markers: ModalMarker[] = [];
-        const seen = new Set<string>();
-        for (const marker of payload.modal_markers) {
-          if (!marker.type || !marker.cue) continue;
-          const span = findSpan(text, marker.cue);
-          if (!span) continue;
-          const normalizedType = normalizeModalType(marker.type);
-          const key = `${normalizedType}:${span.start}:${span.end}:${marker.cue.toLowerCase()}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          markers.push({
-            type: normalizedType,
-            cue: marker.cue,
-            span,
-          });
-          const anchor = makeAnchor({
-            sentenceId,
-            span,
-            text: text.slice(span.start, span.end),
-          });
-          anchorIndex.set(anchor.anchor_hash, anchor);
-        }
-        return markers.length ? markers : undefined;
-      })()
+      const markers: ModalMarker[] = [];
+      const seen = new Set<string>();
+      for (const marker of payload.modal_markers) {
+        if (!marker.type || !marker.cue) continue;
+        const span = findSpan(text, marker.cue);
+        if (!span) continue;
+        const normalizedType = normalizeModalType(marker.type);
+        const key = `${normalizedType}:${span.start}:${span.end}:${marker.cue.toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        markers.push({
+          type: normalizedType,
+          cue: marker.cue,
+          span,
+        });
+        const anchor = makeAnchor({
+          sentenceId,
+          span,
+          text: text.slice(span.start, span.end),
+        });
+        anchorIndex.set(anchor.anchor_hash, anchor);
+      }
+      return markers.length ? markers : undefined;
+    })()
     : undefined;
 
   const anchorList = anchorIndex.size ? sortAnchors(Array.from(anchorIndex.values())) : undefined;
 
   return {
     semantic_roles: semanticRoles,
-    key_phrase: keyPhrase,
+    key_words: keyWords,
     ...classification,
     dependency_light: dependencyLight,
     modal_markers: modalMarkers,
@@ -468,6 +538,12 @@ const mapSentenceResponse = (
   };
 };
 
+/**
+ * Maps and validates the dependency arcs into the internal model.
+ *
+ * @param raw - The raw dependency light data from the LLM.
+ * @returns The sanitized DependencyLight object or undefined.
+ */
 const mapDependencyLight = (raw: LLMSentenceDependencyLight): DependencyLight | undefined => {
   const arcs = raw.arcs?.map((arc) => {
     const head = typeof arc.head === 'number' && Number.isFinite(arc.head) ? Math.trunc(arc.head) : null;
@@ -501,12 +577,20 @@ const mapDependencyLight = (raw: LLMSentenceDependencyLight): DependencyLight | 
   };
 };
 
+/**
+ * Helper to find the start and end offsets of a substring within a text.
+ *
+ * @param text - The full text to search.
+ * @param substring - The substring to find.
+ * @returns An object with start and end offsets, or null if not found.
+ */
 const findSpan = (text: string, substring: string) => {
   const start = text.indexOf(substring);
   if (start === -1) return null;
   return { start, end: start + substring.length };
 };
 
+/** Coerces a raw role object. */
 const coerceRole = (value: unknown): LLMSentenceRole | null => {
   if (!isRecord(value)) return null;
   return {
@@ -516,6 +600,7 @@ const coerceRole = (value: unknown): LLMSentenceRole | null => {
   };
 };
 
+/** Coerces a raw modal marker object. */
 const coerceModalMarker = (value: unknown): LLMSentenceModalMarker | null => {
   if (!isRecord(value)) return null;
   const type = asString(value.type);
@@ -527,21 +612,22 @@ const coerceModalMarker = (value: unknown): LLMSentenceModalMarker | null => {
   };
 };
 
+/** Coerces a raw dependency light object. */
 const coerceDependencyLight = (value: Record<string, unknown>): LLMSentenceDependencyLight => {
   const headIndexed = typeof value.head_indexed === 'boolean' ? value.head_indexed : undefined;
   const arcs = Array.isArray(value.arcs)
     ? value.arcs
-        .map((arc): LLMSentenceDependencyArc | null => {
-          if (!isRecord(arc)) return null;
-          const head = asNumber(arc.head);
-          const dep = asNumber(arc.dep);
-          const label = asString(arc.label);
-          if (typeof head !== 'number' || typeof dep !== 'number' || !label) {
-            return null;
-          }
-          return { head, dep, label };
-        })
-        .filter((arc): arc is LLMSentenceDependencyArc => arc !== null)
+      .map((arc): LLMSentenceDependencyArc | null => {
+        if (!isRecord(arc)) return null;
+        const head = asNumber(arc.head);
+        const dep = asNumber(arc.dep);
+        const label = asString(arc.label);
+        if (typeof head !== 'number' || typeof dep !== 'number' || !label) {
+          return null;
+        }
+        return { head, dep, label };
+      })
+      .filter((arc): arc is LLMSentenceDependencyArc => arc !== null)
     : undefined;
   return {
     head_indexed: headIndexed,
@@ -549,20 +635,25 @@ const coerceDependencyLight = (value: Record<string, unknown>): LLMSentenceDepen
   };
 };
 
+/** Checks if a value is a plain object. */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+/** Casts unknown to trimmed string or undefined. */
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
 
+/** Casts unknown to lowercase trimmed string or undefined. */
 const asLowercaseString = (value: unknown): string | undefined => {
   const str = asString(value);
   return str ? str.toLowerCase() : undefined;
 };
 
+/** Casts unknown to finite number or undefined. */
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
+/** Validates and returns a number between 0 and 1. */
 const asConfidence = (value: unknown): number | undefined => {
   const num = asNumber(value);
   if (typeof num !== 'number') return undefined;

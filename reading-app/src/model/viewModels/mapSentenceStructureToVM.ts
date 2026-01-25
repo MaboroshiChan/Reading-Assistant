@@ -1,25 +1,25 @@
 import type {
-  AnalyzeSubSentenceData,
-  SubSentenceAnalysisData,
-  SubSentenceUnitData,
+  AnalyzeSentenceStructureData,
+  SentenceStructureAnalysisData,
+  SentenceStructureUnitData,
 } from '../../services/envelopes';
 import {
   DefaultLegend,
   type ColorVariant,
   type SemanticRoleName,
   type SemanticTag,
-  type SubSentenceAnalysis,
-  type SubUnit,
+  type SentenceStructureAnalysis,
+  type StructureUnit,
   type SyntacticRole,
-} from '../structure/SubSentence';
+} from '../structure/SentenceStructure';
 
-export interface SubSentenceViewModel {
-  analysis: SubSentenceAnalysis;
+export interface SentenceStructureViewModel {
+  analysis: SentenceStructureAnalysis;
   confidence?: number;
-  unitsById: Map<string, SubUnit>;
+  unitsById: Map<string, StructureUnit>;
 }
 
-export type SubsentenceVM = SubSentenceViewModel;
+export type SentenceStructureVM = SentenceStructureViewModel;
 
 const ROLE_ALIAS: Record<string, SyntacticRole> = {
   subject: 'subject',
@@ -120,13 +120,20 @@ type DensityValue = typeof DENSITY_VALUES[number];
 const HIGHLIGHT_VALUES = ['semantics-first', 'role-first', 'semantic-role', 'mixed'] as const;
 type HighlightValue = typeof HIGHLIGHT_VALUES[number];
 
-export const mapSubSentenceToVM = (
-  data?: AnalyzeSubSentenceData | null,
-): SubsentenceVM | null => {
+/**
+ * Maps the raw sentence structure analysis data to a view model.
+ * This function sanitizes the input data, collects units by ID, and ensures a top-level confidence score.
+ *
+ * @param data - The raw analysis data from the API response.
+ * @returns The view model or null if the input data is missing.
+ */
+export const mapSentenceStructureToVM = (
+  data?: AnalyzeSentenceStructureData | null,
+): SentenceStructureVM | null => {
   if (!data) return null;
 
   const analysis = sanitizeAnalysis(data.analysis);
-  const unitsById = new Map<string, SubUnit>();
+  const unitsById = new Map<string, StructureUnit>();
   collectUnits(analysis.units, unitsById);
 
   const topConfidence = clampConfidence(data.confidence);
@@ -141,13 +148,20 @@ export const mapSubSentenceToVM = (
   };
 };
 
-const sanitizeAnalysis = (analysis?: SubSentenceAnalysisData): SubSentenceAnalysis => {
+/**
+ * Sanitizes the analysis data, ensuring all required fields are present and valid.
+ * It recursively sanitizes nested units and builds fallback structures if necessary.
+ *
+ * @param analysis - The raw analysis data.
+ * @returns A sanitized SentenceStructureAnalysis object.
+ */
+const sanitizeAnalysis = (analysis?: SentenceStructureAnalysisData): SentenceStructureAnalysis => {
   const sentenceId = analysis?.sentenceId ?? 'unknown';
   const text = analysis?.text ?? '';
   const units = Array.isArray(analysis?.units)
     ? analysis.units
       .map((unit) => sanitizeUnit(unit))
-      .filter((unit): unit is SubUnit => unit !== null)
+      .filter((unit): unit is StructureUnit => unit !== null)
     : [];
 
   const finalUnits = units.length ? units : [buildFallbackUnit(text || sentenceId)];
@@ -180,7 +194,14 @@ const sanitizeAnalysis = (analysis?: SubSentenceAnalysisData): SubSentenceAnalys
   };
 };
 
-const sanitizeUnit = (unit?: SubSentenceUnitData | null): SubUnit | null => {
+/**
+ * Sanitizes a single structure unit, including its children and nested clauses.
+ * Validates IDs and text, and normalizes optional fields.
+ *
+ * @param unit - The raw unit data.
+ * @returns A sanitized StructureUnit object or null if invalid.
+ */
+const sanitizeUnit = (unit?: SentenceStructureUnitData | null): StructureUnit | null => {
   if (!unit) return null;
   const id = sanitizeId(unit.id);
   const text = typeof unit.text === 'string' ? unit.text.trim() : '';
@@ -197,7 +218,7 @@ const sanitizeUnit = (unit?: SubSentenceUnitData | null): SubUnit | null => {
   const children = Array.isArray(unit.children)
     ? unit.children
       .map((child) => sanitizeUnit(child))
-      .filter((child): child is SubUnit => child !== null)
+      .filter((child): child is StructureUnit => child !== null)
     : undefined;
 
   const clause = unit.clause ? sanitizeAnalysis(unit.clause) : undefined;
@@ -217,10 +238,18 @@ const sanitizeUnit = (unit?: SubSentenceUnitData | null): SubUnit | null => {
   };
 };
 
+/**
+ * Sanitizes or derives the backbone structure (subject, predicate, object) from the analysis.
+ * If explicit IDs are missing, attempts to find units with corresponding roles.
+ *
+ * @param backbone - The raw backbone data.
+ * @param units - The list of sanitized units to search for derived roles.
+ * @returns A sanitized backbone object or undefined if no components are found.
+ */
 const sanitizeBackbone = (
-  backbone: SubSentenceAnalysisData['backbone'] | undefined,
-  units: SubUnit[],
-): SubSentenceAnalysis['backbone'] | undefined => {
+  backbone: SentenceStructureAnalysisData['backbone'] | undefined,
+  units: StructureUnit[],
+): SentenceStructureAnalysis['backbone'] | undefined => {
   const fromData = backbone ?? {};
   const subjectId = sanitizeId(fromData.subjectId);
   const predicateId = sanitizeId(fromData.predicateId);
@@ -240,9 +269,16 @@ const sanitizeBackbone = (
   };
 };
 
+/**
+ * Sanitizes the legend configuration, including color mappings and palette definitions.
+ * Falls back to default values if specific entries are missing or invalid.
+ *
+ * @param legend - The raw legend data.
+ * @returns A sanitized legend object or undefined if all inputs are empty.
+ */
 const sanitizeLegend = (
-  legend: SubSentenceAnalysisData['legend'] | undefined,
-): SubSentenceAnalysis['legend'] | undefined => {
+  legend: SentenceStructureAnalysisData['legend'] | undefined,
+): SentenceStructureAnalysis['legend'] | undefined => {
   if (!legend) return undefined;
   const semanticsToVariant = sanitizeLegendEntries(legend.semanticsToVariant, canonicalSemantics);
   const roleToVariant = sanitizeLegendEntries(legend.roleToVariant, canonicalRole);
@@ -261,6 +297,13 @@ const sanitizeLegend = (
   };
 };
 
+/**
+ * Helper to sanitize map-like objects in the legend (e.g., role -> color).
+ *
+ * @param input - The raw map object.
+ * @param resolve - A function to validate/normalize the keys.
+ * @returns A sanitized map or undefined.
+ */
 const sanitizeLegendEntries = <T extends string>(
   input: Record<string, string> | undefined,
   resolve: (value: unknown) => T | undefined,
@@ -276,6 +319,12 @@ const sanitizeLegendEntries = <T extends string>(
   return entries.length ? (Object.fromEntries(entries) as Partial<Record<T, ColorVariant>>) : undefined;
 };
 
+/**
+ * Sanitizes the custom color palette definition.
+ *
+ * @param palette - The raw palette data.
+ * @returns A sanitized palette object.
+ */
 const sanitizeVariantPalette = (
   palette: VariantPaletteInput | undefined,
 ): VariantPaletteOutput | undefined => {
@@ -293,9 +342,15 @@ const sanitizeVariantPalette = (
   return entries.length ? Object.fromEntries(entries) : undefined;
 };
 
+/**
+ * Sanitizes layout hints that control rendering (density, labels, etc.).
+ *
+ * @param hint - The raw layout hint data.
+ * @returns A sanitized layout hint object.
+ */
 const sanitizeLayoutHint = (
-  hint: SubSentenceAnalysisData['layoutHint'] | undefined,
-): SubSentenceAnalysis['layoutHint'] | undefined => {
+  hint: SentenceStructureAnalysisData['layoutHint'] | undefined,
+): SentenceStructureAnalysis['layoutHint'] | undefined => {
   if (!hint) return undefined;
   const density = canonicalDensity(hint.density);
   const highlightStrategy = canonicalHighlight(hint.highlightStrategy);
@@ -319,9 +374,15 @@ const sanitizeLayoutHint = (
   };
 };
 
+/**
+ * Sanitizes the list of analysis issues (e.g., low confidence, gaps).
+ *
+ * @param issues - The raw issues array.
+ * @returns A filtered list of valid issues.
+ */
 const sanitizeIssues = (
-  issues: SubSentenceAnalysisData['issues'] | undefined,
-): SubSentenceAnalysis['issues'] | undefined => {
+  issues: SentenceStructureAnalysisData['issues'] | undefined,
+): SentenceStructureAnalysis['issues'] | undefined => {
   if (!issues?.length) return undefined;
   const mapped = issues
     .map((issue) => {
@@ -342,9 +403,15 @@ const sanitizeIssues = (
   return mapped.length ? mapped : undefined;
 };
 
+/**
+ * Sanitizes user or system annotations on the analysis.
+ *
+ * @param annotations - The raw annotations array.
+ * @returns A filtered list of valid annotations.
+ */
 const sanitizeAnnotations = (
-  annotations: SubSentenceAnalysisData['annotations'] | undefined,
-): SubSentenceAnalysis['annotations'] | undefined => {
+  annotations: SentenceStructureAnalysisData['annotations'] | undefined,
+): SentenceStructureAnalysis['annotations'] | undefined => {
   if (!annotations?.length) return undefined;
   const mapped = annotations
     .map((annotation) => {
@@ -365,14 +432,26 @@ const sanitizeAnnotations = (
   return mapped.length ? mapped : undefined;
 };
 
+/**
+ * Ensures the meta field is a valid object.
+ *
+ * @param meta - The raw meta data.
+ * @returns A shallow copy of the meta object or undefined.
+ */
 const sanitizeMeta = (meta: unknown): Record<string, unknown> | undefined => {
   if (!meta || typeof meta !== 'object') return undefined;
   return { ...(meta as Record<string, unknown>) };
 };
 
+/**
+ * Sanitizes view hints for individual units (e.g., collapsed state, custom label).
+ *
+ * @param hint - The raw view hint data.
+ * @returns A sanitized view hint object.
+ */
 const sanitizeViewHint = (
-  hint: SubSentenceUnitData['viewHint'] | undefined,
-): SubUnit['viewHint'] | undefined => {
+  hint: SentenceStructureUnitData['viewHint'] | undefined,
+): StructureUnit['viewHint'] | undefined => {
   if (!hint) return undefined;
   const variant = canonicalVariant(hint.variant);
   const collapsed = typeof hint.collapsed === 'boolean' ? hint.collapsed : undefined;
@@ -391,26 +470,56 @@ const sanitizeViewHint = (
   };
 };
 
+/**
+ * Normalizes syntactic role strings using alias mapping.
+ *
+ * @param value - The raw role string.
+ * @returns The canonical SyntacticRole or undefined.
+ */
 const canonicalRole = (value: unknown): SyntacticRole | undefined => {
   const key = asLower(value);
   return key ? ROLE_ALIAS[key] : undefined;
 };
 
+/**
+ * Normalizes semantic tag strings using alias mapping.
+ *
+ * @param value - The raw semantic tag string.
+ * @returns The canonical SemanticTag or undefined.
+ */
 const canonicalSemantics = (value: unknown): SemanticTag | undefined => {
   const key = asLower(value);
   return key ? SEMANTIC_ALIAS[key] : undefined;
 };
 
+/**
+ * Normalizes semantic role strings using alias mapping.
+ *
+ * @param value - The raw semantic role string.
+ * @returns The canonical SemanticRoleName or undefined.
+ */
 const canonicalSemRole = (value: unknown): SemanticRoleName | undefined => {
   const key = asLower(value);
   return key ? SEMROLE_ALIAS[key] : undefined;
 };
 
+/**
+ * Validates if the string is a valid ColorVariant.
+ *
+ * @param value - The raw variant string.
+ * @returns The valid ColorVariant or undefined.
+ */
 const canonicalVariant = (value: unknown): ColorVariant | undefined => {
   const key = asLower(value);
   return VARIANT_VALUES.includes(key as ColorVariant) ? (key as ColorVariant) : undefined;
 };
 
+/**
+ * Validates or normalizes the data source (manual, model, hybrid).
+ *
+ * @param value - The raw source string.
+ * @returns The valid UnitSource or undefined.
+ */
 const canonicalSource = (value: unknown): UnitSource | undefined => {
   const key = asLower(value);
   if (!key) return undefined;
@@ -421,6 +530,12 @@ const canonicalSource = (value: unknown): UnitSource | undefined => {
   return undefined;
 };
 
+/**
+ * Normalizes issue types using alias mapping.
+ *
+ * @param value - The raw issue type string.
+ * @returns The canonical issue type or undefined.
+ */
 const canonicalIssueType = (
   value: unknown,
 ): 'overlap' | 'gap' | 'conflict' | 'lowConfidence' | 'unparsed' | undefined => {
@@ -429,17 +544,35 @@ const canonicalIssueType = (
   return ISSUE_ALIAS[key as keyof typeof ISSUE_ALIAS];
 };
 
+/**
+ * Validates the layout density preference.
+ *
+ * @param value - The raw density string.
+ * @returns The valid DensityValue or undefined.
+ */
 const canonicalDensity = (value: unknown): DensityValue | undefined => {
   const key = asLower(value);
   return DENSITY_VALUES.includes(key as DensityValue) ? (key as DensityValue) : undefined;
 };
 
+/**
+ * Validates the highlight strategy preference.
+ *
+ * @param value - The raw highlight strategy string.
+ * @returns The valid HighlightValue or undefined.
+ */
 const canonicalHighlight = (value: unknown): HighlightValue | undefined => {
   const key = asLower(value);
   return HIGHLIGHT_VALUES.includes(key as HighlightValue) ? (key as HighlightValue) : undefined;
 };
 
-const buildFallbackUnit = (value: string): SubUnit => {
+/**
+ * Creates a default unit for cases where structure extraction failed or is missing.
+ *
+ * @param value - The fallback text content.
+ * @returns A strictly valid StructureUnit.
+ */
+const buildFallbackUnit = (value: string): StructureUnit => {
   const text = value.trim() || 'fragment';
   const id = sanitizeId(text) ?? 'clause-1';
   return {
@@ -451,7 +584,13 @@ const buildFallbackUnit = (value: string): SubUnit => {
   };
 };
 
-const collectUnits = (units: SubUnit[], acc: Map<string, SubUnit>): void => {
+/**
+ * Recursively collects all units into a flat map for O(1) access by ID.
+ *
+ * @param units - The list of units to traverse.
+ * @param acc - The map accumulator.
+ */
+const collectUnits = (units: StructureUnit[], acc: Map<string, StructureUnit>): void => {
   for (const unit of units) {
     acc.set(unit.id, unit);
     if (unit.children) {
@@ -463,7 +602,14 @@ const collectUnits = (units: SubUnit[], acc: Map<string, SubUnit>): void => {
   }
 };
 
-const findUnitByRole = (role: SyntacticRole, units: SubUnit[]): string | undefined => {
+/**
+ * Recursively finds the first unit with a specific syntactic role.
+ *
+ * @param role - The role to search for (e.g., 'subject').
+ * @param units - The list of units to traverse.
+ * @returns The ID of the matching unit or undefined.
+ */
+const findUnitByRole = (role: SyntacticRole, units: StructureUnit[]): string | undefined => {
   for (const unit of units) {
     if (unit.role === role) return unit.id;
     if (unit.children) {
@@ -478,6 +624,12 @@ const findUnitByRole = (role: SyntacticRole, units: SubUnit[]): string | undefin
   return undefined;
 };
 
+/**
+ * Sanitizes ID strings by removing invalid characters.
+ *
+ * @param value - The raw ID.
+ * @returns A safe ID string or undefined.
+ */
 const sanitizeId = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -486,6 +638,12 @@ const sanitizeId = (value: unknown): string | undefined => {
   return cleaned || undefined;
 };
 
+/**
+ * Clamps confidence scores between 0 and 1, rounding to 3 decimals.
+ *
+ * @param value - The raw confidence number.
+ * @returns A valid number between 0 and 1, or undefined.
+ */
 const clampConfidence = (value: unknown): number | undefined => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   if (value <= 0) return 0;
@@ -493,6 +651,12 @@ const clampConfidence = (value: unknown): number | undefined => {
   return Number(Math.round(value * 1000) / 1000);
 };
 
+/**
+ * Validates that a string is a valid ISO date string.
+ *
+ * @param value - The raw date string.
+ * @returns The valid ISO string or undefined.
+ */
 const sanitizeIsoString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -500,10 +664,16 @@ const sanitizeIsoString = (value: unknown): string | undefined => {
   return Number.isNaN(Date.parse(trimmed)) ? undefined : trimmed;
 };
 
+/**
+ * Helper to safely convert unknown values to lowercase strings.
+ *
+ * @param value - The unknown input.
+ * @returns The lowercase string or undefined.
+ */
 const asLower = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed ? trimmed.toLowerCase() : undefined;
 };
 
-export default mapSubSentenceToVM;
+export default mapSentenceStructureToVM;

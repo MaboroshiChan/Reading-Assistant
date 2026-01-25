@@ -11,12 +11,25 @@ export interface SentenceViewModel {
   confidence?: number;
 }
 
+/**
+ * Selects the most confident role from a list of semantic roles.
+ *
+ * @param roles - The list of roles.
+ * @returns The primary role or undefined.
+ */
 const pickPrimaryRole = (roles?: SentenceRole[]): SentenceRole | undefined => {
   if (!roles?.length) return undefined;
   if (roles.length === 1) return roles[0];
   return [...roles].sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0];
 };
 
+/**
+ * Maps a Sentence model and its (optional) analysis result to a ViewModel.
+ *
+ * @param sentence - The base sentence model.
+ * @param analysis - The optional deep analysis data.
+ * @returns A UI-friendly view model.
+ */
 export const mapSentenceToVM = (
   sentence: Sentence,
   analysis?: AnalyzeSentenceData | null,
