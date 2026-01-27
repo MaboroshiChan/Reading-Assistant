@@ -6,11 +6,12 @@
     color: var(--color-text-main, #333);
     background-color: var(--color-bg-base, #fdfdfd);
     min-height: 100vh;
+    text-align: left;
 }
 
 .reader-header {
     margin-bottom: 48px;
-    text-align: center;
+    text-align: left;
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
     padding-bottom: 32px;
 }
