@@ -72,11 +72,11 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     setActiveBridgeId(prev => prev === bridgeId ? null : bridgeId);
   }, []);
 
-  const handleBridgeMouseEnter = useCallback((bridgeId: string, e: React.MouseEvent) => {
+  const handleBridgeMouseEnter = useCallback((bridgeId: string) => {
     setHoveredBridgeId(bridgeId);
   }, []);
 
-  const handleBridgeMouseLeave = useCallback((e: React.MouseEvent) => {
+  const handleBridgeMouseLeave = useCallback(() => {
     setHoveredBridgeId(null);
   }, []);
 
@@ -147,7 +147,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
                     type={relToPrev.type}
                     isActive={isActive}
                     onClick={(e) => handleBridgeClick(bridgeId, e)}
-                    onMouseEnter={(e) => handleBridgeMouseEnter(bridgeId, e)}
+                    onMouseEnter={() => handleBridgeMouseEnter(bridgeId)}
                     onMouseLeave={handleBridgeMouseLeave}
                   />
                 );
