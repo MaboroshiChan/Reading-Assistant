@@ -1,0 +1,1 @@
+chrome.runtime.onMessage.addListener((e,n,r)=>{e.action==="OPEN_READER"&&chrome.tabs.create({url:"index.html"})});chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:!0}).catch(e=>console.error(e));

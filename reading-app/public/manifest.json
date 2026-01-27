@@ -6,7 +6,8 @@
     "permissions": [
         "activeTab",
         "scripting",
-        "sidePanel"
+        "sidePanel",
+        "storage"
     ],
     "side_panel": {
         "default_path": "index.html"
@@ -19,5 +20,19 @@
         "16": "vite.svg",
         "48": "vite.svg",
         "128": "vite.svg"
-    }
+    },
+    "background": {
+        "service_worker": "assets/background.js",
+        "type": "module"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "assets/content.js"
+            ]
+        }
+    ]
 }

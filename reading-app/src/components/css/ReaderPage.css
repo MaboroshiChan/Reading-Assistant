@@ -1,0 +1,67 @@
+.reader-page {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 60px 20px;
+    font-family: 'Merriweather', 'Georgia', serif;
+    color: var(--color-text-main, #333);
+    background-color: var(--color-bg-base, #fdfdfd);
+    min-height: 100vh;
+}
+
+.reader-header {
+    margin-bottom: 48px;
+    text-align: center;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding-bottom: 32px;
+}
+
+.reader-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 12px;
+    color: #1a1a1a;
+}
+
+.reader-byline {
+    font-size: 1.1rem;
+    color: #666;
+    font-style: italic;
+    margin-bottom: 24px;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+.analyze-btn {
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: white;
+    border: none;
+    padding: 12px 28px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+.analyze-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+}
+
+.text-content {
+    font-size: 1.25rem;
+    line-height: 1.8;
+}
+
+.reader-paragraph {
+    margin-bottom: 24px;
+}
+
+/* When analyzing, we might use the component's styles, but ensure container is handled */
+.analysis-content {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
