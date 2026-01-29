@@ -69,6 +69,12 @@ function injectAnalyzeButton(articleData: any) {
                 timestamp: Date.now()
             };
 
+            if (!chrome.storage) {
+                alert("Reading Assistant extension was updated. Please refresh this page to use the Analyze feature.");
+                btn.innerText = "Refresh Page";
+                return;
+            }
+
             await chrome.storage.local.set({ "latestArticle": dataToStore });
 
             // Notify background script to open the reader
