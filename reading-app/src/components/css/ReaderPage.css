@@ -51,7 +51,8 @@
     box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
 }
 
-.text-content {
+.text-content,
+.analysis-content {
     font-size: 1.25rem;
     line-height: 1.8;
 }
@@ -60,7 +61,6 @@
     margin-bottom: 24px;
 }
 
-/* When analyzing, we might use the component's styles, but ensure container is handled */
 .analysis-content {
     display: flex;
     flex-direction: column;
