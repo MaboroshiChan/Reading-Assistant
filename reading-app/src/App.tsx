@@ -2,6 +2,7 @@ import './App.css';
 import React from 'react';
 
 import { ReaderPage } from './components/ReaderPage';
+import { ExampleArticle } from './components/Demo';
 import messageService from './services/messageService.instance';
 
 /**
@@ -62,6 +63,8 @@ const App: React.FC = () => {
       </div>
       {extractedData ? (
         <ReaderPage articleData={extractedData} />
+      ) : import.meta.env.DEV ? (
+        <ExampleArticle />
       ) : (
         <div className="empty-state">
           <h2>Reading Assistant</h2>

@@ -1,6 +1,6 @@
 import React, { useState, type ReactNode, type CSSProperties, useEffect } from 'react';
 import './css/Demo.css';
-import './css/Highlighted.css';
+// import './css/Highlighted.css';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
