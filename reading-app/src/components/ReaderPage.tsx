@@ -29,6 +29,12 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         }
     }, [articleData]);
 
+    useEffect(() => {
+        if (articleData.title) {
+            document.title = articleData.title;
+        }
+    }, [articleData.title]);
+
     const handleAnalyze = async () => {
         if (viewMode === 'analyzing') return;
 
