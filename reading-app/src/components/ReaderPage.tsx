@@ -43,67 +43,71 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         setAnalyzedData(skeletons);
         setViewMode('analyzing');
 
-        // 2. Streaming Analysis
-        skeletons.forEach(async (p) => {
-            // Mark as streaming
-            setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
+        // 2. Streaming Analysis (Chunked)
+        const CHUNK_SIZE = 4;
+        for (let i = 0; i < skeletons.length; i += CHUNK_SIZE) {
+            const chunk = skeletons.slice(i, i + CHUNK_SIZE);
+            await Promise.all(chunk.map(async (p) => {
+                // Mark as streaming
+                setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
 
-            try {
-                await streamingMessageService.analyzeParagraph(
-                    {
-                        doc_id: 'extracted-doc',
-                        paragraph_id: String(p.id),
-                        paragraph_text: p.sentences.map(s => s.text).join(' '),
-                        options: {
-                            tasks: ['roles', 'rhetoric', 'summary', 'claims']
+                try {
+                    await streamingMessageService.analyzeParagraph(
+                        {
+                            doc_id: 'extracted-doc',
+                            paragraph_id: String(p.id),
+                            paragraph_text: p.sentences.map(s => s.text).join(' '),
+                            options: {
+                                tasks: ['roles', 'rhetoric', 'summary', 'claims']
+                            }
+                        },
+                        { doc: { doc_id: 'extracted-doc', content_hash: 'extracted-hash' } },
+                        {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            onPartial: (partial: any) => {
+                                setAnalyzedData(prev => prev.map(item => {
+                                    if (item.id !== p.id) return item;
+
+                                    // Immutable update of the paragraph
+                                    const updated = { ...item };
+                                    if (partial.summary) updated.centralIdea = partial.summary;
+                                    if (partial.rhetoric && partial.rhetoric.length > 0) {
+                                        updated.structureType = partial.rhetoric[0].label;
+                                    }
+                                    if (partial.roles && partial.roles.length > 0) {
+                                        updated.function = partial.roles[0].role;
+                                    }
+                                    if (partial.topic_sentence) {
+                                        updated.topicSentence = partial.topic_sentence;
+                                    }
+                                    if (partial.sentences && partial.sentences.length > 0) {
+                                        updated.sentences = updated.sentences.map((s, i) => {
+                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                            const incoming = (partial.sentences as any[])[i];
+                                            if (incoming) {
+                                                return {
+                                                    ...s,
+                                                    ...incoming,
+                                                    id: s.id, // Ensure original ID is preserved
+                                                };
+                                            }
+                                            return s;
+                                        });
+                                    }
+                                    return updated;
+                                }));
+                            }
                         }
-                    },
-                    { doc: { doc_id: 'extracted-doc', content_hash: 'extracted-hash' } },
-                    {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        onPartial: (partial: any) => {
-                            setAnalyzedData(prev => prev.map(item => {
-                                if (item.id !== p.id) return item;
+                    );
 
-                                // Immutable update of the paragraph
-                                const updated = { ...item };
-                                if (partial.summary) updated.centralIdea = partial.summary;
-                                if (partial.rhetoric && partial.rhetoric.length > 0) {
-                                    updated.structureType = partial.rhetoric[0].label;
-                                }
-                                if (partial.roles && partial.roles.length > 0) {
-                                    updated.function = partial.roles[0].role;
-                                }
-                                if (partial.topic_sentence) {
-                                    updated.topicSentence = partial.topic_sentence;
-                                }
-                                if (partial.sentences && partial.sentences.length > 0) {
-                                    updated.sentences = updated.sentences.map((s, i) => {
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        const incoming = (partial.sentences as any[])[i];
-                                        if (incoming) {
-                                            return {
-                                                ...s,
-                                                ...incoming,
-                                                id: s.id, // Ensure original ID is preserved
-                                            };
-                                        }
-                                        return s;
-                                    });
-                                }
-                                return updated;
-                            }));
-                        }
-                    }
-                );
-
-                // Mark as complete
-                setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'complete' } : item));
-            } catch (err) {
-                console.error(`Analysis failed for paragraph ${p.id}`, err);
-                setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'error' } : item));
-            }
-        });
+                    // Mark as complete
+                    setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'complete' } : item));
+                } catch (err) {
+                    console.error(`Analysis failed for paragraph ${p.id}`, err);
+                    setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'error' } : item));
+                }
+            }));
+        }
     };
 
     return (
