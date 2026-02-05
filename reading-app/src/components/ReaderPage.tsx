@@ -47,6 +47,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         const CHUNK_SIZE = 4;
         for (let i = 0; i < skeletons.length; i += CHUNK_SIZE) {
             const chunk = skeletons.slice(i, i + CHUNK_SIZE);
+            console.log('Chunk', chunk);
             await Promise.all(chunk.map(async (p) => {
                 // Mark as streaming
                 setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
