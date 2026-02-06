@@ -12,7 +12,7 @@
 .reader-header {
     margin-bottom: 48px;
     text-align: left;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid var(--color-surface-border);
     padding-bottom: 32px;
 }
 
@@ -21,12 +21,12 @@
     font-weight: 700;
     line-height: 1.2;
     margin-bottom: 12px;
-    color: #1a1a1a;
+    color: var(--color-text-main);
 }
 
 .reader-byline {
     font-size: 1.1rem;
-    color: #666;
+    color: var(--color-text-secondary);
     font-style: italic;
     margin-bottom: 24px;
     font-family: 'Inter', system-ui, sans-serif;
