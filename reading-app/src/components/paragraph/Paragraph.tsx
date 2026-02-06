@@ -33,7 +33,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     }
   }, [paragraph.status, paragraph.id, paragraphVm]);
 
-  const isInteractive = !paragraph.status || paragraph.status === 'complete';
+  const isInteractive = paragraph.status === 'complete';
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMouseEnter = useCallback((_event: MouseEvent<HTMLDivElement>) => {

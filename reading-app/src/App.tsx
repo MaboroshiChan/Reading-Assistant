@@ -44,7 +44,7 @@ const App: React.FC = () => {
           console.log("Found extracted article:", result.latestArticle.title);
           setExtractedData(result.latestArticle);
           // Optional: Clear after reading?
-          // chrome.storage.local.remove("latestArticle"); 
+          chrome.storage.local.remove("latestArticle");
         }
       });
     }
