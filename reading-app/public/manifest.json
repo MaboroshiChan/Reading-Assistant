@@ -1,0 +1,38 @@
+{
+    "manifest_version": 3,
+    "name": "Reading Assistant",
+    "version": "1.0.0",
+    "description": "AI-powered reading assistant",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "sidePanel",
+        "storage"
+    ],
+    "side_panel": {
+        "default_path": "index.html"
+    },
+    "action": {
+        "default_popup": "index.html",
+        "default_title": "Reading Assistant"
+    },
+    "icons": {
+        "16": "vite.svg",
+        "48": "vite.svg",
+        "128": "vite.svg"
+    },
+    "background": {
+        "service_worker": "assets/background.js",
+        "type": "module"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "assets/content.js"
+            ]
+        }
+    ]
+}

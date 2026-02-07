@@ -1,8 +1,9 @@
 import './App.css';
 import React from 'react';
-import { ExampleArticle } from './components/ArticleSkeleton';
+
+import { ReaderPage } from './components/ReaderPage';
+import { ExampleArticle } from './components/Demo';
 import messageService from './services/messageService.instance';
-// import {SentenceCardComponent} from './components/InfoComponent';
 
 /**
  * Main application entry point component.
@@ -33,6 +34,22 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const [extractedData, setExtractedData] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    // Check for extension data
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get("latestArticle", (result: { latestArticle?: any }) => {
+        if (result.latestArticle) {
+          console.log("Found extracted article:", result.latestArticle.title);
+          setExtractedData(result.latestArticle);
+          // Optional: Clear after reading?
+          chrome.storage.local.remove("latestArticle");
+        }
+      });
+    }
+  }, []);
+
   return (
     <div className="App">
       <div
@@ -44,7 +61,17 @@ const App: React.FC = () => {
         {pingStatus === 'ok' && 'Connected to analysis server.'}
         {pingStatus === 'error' && 'Unable to reach analysis server.'}
       </div>
-      <ExampleArticle />
+      {extractedData ? (
+        <ReaderPage articleData={extractedData} />
+      ) : import.meta.env.DEV ? (
+        <ExampleArticle />
+      ) : (
+        <div className="empty-state">
+          <h2>Reading Assistant</h2>
+          <p>No article loaded.</p>
+          <p>Navigate to an article and click "✨ Analyze" to start.</p>
+        </div>
+      )}
     </div>
   );
 };

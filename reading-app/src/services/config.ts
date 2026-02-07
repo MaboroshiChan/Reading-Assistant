@@ -6,7 +6,6 @@ interface Config {
     cacheTtlMs: number;
     useMockLLM: boolean;
     debugMode: boolean;
-    renderMode: boolean;
 }
 
 /**
@@ -42,8 +41,7 @@ export const config: Config = {
     cacheMax: Number(getEnv("CACHE_MAX", "100")),
     cacheTtlMs: Number(getEnv("CACHE_TTL_MS", "3600000")),
     useMockLLM: getEnv("MOCK_LLM") === "1" || getEnv("TEST_MODE") === "1",
-    debugMode: getEnv("DEBUG_MODE") === "1",
-    renderMode: true
+    debugMode: getEnv("DEBUG_MODE") === "1"
 };
 
 export default config;

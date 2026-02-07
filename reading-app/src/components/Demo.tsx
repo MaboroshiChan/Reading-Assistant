@@ -1,37 +1,14 @@
 import React, { useState, type ReactNode, type CSSProperties, useEffect } from 'react';
-import './css/ArticleSkeleton.css';
-import './css/Highlighted.css';
+import './css/Demo.css';
+// import './css/Highlighted.css';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
-import exampleArticle from '../../../resource/examples/example-article.json';
-import config from '../services/config';
+
 import { streamingMessageService } from '../services/messageService.instance';
 
 
-/**
- * A demo component that renders an example article using ParagraphData.
- */
-const ExampleParagraph: React.FC = () => {
 
-  const article: Paragraph[] = exampleArticle as Paragraph[];
-
-  return (
-    <div>
-      {article.map(p => (
-        <ParagraphComponent paragraph={p} />
-      ))}
-    </div>
-  );
-};
-
-
-if (config.renderMode) {
-  console.log('render mode on');
-}
-else {
-  console.log('render mode off');
-}
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -325,7 +302,7 @@ const ExampleArticle: React.FC = () => {
       try {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
-        const module = await import('../../../resource/examples/TestArticles/example-article.txt?raw');
+        const module = await import('../../../resource/examples/TestArticles/metaphysics.txt?raw');
         const text = module.default;
         const paragraphs = text.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
         setRawParagraphs(paragraphs);
@@ -333,9 +310,7 @@ const ExampleArticle: React.FC = () => {
         console.error("Failed to load example article text:", error);
       }
     };
-    if (config.renderMode) {
-      loadContent();
-    }
+    loadContent();
   }, []);
 
   const handleShare = (): void => {
@@ -358,76 +333,107 @@ const ExampleArticle: React.FC = () => {
     setAnalyzedData(skeletons);
     setViewMode('analyzing');
 
-    // 2. Streaming Analysis
-    skeletons.forEach(async (p) => {
-      // Mark as streaming
-      setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
+    // 2. Streaming Analysis (Chunked)
+    const CHUNK_SIZE = 1;
+    // Generate a unique session ID for this analysis run to avoid server collisions on refresh
+    const sessionId = `demo-${Date.now()}`;
 
-      try {
-        await streamingMessageService.analyzeParagraph(
-          {
-            doc_id: 'demo-doc',
-            paragraph_id: String(p.id),
-            paragraph_text: p.sentences.map(s => s.text).join(' '),
-            options: {
-              tasks: ['roles', 'rhetoric', 'summary', 'claims']
-            }
-          },
-          { doc: { doc_id: 'demo-doc', content_hash: 'demo-hash' } },
-          {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onPartial: (partial: any) => {
-              // console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
-              setAnalyzedData(prev => prev.map(item => {
-                if (item.id !== p.id) return item;
+    for (let i = 0; i < skeletons.length; i += CHUNK_SIZE) {
+      const chunk = skeletons.slice(i, i + CHUNK_SIZE);
+      await Promise.all(chunk.map(async (p) => {
+        // Mark as streaming
+        setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
 
-                // Immutable update of the paragraph
-                const updated = { ...item };
-                if (partial.summary) updated.centralIdea = partial.summary;
-                if (partial.rhetoric && partial.rhetoric.length > 0) {
-                  updated.structureType = partial.rhetoric[0].label;
+        let hasSentenceData = false;
+
+        try {
+          await streamingMessageService.analyzeParagraph(
+            {
+              doc_id: sessionId,
+              paragraph_id: String(p.id),
+              paragraph_text: p.sentences.map(s => s.text).join(' '),
+              options: {
+                tasks: ['roles', 'rhetoric', 'summary', 'claims']
+              }
+            },
+            { doc: { doc_id: sessionId, content_hash: 'demo-hash' } },
+            {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onPartial: (partial: any) => {
+                // Check if we actually got sentence data in this chunk
+                if (partial.sentences && Array.isArray(partial.sentences) && partial.sentences.length > 0) {
+                  hasSentenceData = true;
                 }
-                if (partial.roles && partial.roles.length > 0) {
-                  updated.function = partial.roles[0].role;
-                }
-                if (partial.topic_sentence) {
-                  updated.topicSentence = partial.topic_sentence;
-                }
-                if (partial.sentences && partial.sentences.length > 0) {
-                  updated.sentences = updated.sentences.map((s, i) => {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const incoming = (partial.sentences as any[])[i];
-                    if (incoming) {
-                      return {
-                        ...s,
-                        ...incoming,
-                        id: s.id, // Ensure original ID is preserved
-                      };
-                    }
-                    return s;
-                  });
-                }
-                return updated;
-              }));
+
+                // console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
+                setAnalyzedData(prev => prev.map(item => {
+                  if (item.id !== p.id) return item;
+
+                  // Immutable update of the paragraph
+                  const updated = { ...item };
+                  if (partial.summary) updated.centralIdea = partial.summary;
+                  if (partial.rhetoric && partial.rhetoric.length > 0) {
+                    updated.structureType = partial.rhetoric[0].label;
+                  }
+                  if (partial.roles && partial.roles.length > 0) {
+                    updated.function = partial.roles[0].role;
+                  }
+                  if (partial.topic_sentence) {
+                    updated.topicSentence = partial.topic_sentence;
+                  }
+                  if (partial.sentences && partial.sentences.length > 0) {
+                    updated.sentences = updated.sentences.map((s, i) => {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      const incoming = (partial.sentences as any[])[i];
+                      if (incoming) {
+                        return {
+                          ...s,
+                          ...incoming,
+                          id: s.id, // Ensure original ID is preserved
+                        };
+                      }
+                      return s;
+                    });
+                  }
+                  return updated;
+                }));
+              }
             }
+          );
+
+          // Mark as complete only if we actually got SENTENCE data
+          if (hasSentenceData) {
+            setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'complete' } : item));
+          } else {
+            console.warn(`[Stream] Paragraph ${p.id} finished but missing sentence data.`);
+            setAnalyzedData(prev => prev.map(item => {
+              if (item.id !== p.id) return item;
+              return {
+                ...item,
+                status: 'error',
+                // Fallback: Clear pending state from sentences so they stop spinning
+                sentences: item.sentences.map(s => s.function === 'Pending' ? { ...s, function: 'Analysis Failed' } : s)
+              };
+            }));
           }
-        );
-
-        // Mark as complete
-        // console.log(`[Stream] Paragraph ${p.id} complete`);
-        setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'complete' } : item));
-      } catch (err) {
-        console.error(`Analysis failed for paragraph ${p.id}`, err);
-        setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'error' } : item));
-      }
-    });
+        } catch (err) {
+          console.error(`Analysis failed for paragraph ${p.id}`, err);
+          setAnalyzedData(prev => prev.map(item => {
+            if (item.id !== p.id) return item;
+            return {
+              ...item,
+              status: 'error',
+              sentences: item.sentences.map(s => s.function === 'Pending' ? { ...s, function: 'Analysis Failed' } : s)
+            };
+          }));
+        }
+      }));
+    }
   };
 
   // Determine content to render
   let contentNode: ReactNode;
-  if (!config.renderMode) {
-    contentNode = <ExampleParagraph />;
-  } else if (viewMode === 'raw') {
+  if (viewMode === 'raw') {
     console.log('raw mode');
     contentNode = (
       <div style={{ whiteSpace: 'pre-wrap', textAlign: 'left' }}>
