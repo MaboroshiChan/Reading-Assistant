@@ -6,6 +6,7 @@ export default interface Paragraph {
   sentences: Sentence[];
 
   status?: 'pending' | 'streaming' | 'complete' | 'error';
+  errorMessage?: string;
   /** 段落的中心思想，可由 LLM 提炼或用户指定 */
   centralIdea?: string;
 
@@ -16,7 +17,7 @@ export default interface Paragraph {
   function?: 'Introduction' | 'Premise' | 'Conclusion' | 'Evidence' | string;
 
   /** Topic Sentence data */
-  topicSentence?: { is_implicit: boolean; text: string };
+  topicSentence?: { is_implicit: boolean; text: string; id?: string };
 }
 
 /**

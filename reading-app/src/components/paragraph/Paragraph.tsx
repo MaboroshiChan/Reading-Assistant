@@ -33,7 +33,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     }
   }, [paragraph.status, paragraph.id, paragraphVm]);
 
-  const isInteractive = paragraph.status === 'complete';
+  const isInteractive = paragraph.status === 'complete' || paragraph.status === 'error';
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMouseEnter = useCallback((_event: MouseEvent<HTMLDivElement>) => {
@@ -180,9 +180,22 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
 
             // Check for explicit topic sentence
             const normalize = (s: string) => s.trim().toLowerCase().replace(/[^\w\s]|_/g, "").replace(/\s+/g, " ");
-            const isTopicSentence = !paragraphVm.topicSentence?.is_implicit &&
-              paragraphVm.topicSentence?.text &&
-              normalize(sentence.text).includes(normalize(paragraphVm.topicSentence.text));
+            const isTopicSentence = (() => {
+              if (paragraphVm.topicSentence?.is_implicit) return false;
+              const topic = paragraphVm.topicSentence;
+              if (!topic) return false;
+
+              const topicText = topic.text;
+              const textMatch = topicText && normalize(sentence.text).includes(normalize(topicText));
+              if (textMatch) return true;
+
+              // Fallback to ID matching
+              if (topic.id && String(index + 1) === String(topic.id)) {
+                return true;
+              }
+
+              return false;
+            })();
 
             return (
               <React.Fragment key={sentence.id}>

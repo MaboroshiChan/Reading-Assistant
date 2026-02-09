@@ -22,9 +22,9 @@ const CACHE_PREFIX = 'paragraph';
 const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'paragraph.v1.1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
-const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims'];
+const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims', 'topic_sentence'];
 
-export type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary';
+export type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary' | 'topic_sentence';
 export { PROMPT_VERSION as PARAGRAPH_PROMPT_VERSION };
 
 interface LLMParagraphAnchor {
@@ -59,7 +59,7 @@ interface LLMParagraphResponse {
   rhetoric?: LLMParagraphRhetoric[];
   claims?: LLMParagraphClaim[];
   anchors?: LLMParagraphAnchor[];
-  topic_sentence?: { is_implicit: boolean; text: string };
+  topic_sentence?: { is_implicit: boolean; text: string; id?: string };
   confidence?: number;
 }
 
@@ -347,7 +347,11 @@ const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
       ? coerceAnchorArray(value.anchors)
       : undefined,
     topic_sentence: isRecord(value.topic_sentence) && typeof value.topic_sentence.text === 'string' && typeof value.topic_sentence.is_implicit === 'boolean'
-      ? { is_implicit: value.topic_sentence.is_implicit, text: value.topic_sentence.text }
+      ? {
+        is_implicit: value.topic_sentence.is_implicit,
+        text: value.topic_sentence.text,
+        id: asString(value.topic_sentence.id)
+      }
       : undefined,
     confidence: asConfidence(value.confidence),
   };
@@ -505,7 +509,7 @@ const mapParagraphResponse = (
     rhetoric,
     claims,
     anchors: anchorList,
-    topic_sentence: payload.topic_sentence,
+    topic_sentence: shouldInclude('topic_sentence') ? payload.topic_sentence : undefined,
     confidence: payload.confidence,
   };
 };

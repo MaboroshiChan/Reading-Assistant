@@ -187,7 +187,7 @@ export interface AnalyzeParagraphPayload {
   doc_id: string;
   paragraph_id: string;
   paragraph_text: string;
-  options?: { tasks?: Array<'roles' | 'rhetoric' | 'claims' | 'summary'> };
+  options?: { tasks?: Array<'roles' | 'rhetoric' | 'claims' | 'summary' | 'topic_sentence'> };
 }
 
 export interface ParagraphRole { role: string; anchors: Anchor[]; confidence?: number }
@@ -206,7 +206,7 @@ export interface AnalyzeParagraphData {
   rhetoric?: ParagraphRhetoric[];
   claims?: ParagraphClaim[];
   anchors?: Anchor[];
-  topic_sentence?: { is_implicit: boolean; text: string };
+  topic_sentence?: { is_implicit: boolean; text: string; id?: string };
   confidence?: number; // aggregate
 }
 

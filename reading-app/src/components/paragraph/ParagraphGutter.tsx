@@ -73,7 +73,7 @@ export const ParagraphGutter: React.FC<ParagraphGutterProps> = ({
     if (status === 'pending' || status === 'streaming') {
         indicator = <Spinner />;
     } else if (showSuccess) {
-        indicator = <div className="paragraph-gutter-indicator success"><CheckMark /></div>;
+        indicator = <CheckMark />;
     } else if (status === 'error') {
         indicator = <div className="paragraph-gutter-indicator error">!</div>;
     } else {
@@ -84,7 +84,7 @@ export const ParagraphGutter: React.FC<ParagraphGutterProps> = ({
     return (
         <div className="paragraph-gutter-container">
             <div
-                className={`paragraph-gutter-indicator ${isActive ? 'active' : ''}`}
+                className={`paragraph-gutter-indicator ${isActive ? 'active' : ''} ${showSuccess ? 'success' : ''}`}
                 title={structureType || `Paragraph ${id}`}
                 onClick={onClick}
                 style={{

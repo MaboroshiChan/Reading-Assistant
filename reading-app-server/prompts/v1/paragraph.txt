@@ -39,7 +39,8 @@ are not requested in the task list):
   ],
   "topic_sentence": {
     "is_implicit": boolean,
-    "text": "string"
+    "text": "string",
+    "id": "string"
   }
   "confidence": 0.0
 }
@@ -64,9 +65,12 @@ General instructions:
 - `topic_sentence` is the main topic of the paragraph.
   - `is_implicit` is true if the topic sentence is not explicitly stated.
   - `text` is the topic sentence text. It should be direct copy from the paragraph if it is explicit. Otherwise, it should be inferred from the paragraph.
+  - `id` is the topic sentence id. It is 1-based.
+  - If `topic_sentence` is requested, you MUST provide it.
   - every paragraph has a topic sentence, either explicit or implicit.
   - a topic sentence can be a conclusion came after setup.
-  - a topic sentence can be the first sentence. 
+  - a topic sentence can be the first sentence.
+  - If no clear topic sentence exists, identify the most important sentence in the paragraph as the topic sentence. 
 - Confidence scores are floats between 0 and 1.
 - When a section is not requested, omit that key entirely.
 - If unsure about a value, omit the field instead of guessing.

@@ -353,7 +353,7 @@ const ExampleArticle: React.FC = () => {
               paragraph_id: String(p.id),
               paragraph_text: p.sentences.map(s => s.text).join(' '),
               options: {
-                tasks: ['roles', 'rhetoric', 'summary', 'claims']
+                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'topic_sentence']
               }
             },
             { doc: { doc_id: sessionId, content_hash: 'demo-hash' } },

@@ -397,7 +397,7 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
                 data-sentence-id={sentence.id}
                 style={{ '--formatted-highlight-color': bridgeHighlightColor } as React.CSSProperties}
             >
-                <span className="sentence-indicator" contentEditable={false}>
+                <span className={`sentence-indicator ${showSuccess ? "success" : ""}`} contentEditable={false}>
                     {isPending ? (
                         <Spinner />
                     ) : showSuccess ? (

@@ -35,7 +35,13 @@ export const ParagraphPanel: React.FC<ParagraphPanelProps> = ({ vm }) => {
                         {vm.topicSentence.text}
                     </div>
                 )}
-                {!vm.centralIdea && !vm.structureType && !vm.function && !vm.topicSentence && (
+                {vm.errorMessage && (
+                    <div className="paragraph-section error">
+                        <span className="paragraph-label">Error:</span>
+                        <span className="error-message">{vm.errorMessage}</span>
+                    </div>
+                )}
+                {!vm.centralIdea && !vm.structureType && !vm.function && !vm.topicSentence && !vm.errorMessage && (
                     <span className="paragraph-label">No analysis data available.</span>
                 )}
             </div>

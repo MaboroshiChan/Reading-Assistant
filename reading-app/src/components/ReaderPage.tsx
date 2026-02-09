@@ -59,7 +59,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                             paragraph_id: String(p.id),
                             paragraph_text: p.sentences.map(s => s.text).join(' '),
                             options: {
-                                tasks: ['roles', 'rhetoric', 'summary', 'claims']
+                                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'topic_sentence']
                             }
                         },
                         { doc: { doc_id: 'extracted-doc', content_hash: 'extracted-hash' } },
@@ -105,7 +105,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                     setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'complete' } : item));
                 } catch (err) {
                     console.error(`Analysis failed for paragraph ${p.id}`, err);
-                    setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'error' } : item));
+                    setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'error', errorMessage: (err as Error).message || String(err) } : item));
                 }
             }));
         }
