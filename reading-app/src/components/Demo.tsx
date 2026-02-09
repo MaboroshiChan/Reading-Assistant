@@ -7,9 +7,6 @@ import { ParagraphComponent } from './paragraph/Paragraph';
 
 import { streamingMessageService } from '../services/messageService.instance';
 
-
-
-
 // Type definitions
 export interface ArticleFrameworkProps {
   // Core content props
