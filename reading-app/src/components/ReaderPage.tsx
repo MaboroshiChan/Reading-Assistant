@@ -4,7 +4,7 @@ import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { streamingMessageService } from '../services/messageService.instance';
 import './css/ReaderPage.css';
-import { chunkParagraphsByWordCount, isValidParagraph } from '../utils/textUtils';
+import { chunkParagraphsByWordCount } from '../utils/textUtils';
 
 interface ReaderPageProps {
     articleData: {
@@ -81,7 +81,6 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
 
         // 1. Preprocessing
         const skeletons = rawParagraphs
-            .filter(p => isValidParagraph(p))
             .map((text, index) => preprocessingFromText(text, index + 1));
         setAnalyzedData(skeletons);
         setViewMode('analyzing');
@@ -94,6 +93,9 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         for (const chunk of chunks) {
             console.log('Chunk', chunk);
             await Promise.all(chunk.map(async (p) => {
+                // Skip anything that isn't regular text (titles, citations)
+                if (p.kind !== 'text') return;
+
                 // Mark as streaming
                 setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' as const } : item));
 

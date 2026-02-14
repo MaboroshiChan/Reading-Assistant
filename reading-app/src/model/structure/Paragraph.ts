@@ -1,4 +1,5 @@
 import type { Sentence } from "./Sentence";
+import { isTitle } from "../../utils/textUtils";
 
 /** Represents a text paragraph with state and analysis results. */
 export default interface Paragraph {
@@ -7,6 +8,9 @@ export default interface Paragraph {
 
   status?: 'pending' | 'streaming' | 'complete' | 'error';
   errorMessage?: string;
+  /** Kind of paragraph: regular text, a title/header, or a citation/note */
+  kind?: 'text' | 'title' | 'citation';
+
   /** 段落的中心思想，可由 LLM 提炼或用户指定 */
   centralIdea?: string;
 
@@ -28,6 +32,21 @@ export default interface Paragraph {
  * @returns A new Paragraph object with initial pending state.
  */
 export const preprocessingFromText = (text: string, id: number): Paragraph => {
+  const isTitleParagraph = isTitle(text);
+  const trimmed = text.trim();
+  const lastChar = trimmed.length > 0 ? trimmed[trimmed.length - 1] : '';
+  const isRegularParagraph = ['.', '?', '!'].includes(lastChar);
+
+  // Classify kind
+  let kind: 'text' | 'title' | 'citation';
+  if (isTitleParagraph) {
+    kind = 'title';
+  } else if (isRegularParagraph) {
+    kind = 'text';
+  } else {
+    kind = 'citation';
+  }
+
   let rawSentences: string[] = [];
 
   // Use Intl.Segmenter if available for better sentence boundary detection
@@ -60,7 +79,8 @@ export const preprocessingFromText = (text: string, id: number): Paragraph => {
   return {
     id,
     sentences,
-    status: 'pending',
-    function: 'Pending',
+    status: kind === 'text' ? 'pending' : 'complete', // Only analyze if it is regular text
+    kind,
+    function: kind === 'title' ? 'Title' : (kind === 'citation' ? 'Citation' : 'Pending'),
   };
 };

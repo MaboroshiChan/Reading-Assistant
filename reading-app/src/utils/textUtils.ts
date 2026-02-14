@@ -43,16 +43,41 @@ export function chunkParagraphsByWordCount(
 }
 
 /**
- * Checks if a paragraph is valid (ends with '.', '?', or '!').
- * TODO: Some 'paragraphs' that are not valid and contain a few words may be titles. Titles should be included but not analyzed.
- * To add this feature, it may involve modifying the Paragraph model 
- * to include a 'title' field and updating the isValidParagraph function to check for this field.
+ * Checks if a paragraph is valid (ends with '.', '?', or '!') or if it is a title.
  * @param text - The paragraph text to check.
- * @returns True if valid, false otherwise.
+ * @returns True if valid or title, false otherwise.
  */
 export function isValidParagraph(text: string): boolean {
     const trimmed = text.trim();
     if (trimmed.length === 0) return false;
+
+    // Check if it's a regular paragraph (ends with punctuation)
     const lastChar = trimmed[trimmed.length - 1];
-    return ['.', '?', '!'].includes(lastChar);
+    if (['.', '?', '!'].includes(lastChar)) {
+        return true;
+    }
+
+    // Check if it's a title
+    return isTitle(text);
+}
+
+/**
+ * Checks if a text block looks like a title.
+ * Heuristic: Shorter than 20 words and does not end with terminal punctuation.
+ * @param text - The text to check.
+ * @returns True if it looks like a title.
+ */
+export function isTitle(text: string): boolean {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return false;
+
+    const lastChar = trimmed[trimmed.length - 1];
+    // Titles typically don't end with ., ?, or !
+    if (['.', '?', '!'].includes(lastChar)) {
+        return false;
+    }
+
+    // Check word count
+    const wordCount = trimmed.split(/\s+/).length;
+    return wordCount <= 20;
 }

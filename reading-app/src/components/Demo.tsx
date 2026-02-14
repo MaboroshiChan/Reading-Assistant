@@ -4,7 +4,7 @@ import './css/Demo.css';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
-import { chunkParagraphsByWordCount, isValidParagraph } from '../utils/textUtils';
+import { chunkParagraphsByWordCount } from '../utils/textUtils';
 
 import { streamingMessageService } from '../services/messageService.instance';
 
@@ -328,7 +328,6 @@ const ExampleArticle: React.FC = () => {
 
     // 1. Preprocessing: Convert raw text to "Pending" Paragraph skeletons immediately
     const skeletons = rawParagraphs
-      .filter(p => isValidParagraph(p))
       .map((text, index) => preprocessingFromText(text, index + 1));
     setAnalyzedData(skeletons);
     setViewMode('analyzing');
@@ -343,6 +342,9 @@ const ExampleArticle: React.FC = () => {
 
     for (const chunk of chunks) {
       await Promise.all(chunk.map(async (p) => {
+        // Skip anything that isn't regular text (titles, citations)
+        if (p.kind !== 'text') return;
+
         // Mark as streaming
         setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
 
