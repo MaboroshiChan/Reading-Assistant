@@ -4,6 +4,7 @@ import './css/Demo.css';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
+import { chunkParagraphsByWordCount } from '../utils/textUtils';
 
 import { streamingMessageService } from '../services/messageService.instance';
 
@@ -331,12 +332,14 @@ const ExampleArticle: React.FC = () => {
     setViewMode('analyzing');
 
     // 2. Streaming Analysis (Chunked)
-    const CHUNK_SIZE = 1;
+
+    const WORD_LIMIT = 400; // Max total words per concurrent batch of paragraphs
     // Generate a unique session ID for this analysis run to avoid server collisions on refresh
     const sessionId = `demo-${Date.now()}`;
 
-    for (let i = 0; i < skeletons.length; i += CHUNK_SIZE) {
-      const chunk = skeletons.slice(i, i + CHUNK_SIZE);
+    const chunks = chunkParagraphsByWordCount(skeletons, WORD_LIMIT);
+
+    for (const chunk of chunks) {
       await Promise.all(chunk.map(async (p) => {
         // Mark as streaming
         setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
