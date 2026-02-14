@@ -41,3 +41,18 @@ export function chunkParagraphsByWordCount(
 
     return chunks;
 }
+
+/**
+ * Checks if a paragraph is valid (ends with '.', '?', or '!').
+ * TODO: Some 'paragraphs' that are not valid and contain a few words may be titles. Titles should be included but not analyzed.
+ * To add this feature, it may involve modifying the Paragraph model 
+ * to include a 'title' field and updating the isValidParagraph function to check for this field.
+ * @param text - The paragraph text to check.
+ * @returns True if valid, false otherwise.
+ */
+export function isValidParagraph(text: string): boolean {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return false;
+    const lastChar = trimmed[trimmed.length - 1];
+    return ['.', '?', '!'].includes(lastChar);
+}

@@ -4,7 +4,7 @@ import './css/Demo.css';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
-import { chunkParagraphsByWordCount } from '../utils/textUtils';
+import { chunkParagraphsByWordCount, isValidParagraph } from '../utils/textUtils';
 
 import { streamingMessageService } from '../services/messageService.instance';
 
@@ -327,7 +327,9 @@ const ExampleArticle: React.FC = () => {
     if (viewMode === 'analyzing') return;
 
     // 1. Preprocessing: Convert raw text to "Pending" Paragraph skeletons immediately
-    const skeletons = rawParagraphs.map((text, index) => preprocessingFromText(text, index + 1));
+    const skeletons = rawParagraphs
+      .filter(p => isValidParagraph(p))
+      .map((text, index) => preprocessingFromText(text, index + 1));
     setAnalyzedData(skeletons);
     setViewMode('analyzing');
 

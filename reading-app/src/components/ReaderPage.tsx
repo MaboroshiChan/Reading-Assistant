@@ -4,7 +4,7 @@ import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { streamingMessageService } from '../services/messageService.instance';
 import './css/ReaderPage.css';
-import { chunkParagraphsByWordCount } from '../utils/textUtils';
+import { chunkParagraphsByWordCount, isValidParagraph } from '../utils/textUtils';
 
 interface ReaderPageProps {
     articleData: {
@@ -80,7 +80,9 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         }
 
         // 1. Preprocessing
-        const skeletons = rawParagraphs.map((text, index) => preprocessingFromText(text, index + 1));
+        const skeletons = rawParagraphs
+            .filter(p => isValidParagraph(p))
+            .map((text, index) => preprocessingFromText(text, index + 1));
         setAnalyzedData(skeletons);
         setViewMode('analyzing');
 
