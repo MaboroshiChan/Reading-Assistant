@@ -208,17 +208,6 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
             </div>
           )}
 
-          {/* Article Content */}
-          {content && (
-            <div className="article-content">
-              {typeof content === 'string' ? (
-                <div dangerouslySetInnerHTML={{ __html: content }} />
-              ) : (
-                content
-              )}
-            </div>
-          )}
-
           {/* Interactive Actions */}
           <div className="article-actions">
             <button
@@ -251,6 +240,17 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
               </button>
             )}
           </div>
+
+          {/* Article Content */}
+          {content && (
+            <div className="article-content">
+              {typeof content === 'string' ? (
+                <div dangerouslySetInnerHTML={{ __html: content }} />
+              ) : (
+                content
+              )}
+            </div>
+          )}
 
           {/* Custom Footer Component */}
           {FooterComponent && (
