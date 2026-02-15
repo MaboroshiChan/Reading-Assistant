@@ -1,10 +1,11 @@
-import React, { useState, type ReactNode, type CSSProperties, useEffect } from 'react';
+import React, { useState, type ReactNode, type CSSProperties, useEffect, useMemo } from 'react';
 import './css/Demo.css';
 // import './css/Highlighted.css';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
 import { chunkParagraphsByWordCount } from '../utils/textUtils';
+import { isPending } from '../model/structure/Sentence';
 
 import { streamingMessageService } from '../services/messageService.instance';
 
@@ -27,6 +28,7 @@ export interface ArticleFrameworkProps {
   showImage?: boolean;
   showMeta?: boolean;
   showProgress?: boolean;
+  progress?: number;
   showSidebar?: boolean;
 
   // Styling options
@@ -85,6 +87,7 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
   image,
   imageAlt,
   content,
+  progress = 0,
 
   // Layout options
   layout = 'default',
@@ -110,7 +113,6 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
   SidebarComponent
 }) => {
   const [isLiked, setIsLiked] = useState<boolean>(false);
-  const [readingProgress] = useState<number>(0);
 
   const handleLike = (): void => {
     setIsLiked(!isLiked);
@@ -134,7 +136,7 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
         .progress-bar {
           height: 100%;
           background: var(--accent-color);
-          width: ${readingProgress}%;
+          width: ${progress}%;
           transition: width 0.3s ease;
         }
       `}</style>
@@ -416,7 +418,7 @@ const ExampleArticle: React.FC = () => {
                 ...item,
                 status: 'error',
                 // Fallback: Clear pending state from sentences so they stop spinning
-                sentences: item.sentences.map(s => s.function === 'Pending' ? { ...s, function: 'Analysis Failed' } : s)
+                sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s)
               };
             }));
           }
@@ -427,7 +429,7 @@ const ExampleArticle: React.FC = () => {
             return {
               ...item,
               status: 'error',
-              sentences: item.sentences.map(s => s.function === 'Pending' ? { ...s, function: 'Analysis Failed' } : s)
+              sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s)
             };
           }));
         }
@@ -452,6 +454,17 @@ const ExampleArticle: React.FC = () => {
     );
   }
 
+  // Calculate analysis progress
+  const progress = useMemo(() => {
+    if (viewMode === 'raw' || analyzedData.length === 0) return 0;
+    const totalSentences = analyzedData.reduce((acc, p) => acc + p.sentences.length, 0);
+    if (totalSentences === 0) return 0;
+    const completedSentences = analyzedData.reduce((acc, p) =>
+      acc + p.sentences.filter(s => !isPending(s)).length, 0
+    );
+    return Math.round((completedSentences / totalSentences) * 100);
+  }, [analyzedData, viewMode]);
+
   return (
     <ArticleFramework
       title="Your Article Title Here"
@@ -464,6 +477,7 @@ const ExampleArticle: React.FC = () => {
       image="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=400&fit=crop"
       imageAlt="Article header image"
       content={contentNode}
+      progress={progress}
       layout="default"
       theme="light"
       accentColor="#007acc"

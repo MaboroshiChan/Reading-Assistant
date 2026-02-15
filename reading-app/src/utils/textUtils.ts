@@ -51,9 +51,19 @@ export function isValidParagraph(text: string): boolean {
     const trimmed = text.trim();
     if (trimmed.length === 0) return false;
 
+
     // Check if it's a regular paragraph (ends with punctuation)
+    // OR matches: period + optional spaces + ( + text + ) + end of string
     const lastChar = trimmed[trimmed.length - 1];
-    if (['.', '?', '!'].includes(lastChar)) {
+
+    // 1. Standard ending
+    if (['.', '?', '!', ':'].includes(lastChar)) {
+        return true;
+    }
+
+    // 2. Parenthesis ending: "... . (Reference)"
+    // Matches a period, optional whitespace, open paren, any text (non-greedy), close paren, end of string
+    if (/\.\s*\(.*?\)$/.test(trimmed)) {
         return true;
     }
 
@@ -73,7 +83,7 @@ export function isTitle(text: string): boolean {
 
     const lastChar = trimmed[trimmed.length - 1];
     // Titles typically don't end with ., ?, or !
-    if (['.', '?', '!'].includes(lastChar)) {
+    if (['.', '?', '!', ':'].includes(lastChar)) {
         return false;
     }
 

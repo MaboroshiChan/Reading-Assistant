@@ -1,5 +1,5 @@
 import type { Sentence } from "./Sentence";
-import { isTitle } from "../../utils/textUtils";
+import { isTitle, isValidParagraph } from "../../utils/textUtils";
 
 /** Represents a text paragraph with state and analysis results. */
 export default interface Paragraph {
@@ -33,9 +33,10 @@ export default interface Paragraph {
  */
 export const preprocessingFromText = (text: string, id: number): Paragraph => {
   const isTitleParagraph = isTitle(text);
-  const trimmed = text.trim();
-  const lastChar = trimmed.length > 0 ? trimmed[trimmed.length - 1] : '';
-  const isRegularParagraph = ['.', '?', '!'].includes(lastChar);
+
+  // Use shared validation logic
+  // If it's not a title but is valid according to our rules, it's text
+  const isRegularParagraph = !isTitleParagraph && isValidParagraph(text);
 
   // Classify kind
   let kind: 'text' | 'title' | 'citation';

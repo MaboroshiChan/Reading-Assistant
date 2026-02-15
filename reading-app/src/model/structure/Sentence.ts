@@ -18,3 +18,10 @@ export interface Sentence {
   text: string;
   key_words?: string[];
 }
+
+/** 
+ * Returns true if the sentence is still waiting for analysis.
+ */
+export const isPending = (sentence: Sentence): boolean => {
+  return sentence.function === 'Pending';
+};

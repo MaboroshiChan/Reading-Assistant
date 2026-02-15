@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState, type MouseEvent } from "react";
 import type Paragraph from "../../model/structure/Paragraph";
+import { isPending } from "../../model/structure/Sentence";
 import "./css/Paragraph.css";
 import SentenceComponent from "../sentence/Sentence";
 import mapParagraphToVM from "../../model/viewModels/mapParagraphToVM";
@@ -63,7 +64,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     }
   }, [paragraph.status, paragraph.id, paragraphVm]);
 
-  const isInteractive = paragraph.status === 'complete' || paragraph.status === 'error';
+  const isInteractive = paragraph.status === 'complete' || paragraph.status === 'error' || paragraph.status === 'streaming';
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMouseEnter = useCallback((_event: MouseEvent<HTMLDivElement>) => {
@@ -164,8 +165,8 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
                 ? sentence.relation
                 : null;
 
-              const isPrevReady = prevSentence.function !== 'Pending';
-              const isCurrReady = sentence.function !== 'Pending';
+              const isPrevReady = !isPending(prevSentence);
+              const isCurrReady = !isPending(sentence);
 
               if (relToPrev && isPrevReady && isCurrReady) {
                 const bridgeId = `${prevSentence.id}-${sentence.id}`;
