@@ -8,6 +8,7 @@ function checkForArticle() {
     if (document.body) {
         // Clone document to avoid modifying the actual page during check
         const docClone = document.cloneNode(true) as Document;
+        // TODO: Add more heuristics to detect articles. Include <div> and <p> tags.
         const reader = new Readability(docClone);
         const article = reader.parse();
 
