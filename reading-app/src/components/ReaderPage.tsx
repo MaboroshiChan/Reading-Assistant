@@ -4,7 +4,7 @@ import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { streamingMessageService } from '../services/messageService.instance';
 import './css/ReaderPage.css';
-import { chunkParagraphsByWordCount } from '../utils/textUtils';
+import { chunkParagraphsByWordCount, isTitle } from '../utils/textUtils';
 
 interface ReaderPageProps {
     articleData: {
@@ -201,9 +201,16 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
             <main className="reader-content">
                 {viewMode === 'reading' ? (
                     <div className="text-content">
-                        {rawParagraphs.map((text, i) => (
-                            <p key={i} className="reader-paragraph">{text}</p>
-                        ))}
+                        {rawParagraphs.map((text, i) => {
+                            if (isTitle(text)) {
+                                return (
+                                    <h2 key={i} className="reader-section-title">
+                                        {text}
+                                    </h2>
+                                );
+                            }
+                            return <p key={i} className="reader-paragraph">{text}</p>;
+                        })}
                     </div>
                 ) : (
                     <div className="analysis-content">
