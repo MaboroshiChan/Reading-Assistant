@@ -8,8 +8,32 @@ function checkForArticle() {
     if (document.body) {
         // Clone document to avoid modifying the actual page during check
         const docClone = document.cloneNode(true) as Document;
+
+        // Pre-processing: Inject explicit newlines into the clone.
+        // This prevents Readability from concatenating text when it strips tags
+        // or flattens the structure of sites like Medium/Substack.
+        const blocks = docClone.querySelectorAll("p, div, li, h1, h2, h3, h4, h5, h6, br");
+        blocks.forEach((el: Element) => {
+            if (el.tagName.toLowerCase() === "br") {
+                el.replaceWith(docClone.createTextNode("\n\n"));
+            } else if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(el.tagName.toLowerCase())) {
+                // For headers, Readability often drops them if they contain complex nested 
+                // elements (like anchors, divs, or SVGs) or specific classes. 
+                // We create a clean header containing just the text.
+                const cleanHeader = docClone.createElement(el.tagName);
+                cleanHeader.textContent = el.textContent || "";
+                el.replaceWith(cleanHeader);
+                // Also ensure it gets the newline treatment so it doesn't merge
+                cleanHeader.appendChild(docClone.createTextNode("\n\n"));
+            } else {
+                // Adding a newline inside the element ensures it is included in .textContent
+                el.appendChild(docClone.createTextNode("\n\n"));
+            }
+        });
+
         const reader = new Readability(docClone);
         const article = reader.parse();
+        console.log("[Reading Assistant] Article parsed");
 
         if (article && article.content && (article.length || 0) > 500) { // Threshold for "article"
             console.log("[Reading Assistant] Article detected:", article.title);

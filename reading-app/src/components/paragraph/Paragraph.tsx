@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState, type MouseEvent } from "react";
 import type Paragraph from "../../model/structure/Paragraph";
+import { isPending } from "../../model/structure/Sentence";
 import "./css/Paragraph.css";
 import SentenceComponent from "../sentence/Sentence";
 import mapParagraphToVM from "../../model/viewModels/mapParagraphToVM";
@@ -20,6 +21,36 @@ interface ParagraphComponentProps {
  * @param props - Component properties containing the paragraph data.
  */
 export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
+  // Special rendering for titles
+  if (paragraph.kind === 'title') {
+    return (
+      <div className="paragraph-title-container" style={{ margin: '2rem 0 1rem 0' }}>
+        <h2 className="paragraph-title" style={{
+          fontSize: '1.5rem',
+          fontWeight: 'bold',
+          color: 'var(--color-text-main)',
+          lineHeight: '1.3'
+        }}>
+          {paragraph.sentences.map(s => s.text).join(' ')}
+        </h2>
+      </div>
+    );
+  }
+
+  // Special rendering for citations/notes
+  if (paragraph.kind === 'citation') {
+    return (
+      <div className="paragraph-citation-container" style={{ margin: '1rem 0', opacity: 0.8 }}>
+        <p className="paragraph-citation" style={{
+          fontSize: '1rem',
+          color: 'var(--color-text-secondary)',
+          lineHeight: '1.5'
+        }}>
+          {paragraph.sentences.map(s => s.text).join(' ')}
+        </p>
+      </div>
+    );
+  }
 
   // isClicked now serves as "isActive" for showing the panel
   const [isClicked, setIsClicked] = useState(false);
@@ -33,7 +64,7 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     }
   }, [paragraph.status, paragraph.id, paragraphVm]);
 
-  const isInteractive = paragraph.status === 'complete' || paragraph.status === 'error';
+  const isInteractive = paragraph.status === 'complete' || paragraph.status === 'error' || paragraph.status === 'streaming';
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleMouseEnter = useCallback((_event: MouseEvent<HTMLDivElement>) => {
@@ -134,8 +165,8 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
                 ? sentence.relation
                 : null;
 
-              const isPrevReady = prevSentence.function !== 'Pending';
-              const isCurrReady = sentence.function !== 'Pending';
+              const isPrevReady = !isPending(prevSentence);
+              const isCurrReady = !isPending(sentence);
 
               if (relToPrev && isPrevReady && isCurrReady) {
                 const bridgeId = `${prevSentence.id}-${sentence.id}`;

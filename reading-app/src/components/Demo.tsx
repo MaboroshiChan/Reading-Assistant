@@ -1,14 +1,13 @@
-import React, { useState, type ReactNode, type CSSProperties, useEffect } from 'react';
+import React, { useState, type ReactNode, type CSSProperties, useEffect, useMemo } from 'react';
 import './css/Demo.css';
 // import './css/Highlighted.css';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
+import { chunkParagraphsByWordCount } from '../utils/textUtils';
+import { isPending } from '../model/structure/Sentence';
 
 import { streamingMessageService } from '../services/messageService.instance';
-
-
-
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -29,6 +28,7 @@ export interface ArticleFrameworkProps {
   showImage?: boolean;
   showMeta?: boolean;
   showProgress?: boolean;
+  progress?: number;
   showSidebar?: boolean;
 
   // Styling options
@@ -87,6 +87,7 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
   image,
   imageAlt,
   content,
+  progress = 0,
 
   // Layout options
   layout = 'default',
@@ -112,7 +113,6 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
   SidebarComponent
 }) => {
   const [isLiked, setIsLiked] = useState<boolean>(false);
-  const [readingProgress] = useState<number>(0);
 
   const handleLike = (): void => {
     setIsLiked(!isLiked);
@@ -136,7 +136,7 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
         .progress-bar {
           height: 100%;
           background: var(--accent-color);
-          width: ${readingProgress}%;
+          width: ${progress}%;
           transition: width 0.3s ease;
         }
       `}</style>
@@ -210,17 +210,6 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
             </div>
           )}
 
-          {/* Article Content */}
-          {content && (
-            <div className="article-content">
-              {typeof content === 'string' ? (
-                <div dangerouslySetInnerHTML={{ __html: content }} />
-              ) : (
-                content
-              )}
-            </div>
-          )}
-
           {/* Interactive Actions */}
           <div className="article-actions">
             <button
@@ -253,6 +242,17 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
               </button>
             )}
           </div>
+
+          {/* Article Content */}
+          {content && (
+            <div className="article-content">
+              {typeof content === 'string' ? (
+                <div dangerouslySetInnerHTML={{ __html: content }} />
+              ) : (
+                content
+              )}
+            </div>
+          )}
 
           {/* Custom Footer Component */}
           {FooterComponent && (
@@ -329,18 +329,24 @@ const ExampleArticle: React.FC = () => {
     if (viewMode === 'analyzing') return;
 
     // 1. Preprocessing: Convert raw text to "Pending" Paragraph skeletons immediately
-    const skeletons = rawParagraphs.map((text, index) => preprocessingFromText(text, index + 1));
+    const skeletons = rawParagraphs
+      .map((text, index) => preprocessingFromText(text, index + 1));
     setAnalyzedData(skeletons);
     setViewMode('analyzing');
 
     // 2. Streaming Analysis (Chunked)
-    const CHUNK_SIZE = 1;
+
+    const WORD_LIMIT = 400; // Max total words per concurrent batch of paragraphs
     // Generate a unique session ID for this analysis run to avoid server collisions on refresh
     const sessionId = `demo-${Date.now()}`;
 
-    for (let i = 0; i < skeletons.length; i += CHUNK_SIZE) {
-      const chunk = skeletons.slice(i, i + CHUNK_SIZE);
+    const chunks = chunkParagraphsByWordCount(skeletons, WORD_LIMIT);
+
+    for (const chunk of chunks) {
       await Promise.all(chunk.map(async (p) => {
+        // Skip anything that isn't regular text (titles, citations)
+        if (p.kind !== 'text') return;
+
         // Mark as streaming
         setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
 
@@ -412,7 +418,7 @@ const ExampleArticle: React.FC = () => {
                 ...item,
                 status: 'error',
                 // Fallback: Clear pending state from sentences so they stop spinning
-                sentences: item.sentences.map(s => s.function === 'Pending' ? { ...s, function: 'Analysis Failed' } : s)
+                sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s)
               };
             }));
           }
@@ -423,7 +429,7 @@ const ExampleArticle: React.FC = () => {
             return {
               ...item,
               status: 'error',
-              sentences: item.sentences.map(s => s.function === 'Pending' ? { ...s, function: 'Analysis Failed' } : s)
+              sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s)
             };
           }));
         }
@@ -448,6 +454,17 @@ const ExampleArticle: React.FC = () => {
     );
   }
 
+  // Calculate analysis progress
+  const progress = useMemo(() => {
+    if (viewMode === 'raw' || analyzedData.length === 0) return 0;
+    const totalSentences = analyzedData.reduce((acc, p) => acc + p.sentences.length, 0);
+    if (totalSentences === 0) return 0;
+    const completedSentences = analyzedData.reduce((acc, p) =>
+      acc + p.sentences.filter(s => !isPending(s)).length, 0
+    );
+    return Math.round((completedSentences / totalSentences) * 100);
+  }, [analyzedData, viewMode]);
+
   return (
     <ArticleFramework
       title="Your Article Title Here"
@@ -460,6 +477,7 @@ const ExampleArticle: React.FC = () => {
       image="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=400&fit=crop"
       imageAlt="Article header image"
       content={contentNode}
+      progress={progress}
       layout="default"
       theme="light"
       accentColor="#007acc"

@@ -181,9 +181,9 @@
 .article-actions {
     display: flex;
     gap: 16px;
-    margin: 40px 0;
-    padding: 20px 0;
-    border-top: 1px solid var(--border-color);
+    margin: 20px 0 40px 0;
+    padding: 0 0 20px 0;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .action-btn {
