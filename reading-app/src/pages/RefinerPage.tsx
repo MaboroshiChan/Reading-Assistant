@@ -98,7 +98,7 @@ export const RefinerPage: React.FC = () => {
     };
 
     if (sentences.length === 0) {
-        return <div className="refiner-page">Loading sentences queue from Python backend... Ensure <code>prompt-refiner/server.py</code> is running.</div>;
+        return <div className="refiner-page">Loading sentences queue from Python backend... Ensure <code>reading-app-server/prompt-refiner/server.py</code> is running.</div>;
     }
 
     if (currentIndex >= sentences.length) {

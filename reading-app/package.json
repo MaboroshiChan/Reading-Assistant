@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:watch": "vitest --watch",
-    "refiner": "concurrently \"npm run dev\" \"cd ../prompt-refiner && python3 server.py\""
+    "refiner": "concurrently \"npm run dev\" \"cd ../reading-app-server/prompt-refiner && python3 server.py\""
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
