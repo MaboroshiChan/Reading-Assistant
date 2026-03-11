@@ -1,0 +1,4 @@
+dspy-ai
+fastapi
+uvicorn
+pydantic

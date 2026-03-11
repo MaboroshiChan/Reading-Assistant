@@ -106,39 +106,40 @@ def collect_human_feedback(raw_sentences, save_path="golden_dataset.json"):
 # 4. Execution Pipeline
 # ======================================================
 
-# Sample data for your Reading App
-sample_texts = [
-    "However, if it rains tomorrow, we will not be able to run fast in the park.",
-    "He usually doesn't like to swim, because the water is too cold.",
-    "They should have known that the mission was compromised."
-]
+if __name__ == "__main__":
+    # Sample data for your Reading App
+    sample_texts = [
+        "However, if it rains tomorrow, we will not be able to run fast in the park.",
+        "He usually doesn't like to swim, because the water is too cold.",
+        "They should have known that the mission was compromised."
+    ]
 
-# Step A: Human Selection Mode
-print("Starting Human Annotation Mode...")
-my_trainset = collect_human_feedback(sample_texts)
+    # Step A: Human Selection Mode
+    print("Starting Human Annotation Mode...")
+    my_trainset = collect_human_feedback(sample_texts)
 
-# Step B: Optimization (The 'Prompt Tuning' phase)
-if len(my_trainset) > 0:
-    print("\n>>> Optimizing Prompt based on your preferences...")
+    # Step B: Optimization (The 'Prompt Tuning' phase)
+    if len(my_trainset) > 0:
+        print("\n>>> Optimizing Prompt based on your preferences...")
 
-    # Simple metric: keywords should not be empty, and hopefully no nouns (though harder to verify in code without NLP, so we do basic check)
-    def simple_metric(example, pred, trace=None):
-        return len(pred.key_words.strip()) > 0
+        # Simple metric: keywords should not be empty, and hopefully no nouns (though harder to verify in code without NLP, so we do basic check)
+        def simple_metric(example, pred, trace=None):
+            return len(pred.key_words.strip()) > 0
 
-    # BootstrapFewShot will take your 'Golden Examples' and bake them into the prompt
-    optimizer = BootstrapFewShot(metric=simple_metric)
-    compiled_app = optimizer.compile(extractor, trainset=my_trainset)
+        # BootstrapFewShot will take your 'Golden Examples' and bake them into the prompt
+        optimizer = BootstrapFewShot(metric=simple_metric)
+        compiled_app = optimizer.compile(extractor, trainset=my_trainset)
 
-    # Step C: Testing the Optimized Prompt
-    print("\n" + "*"*20 + " TESTING OPTIMIZED PROMPT " + "*"*20)
-    test_case = "Furthermore, although she was exhausted, she decided to keep working on the project."
-    final_output = compiled_app(sentence=test_case)
-    
-    print(f"Test Sentence: {test_case}")
-    print(f"Final Optimized Output (Key words): {final_output.key_words}")
+        # Step C: Testing the Optimized Prompt
+        print("\n" + "*"*20 + " TESTING OPTIMIZED PROMPT " + "*"*20)
+        test_case = "Furthermore, although she was exhausted, she decided to keep working on the project."
+        final_output = compiled_app(sentence=test_case)
+        
+        print(f"Test Sentence: {test_case}")
+        print(f"Final Optimized Output (Key words): {final_output.key_words}")
 
-    # Save the compiled program (this includes your chosen few-shot examples)
-    compiled_app.save("optimized_reading_agent.json")
-    print("\nOptimization Complete! Configuration saved to optimized_reading_agent.json")
-else:
-    print("No data collected. Optimization aborted.")
+        # Save the compiled program (this includes your chosen few-shot examples)
+        compiled_app.save("optimized_reading_agent.json")
+        print("\nOptimization Complete! Configuration saved to optimized_reading_agent.json")
+    else:
+        print("No data collected. Optimization aborted.")

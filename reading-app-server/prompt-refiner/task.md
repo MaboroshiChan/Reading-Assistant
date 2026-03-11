@@ -2,9 +2,9 @@
 
 ## 1. Overview and Goal
 The goal of this task is to build a human-in-the-loop (HITL) prompt refinement system. Specifically, we want to improve the prompt used for generating sentence keyword highlighting. 
-By collecting human feedback on AI-generated highlights, we can build a golden dataset, evaluate performance, and leverage DSPy (e.g., `prompt-refiner/dspy.py`) to automatically compile and optimize the prompt over time.
+By collecting human feedback on AI-generated highlights, we can build a golden dataset, evaluate performance, and leverage DSPy (e.g., `reading-app-server/prompt-refiner/dspy.py`) to automatically compile and optimize the prompt over time.
 
-## 2. The Human Feedback Loop Workflow
+## Proposed Changes Human Feedback Loop Workflow
 1. **Generation:** The system takes a sentence and runs it through multiple variations of prompts or models to generate different keyword highlighting candidates.
 2. **Review:** A human reviewer inspects the original sentence alongside the generated candidates in a dedicated web interface.
 3. **Selection/Editing:** The human chooses the best candidate. If none are perfect, the human can manually edit a candidate to create the ideal highlight.
