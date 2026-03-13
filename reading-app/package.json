@@ -9,15 +9,18 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
-    "test:watch": "vitest --watch"
+    "test:watch": "vitest --watch",
+    "refiner": "concurrently \"npm run dev\" \"cd ../reading-app-server/prompt-refiner && python3 server.py\""
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "@types/dompurify": "^3.0.5",
+    "concurrently": "^9.2.1",
     "dompurify": "^3.3.1",
     "openai": "^5.8.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",

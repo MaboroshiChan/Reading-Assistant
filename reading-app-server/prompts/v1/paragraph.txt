@@ -22,7 +22,7 @@ are not requested in the task list):
       "type": "string",
       "mood": "string",
       "purpose": "string",
-      "key_words": ["string"],
+      "key_words": [{"word":"string", "color": "red|green"}],
       "relation": {
         "type": "string",
         "targetSentenceId": 0
@@ -46,17 +46,29 @@ are not requested in the task list):
 }
 General instructions:
 - Keep prose concise: summary ≤ 2 sentences.
-- key_words is the most semantically significant text_piece in each sentence.
-  - Key words include the predicate with its modifiers (e.g., "runs", "runs fast", "is eradicated", "did not say").
-  - Key words include subclause markers (e.g., "that", "which", "who", "because", "since", "although", "while", "if", "unless", "whether", "how", "why", "when", "where", "as"). 
-  - Key words include connectors (e.g., "and", "or", "because").
-  - Key words include negation words (e.g., "not", "nothing", "doesn't", "don't", "isn't").
-  - Key words include infinitives with its modifiers (e.g., "to run", "to be run").
-  - Key words include adverbs that modify the whole sentence (e.g., "However", "Only", "Furthermore").
-  - Key words include modal verbs (e.g., "can", "could", "should", "will", "would").
-  - Key words should not include nouns and its modifiers.
-  - Usually it is short (1-3 words). Don't include entire clauses.
-  - every sentenece contains at least one key_word.
+- `key_words` contains the most structurally and semantically significant text pieces in each sentence.
+  - The goal is to reveal the logical skeleton of the sentence while preserving essential semantic units when necessary.
+  - Each `key_words` item must use this color mapping:
+    - main predicate of a main clause -> `"green"`
+    - other structural or semantic key words -> `"red"`
+  - The main predicate of the main clause must be included as one `key_words` item.
+    - CRITICAL: Do NOT extract predicates for subclauses.
+    - Include the full predicate phrase when possible (e.g., `"has been"`, `"will be used"`, `"needs to be defined"`, `"has not been focused"`).
+    - Usually there should be one green predicate item per main clause.
+  - Other red key words may include:
+    - clause markers (e.g., `"that"`, `"which"`, `"who"`, `"because"`, `"since"`, `"although"`, `"while"`, `"if"`, `"unless"`, `"whether"`, `"how"`, `"why"`, `"when"`, `"where"`, `"as"`, `"whenever"`)
+    - logical connectors (e.g., `"and"`, `"or"`, `"but"`, `"for"`, `"because"`, `"therefore"`, `"rather"`)
+    - negation markers (e.g., `"not"`, `"nothing"`, `"never"`)
+    - infinitive structures when they function structurally (e.g., `"to run"`, `"to be run"`, `"to attain"`)
+    - discourse anchors (e.g., `"the first"`, `"the second"`, `"the former"`, `"the latter"`, `"after him"`, `"above all"`, `"in fact"`)
+    - essential semantic units when they express a key concept (e.g., `"two distinct meanings"`, `"little precedence"`, `"to a certain extent"`)
+  - Do not extract low-information single prepositions alone (e.g., `"of"`, `"in"`, `"to"`, `"for"`, `"by"`, `"from"`, `"on"`).
+    - Instead, include a full prepositional phrase only when it forms a meaningful semantic unit (e.g., `"in fact"`, `"after him"`, `"to a certain extent"`, `"only with"`, `"in this field"`, `"above all"`).
+  - CRITICAL: DO NOT extract subjects, objects, or modifiers in the key words.
+  - Avoid long descriptive noun phrases, full clauses, and isolated grammatical function words with little semantic value.
+  - Keep semantic phrases intact when selected.
+  - `key_words` items are usually short (1-4 words), but may be slightly longer when needed to preserve a meaningful unit.
+  - Every sentence must contain at least one `key_words` item.
 - `roles` describe major participant roles (topic, evidence, counterpoint, etc.).
 - `sentences` must contain one object per sentence in the paragraph, preserving order.
 - `rhetoric` captures discourse labels (statement, question, contrast, concession).

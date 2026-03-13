@@ -201,8 +201,15 @@
 /* Key Phrase Highlighting */
 .sentence-key-phrase {
   font-weight: bold;
-  color: var(--color-status-red);
   transition: color 0.2s ease;
+}
+
+.key-phrase-red {
+  color: var(--color-status-red);
+}
+
+.key-phrase-green {
+  color: var(--color-status-green);
 }
 
 /* Tag Variants - updated to use shared variables */

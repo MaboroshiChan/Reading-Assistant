@@ -1,0 +1,42 @@
+.refiner-sentence {
+    font-size: 1.1rem;
+    line-height: 1.7;
+}
+
+.refiner-token {
+    display: inline-block;
+    transition: all 0.2s;
+    padding: 0 1px;
+    border-radius: 4px;
+}
+
+/* Default styling for editable tokens */
+.refiner-sentence.editable .refiner-token.interactive {
+    cursor: pointer;
+    border-bottom: 2px dashed #ccc;
+    margin: 0 2px;
+}
+
+.refiner-sentence.editable .refiner-token.interactive:hover {
+    background-color: #f1f3f5;
+    border-color: #007bff;
+}
+
+/* Selected token in editable mode */
+.refiner-sentence.editable .refiner-token.interactive.active {
+    background-color: #ffe066;
+    border: 1px solid #fcc419;
+    border-bottom: 2px solid #fcc419;
+    color: #d9480f;
+    font-weight: 500;
+}
+
+/* The regex highlight when just viewing (candidates) */
+.refiner-highlight {
+    background-color: #ffe066;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-weight: 500;
+    color: #d9480f;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}

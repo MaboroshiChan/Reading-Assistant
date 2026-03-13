@@ -16,7 +16,7 @@ export interface Sentence {
   mood: string;             // e.g., Indicative, Subjunctive 
   relation?: SentenceRelation;
   text: string;
-  key_words?: string[];
+  key_words?: Array<{ word: string; color: 'red' | 'green' }>;
 }
 
 /** 
