@@ -49,11 +49,12 @@ General instructions:
 - `key_words` contains the most structurally and semantically significant text pieces in each sentence.
   - The goal is to reveal the logical skeleton of the sentence while preserving essential semantic units when necessary.
   - Each `key_words` item must use this color mapping:
-    - main predicate of a clause -> `"green"`
+    - main predicate of a main clause -> `"green"`
     - other structural or semantic key words -> `"red"`
-  - The main predicate of every clause must be included as one `key_words` item.
+  - The main predicate of the main clause must be included as one `key_words` item.
+    - CRITICAL: Do NOT extract predicates for subclauses.
     - Include the full predicate phrase when possible (e.g., `"has been"`, `"will be used"`, `"needs to be defined"`, `"has not been focused"`).
-    - Usually there should be one green predicate item per clause.
+    - Usually there should be one green predicate item per main clause.
   - Other red key words may include:
     - clause markers (e.g., `"that"`, `"which"`, `"who"`, `"because"`, `"since"`, `"although"`, `"while"`, `"if"`, `"unless"`, `"whether"`, `"how"`, `"why"`, `"when"`, `"where"`, `"as"`, `"whenever"`)
     - logical connectors (e.g., `"and"`, `"or"`, `"but"`, `"for"`, `"because"`, `"therefore"`, `"rather"`)
