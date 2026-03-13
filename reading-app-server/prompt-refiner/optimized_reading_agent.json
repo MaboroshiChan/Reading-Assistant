@@ -1,0 +1,81 @@
+{
+  "predict": {
+    "traces": [],
+    "train": [],
+    "demos": [
+      {
+        "augmented": true,
+        "sentence": "However, if it rains tomorrow, we will not be able to run fast in the park.",
+        "reasoning": "The key words are extracted based on the following guidelines:\n- \"However\" is an adverb that modifies the whole sentence.\n- \"if\" is a subclause marker.\n- \"rains\" is the predicate.\n- \"will\" is a modal verb.\n- \"not\" is a negation word.\n- \"be able\" is part of the predicate phrase.\n- \"to run fast\" is an infinitive with its modifier.\nNouns and their modifiers (e.g., \"it\", \"tomorrow\", \"we\", \"park\") are excluded.",
+        "key_words": "However, if, rains, will, not, be able, to run fast"
+      },
+      {
+        "augmented": true,
+        "sentence": "He usually doesn't like to swim, because the water is too cold.",
+        "reasoning": "The key words are extracted based on the guidelines: \"doesn't\" is a negation word and part of the predicate; \"like\" is the main verb (predicate); \"to swim\" is an infinitive; \"because\" is a subclause marker\/connector; \"is\" is a predicate; \"too\" is an adverb modifying \"cold\", which is part of the predicate phrase \"is too cold\". Nouns and their modifiers (\"He\", \"the water\") are excluded. \"usually\" modifies the verb phrase, not the whole sentence, so it's excluded.",
+        "key_words": "doesn't, like, to swim, because, is, too, cold"
+      },
+      {
+        "augmented": true,
+        "sentence": "They should have known that the mission was compromised.",
+        "reasoning": "The key words are extracted based on the guidelines: \"should\" is a modal verb. \"have known\" is part of the predicate. \"that\" is a subclause marker. \"was compromised\" is the predicate in the subclause. Nouns and their modifiers (\"They\", \"the mission\") are excluded.",
+        "key_words": "should, have known, that, was, compromised"
+      },
+      {
+        "augmented": true,
+        "sentence": "The quick brown fox jumps over the lazy dog.",
+        "reasoning": "The predicate \"jumps over\" is extracted as per the guideline \"Include the predicate with its modifiers\". Nouns and their modifiers (\"The quick brown fox\", \"the lazy dog\") are excluded.",
+        "key_words": "jumps over"
+      },
+      {
+        "sentence": "Furthermore, although she was exhausted, she decided to keep working on the project.",
+        "key_words": "Furthermore, although, was, exhausted, decided"
+      },
+      {
+        "sentence": "They should have known that the mission was compromised.",
+        "key_words": "have, known, should, was, compromised"
+      },
+      {
+        "sentence": "The quick brown fox jumps over the lazy dog.",
+        "key_words": "jumps, over"
+      },
+      {
+        "sentence": "He usually doesn't like to swim, because the water is too cold.",
+        "key_words": "doesn't, like, because, is, too, cold"
+      },
+      {
+        "sentence": "However, if it rains tomorrow, we will not be able to run fast in the park.",
+        "key_words": "rains, will, not, be, able, However"
+      },
+      {
+        "sentence": "Furthermore, although she was exhausted, she decided to keep working on the project.",
+        "key_words": "Furthermore, although, decided, was, exhausted"
+      }
+    ],
+    "signature": {
+      "instructions": "Extract the most semantically significant text pieces (key words) from a sentence.\n    \nGuidelines for key words:\n- Include the predicate with its modifiers (e.g., \"runs\", \"runs fast\", \"is eradicated\", \"did not say\").\n- Include subclause markers (e.g., \"that\", \"which\", \"who\", \"because\", \"since\", \"although\", \"while\", \"if\", \"unless\", \"whether\", \"how\", \"why\", \"when\", \"where\", \"as\"). \n- Include connectors (e.g., \"and\", \"or\", \"because\").\n- Include negation words (e.g., \"not\", \"nothing\", \"doesn't\", \"don't\", \"isn't\").\n- Include infinitives with its modifiers (e.g., \"to run\", \"to be run\").\n- Include adverbs that modify the whole sentence (e.g., \"However\", \"Only\", \"Furthermore\").\n- Include modal verbs (e.g., \"can\", \"could\", \"should\", \"will\", \"would\").\n- DO NOT include nouns and their modifiers.\n- Usually short (1-3 words). Do not include entire clauses.\n- Every sentence contains at least one key_word.",
+      "fields": [
+        {
+          "prefix": "Sentence:",
+          "description": "A single sentence to be analyzed"
+        },
+        {
+          "prefix": "Reasoning: Let's think step by step in order to",
+          "description": "${reasoning}"
+        },
+        {
+          "prefix": "Key Words:",
+          "description": "Comma-separated list of extracted key words, adhering precisely to the guidelines"
+        }
+      ]
+    },
+    "lm": null
+  },
+  "metadata": {
+    "dependency_versions": {
+      "python": "3.9",
+      "dspy": "2.6.27",
+      "cloudpickle": "3.1"
+    }
+  }
+}
