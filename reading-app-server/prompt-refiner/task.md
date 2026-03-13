@@ -23,6 +23,15 @@ By collecting human feedback on AI-generated highlights, we can build a golden d
 - **Feedback Endpoint:** An endpoint to receive the human's final choice (or edited text) and save it to the local golden dataset.
 - **Data Source:** Ability to pull raw, unannotated sentences from an existing database or sample text file to feed into the UI queue.
 
+## 3. Implementation Tasks
+
+### Python Backend
+- [x] Create `Initial_prompt.txt` and move the hardcoded prompt guidelines into it.
+- [x] Update `dspy_logic.py` to dynamically read `Initial_prompt.txt` and set it as the DSPy Signature docstring and the base for Candidate generation.
+- [ ] Update `optimize_prompt()` to output `Optimized_prompt.txt` as a clean, readable text file that shows the base instructions and the chosen few-shot examples.
+- [x] Set up a standalone Python backend (e.g., `server.py` using FastAPI/Flask).
+- [x] Expose `GET /sentences` to provide raw material.
+
 ## 5. DSPy Integration
 - Update the DSPy pipeline to ingest the JSON dataset created by the frontend.
 - Define a DSPy signature focused on sentence highlighting: e.g., mapping `sentence` to `highlighted_keywords`.

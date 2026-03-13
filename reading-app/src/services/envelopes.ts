@@ -230,7 +230,7 @@ export interface AnalyzeSentenceData {
   modal_markers?: ModalMarker[];
   anchors?: Anchor[];
   confidence?: number;
-  key_words?: string[];
+  key_words?: Array<{ word: string; color: 'red' | 'green' }>;
 }
 
 // 4) analyze.sentence-structure.v1

@@ -97,6 +97,27 @@ export const RefinerPage: React.FC = () => {
         }
     };
 
+    const [isOptimizing, setIsOptimizing] = useState(false);
+
+    const handleOptimize = async () => {
+        setIsOptimizing(true);
+        try {
+            const res = await fetch('http://localhost:8000/optimize', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok && data.status === 'success') {
+                alert(data.message);
+            } else {
+                const errorMsg = data.message || data.detail || JSON.stringify(data);
+                alert("Optimization failed: " + errorMsg);
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Failed to connect to optimization server.");
+        } finally {
+            setIsOptimizing(false);
+        }
+    };
+
     if (sentences.length === 0) {
         return <div className="refiner-page">Loading sentences queue from Python backend... Ensure <code>reading-app-server/prompt-refiner/server.py</code> is running.</div>;
     }
@@ -107,7 +128,24 @@ export const RefinerPage: React.FC = () => {
                 <h2>🎉 All Done!</h2>
                 <p>You have annotated all sentences in the queue.</p>
                 <p>Total examples in Golden Dataset: <strong>{savedCount}</strong></p>
-                <button onClick={() => window.location.reload()}>Refresh Queue</button>
+                
+                <div className="done-actions" style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }}>
+                    <button 
+                        className="btn primary" 
+                        onClick={handleOptimize} 
+                        disabled={isOptimizing}
+                        style={{ padding: '0.8rem 1.6rem' }}
+                    >
+                        {isOptimizing ? "⚙️ Training Prompt..." : "🚀 Optimize Prompt Now"}
+                    </button>
+                    <button 
+                        className="btn secondary" 
+                        onClick={() => window.location.reload()}
+                        style={{ padding: '0.8rem 1.6rem' }}
+                    >
+                        Refresh Queue
+                    </button>
+                </div>
             </div>
         );
     }

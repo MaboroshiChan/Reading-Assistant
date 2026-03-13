@@ -17,21 +17,16 @@ dspy.settings.configure(lm=gemini)
 # ======================================================
 # 2. Define the Task (Signature)
 # ======================================================
+# Load instructions from Text file
+prompt_path = os.path.join(os.path.dirname(__file__), "Initial_prompt.txt")
+try:
+    with open(prompt_path, "r", encoding="utf-8") as f:
+        INSTRUCTIONS = f.read().strip()
+except FileNotFoundError:
+    INSTRUCTIONS = "Extract the most semantically significant text pieces (key words) from a sentence."
+
 class KeywordExtraction(dspy.Signature):
-    """Extract the most semantically significant text pieces (key words) from a sentence.
-    
-    Guidelines for key words:
-    - Include the predicate with its modifiers (e.g., "runs", "runs fast", "is eradicated", "did not say").
-    - Include subclause markers (e.g., "that", "which", "who", "because", "since", "although", "while", "if", "unless", "whether", "how", "why", "when", "where", "as"). 
-    - Include connectors (e.g., "and", "or", "because").
-    - Include negation words (e.g., "not", "nothing", "doesn't", "don't", "isn't").
-    - Include infinitives with its modifiers (e.g., "to run", "to be run").
-    - Include adverbs that modify the whole sentence (e.g., "However", "Only", "Furthermore").
-    - Include modal verbs (e.g., "can", "could", "should", "will", "would").
-    - DO NOT include nouns and their modifiers.
-    - Usually short (1-3 words). Do not include entire clauses.
-    - Every sentence contains at least one key_word.
-    """
+    __doc__ = INSTRUCTIONS
     sentence = dspy.InputField(desc="A single sentence to be analyzed")
     key_words = dspy.OutputField(desc="Comma-separated list of extracted key words, adhering precisely to the guidelines")
 
@@ -41,7 +36,10 @@ extractor = dspy.ChainOfThought(KeywordExtraction)
 # ======================================================
 # 3. Human Feedback Collection Logic
 # ======================================================
-def collect_human_feedback(raw_sentences, save_path="golden_dataset.json"):
+def collect_human_feedback(raw_sentences, save_path=None):
+    if save_path is None:
+        save_path = os.path.join(os.path.dirname(__file__), "golden_dataset.json")
+        
     golden_examples = []
     
     # Load existing progress if available
@@ -60,12 +58,11 @@ def collect_human_feedback(raw_sentences, save_path="golden_dataset.json"):
         candidates = []
         
         for s in styles:
-            # We use a direct call to simulate different prompt variations
+            # We use a direct call to simulate different prompt variations using the Initial_prompt.txt as a base
             prompt = (
+                f"{INSTRUCTIONS}\n\n"
                 f"Extract the key words from this sentence using a '{s}' approach. "
-                f"Follow these rules strictly: include predicates, subclause markers, connectors, negations, "
-                f"infinitives, sentence adverbs, and modal verbs. DO NOT include nouns. Keep it short (1-3 words). "
-                f"Output ONLY comma-separated keywords. "
+                f"Keep it short (1-3 words). Output ONLY comma-separated keywords.\n"
                 f"Sentence: {text}"
             )
             res = gemini(prompt)
@@ -118,28 +115,89 @@ if __name__ == "__main__":
     print("Starting Human Annotation Mode...")
     my_trainset = collect_human_feedback(sample_texts)
 
+def optimize_prompt():
+    """
+    Triggers the DSPy BootstrapFewShot optimizer using the golden_dataset.json.
+    """
+    save_path = os.path.join(os.path.dirname(__file__), "golden_dataset.json")
+    
+    if not os.path.exists(save_path):
+        return {"status": "error", "message": "No golden_dataset.json found. Please annotate some sentences first."}
+
+    with open(save_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        my_trainset = [dspy.Example(**item).with_inputs('sentence') for item in data]
+
+    if len(my_trainset) == 0:
+        return {"status": "error", "message": "Dataset is empty."}
+
+    print(f"\n>>> Optimizing Prompt based on {len(my_trainset)} examples...")
+
+    def simple_metric(example, pred, trace=None):
+        return len(pred.key_words.strip()) > 0
+
+    # Compile the prompt
+    optimizer = BootstrapFewShot(metric=simple_metric)
+    compiled_app = optimizer.compile(extractor, trainset=my_trainset)
+
+    # Save the result
+    model_save_path = os.path.join(os.path.dirname(__file__), "optimized_reading_agent.json")
+    compiled_app.save(model_save_path)
+    
+    # Generate the text representation of the prompt
+    txt_save_path = os.path.join(os.path.dirname(__file__), "Optimized_prompt.txt")
+    
+    try:
+        # Build a human-readable representation of the finished prompt
+        prompt_text = f"[INSTRUCTIONS]\n{INSTRUCTIONS}\n\n[FEW-SHOT EXAMPLES (Learned from UI)]\n"
+        
+        # Extract the examples that DSPy actually selected to use
+        # compiled_app.demos contains the few-shot traces it bootstrapped
+        demos_to_print = []
+        if hasattr(compiled_app, 'demos') and compiled_app.demos:
+            demos_to_print = compiled_app.demos
+        else:
+            # Fallback: If DSPy couldn't bootstrap traces (e.g., due to metric failures), it still uses the dataset directly
+            demos_to_print = my_trainset
+            prompt_text += "(Note: These are the raw examples loaded from the UI. DSPy trace generation was skipped.)\n"
+
+        if demos_to_print:
+            for i, demo in enumerate(demos_to_print):
+                prompt_text += f"\n--- Example {i+1} ---\n"
+                prompt_text += f"Sentence: {demo.sentence}\n"
+                if hasattr(demo, 'reasoning') and demo.reasoning:
+                    prompt_text += f"Reasoning: {demo.reasoning}\n"
+                prompt_text += f"Key Words: {demo.key_words}\n"
+        else:
+            prompt_text += "\nNo examples were found.\n"
+            
+        with open(txt_save_path, 'w', encoding='utf-8') as f:
+            f.write(prompt_text)
+            
+    except Exception as e:
+        print("Could not generate text prompt preview: ", e)
+    
+    return {
+        "status": "success", 
+        "message": f"Optimization complete! Saved JSON to {model_save_path} and text preview to {txt_save_path}",
+        "dataset_size": len(my_trainset)
+    }
+
+if __name__ == "__main__":
+    # Sample data for your Reading App
+    sample_texts = [
+        "However, if it rains tomorrow, we will not be able to run fast in the park.",
+        "He usually doesn't like to swim, because the water is too cold.",
+        "They should have known that the mission was compromised."
+    ]
+
+    # Step A: Human Selection Mode
+    print("Starting Human Annotation Mode...")
+    my_trainset = collect_human_feedback(sample_texts)
+
     # Step B: Optimization (The 'Prompt Tuning' phase)
     if len(my_trainset) > 0:
-        print("\n>>> Optimizing Prompt based on your preferences...")
-
-        # Simple metric: keywords should not be empty, and hopefully no nouns (though harder to verify in code without NLP, so we do basic check)
-        def simple_metric(example, pred, trace=None):
-            return len(pred.key_words.strip()) > 0
-
-        # BootstrapFewShot will take your 'Golden Examples' and bake them into the prompt
-        optimizer = BootstrapFewShot(metric=simple_metric)
-        compiled_app = optimizer.compile(extractor, trainset=my_trainset)
-
-        # Step C: Testing the Optimized Prompt
-        print("\n" + "*"*20 + " TESTING OPTIMIZED PROMPT " + "*"*20)
-        test_case = "Furthermore, although she was exhausted, she decided to keep working on the project."
-        final_output = compiled_app(sentence=test_case)
-        
-        print(f"Test Sentence: {test_case}")
-        print(f"Final Optimized Output (Key words): {final_output.key_words}")
-
-        # Save the compiled program (this includes your chosen few-shot examples)
-        compiled_app.save("optimized_reading_agent.json")
-        print("\nOptimization Complete! Configuration saved to optimized_reading_agent.json")
+        res = optimize_prompt()
+        print(res["message"])
     else:
         print("No data collected. Optimization aborted.")

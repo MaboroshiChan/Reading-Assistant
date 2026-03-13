@@ -364,17 +364,29 @@ export const SentenceComponent: React.FC<SentenceComponentProps> = ({
             return sentence.text;
         }
 
+        // Normalize keywords for backward compatibility (in case of old cache or backend strings)
+        const normalizedKeyWords = (keyWords as any[]).map(kw => {
+            if (typeof kw === 'string') {
+                return { word: kw, color: 'red' }; // Default to red
+            }
+            return kw;
+        }).filter(kw => kw && typeof kw.word === 'string');
+
+        if (normalizedKeyWords.length === 0) return sentence.text;
+
         // Escape special chars for regex
         const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         // Join all key words with | for regex
-        const pattern = new RegExp(`\\b(${keyWords.map(escapeRegExp).join('|')})\\b`, 'g');
+        const words = normalizedKeyWords.map(kw => kw.word);
+        const pattern = new RegExp(`\\b(${words.map(escapeRegExp).join('|')})\\b`, 'g');
         const parts = sentence.text.split(pattern);
 
         return parts.map((part, index) => {
-            if (keyWords.includes(part)) {
+            const kw = normalizedKeyWords.find(k => k.word === part);
+            if (kw) {
                 return (
-                    <span key={index} className="sentence-key-phrase">
+                    <span key={index} className={`sentence-key-phrase key-phrase-${kw.color}`}>
                         {part}
                     </span>
                 );

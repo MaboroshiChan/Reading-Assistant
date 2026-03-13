@@ -7,7 +7,7 @@ from typing import List
 
 # Import our Gemini configuration and models from dspy logic
 import dspy
-from dspy_logic import gemini, KeywordExtraction
+from dspy_logic import gemini, KeywordExtraction, optimize_prompt
 
 app = FastAPI(title="Prompt Refiner")
 
@@ -84,6 +84,14 @@ def save_feedback(req: SaveRequest):
         json.dump(golden_examples, f, ensure_ascii=False, indent=2)
         
     return {"status": "success", "total_examples": len(golden_examples)}
+
+@app.post("/optimize")
+def trigger_optimization():
+    # Call the optimization logic from dspy_logic.py
+    result = optimize_prompt()
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
 
 if __name__ == "__main__":
     import uvicorn
