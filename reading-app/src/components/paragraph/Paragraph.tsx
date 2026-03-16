@@ -52,6 +52,23 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
     );
   }
 
+  // Special rendering for short paragraphs that don't warrant analysis
+  if (paragraph.kind === 'short') {
+    return (
+      <div className="paragraph-short-container" style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+        <p className="paragraph-short" style={{
+          fontSize: '1rem',
+          color: 'var(--color-text-main)',
+          fontStyle: 'italic',
+          lineHeight: '1.6',
+          margin: 0,
+        }}>
+          {paragraph.sentences.map(s => s.text).join(' ')}
+        </p>
+      </div>
+    );
+  }
+
   // isClicked now serves as "isActive" for showing the panel
   const [isClicked, setIsClicked] = useState(false);
   const [hoveredBridgeId, setHoveredBridgeId] = useState<string | null>(null);

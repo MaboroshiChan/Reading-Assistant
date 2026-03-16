@@ -1,5 +1,5 @@
 import type { Sentence } from "./Sentence";
-import { isTitle, isValidParagraph } from "../../utils/textUtils";
+import { isTitle, isTooShortToAnalyze, isValidParagraph } from "../../utils/textUtils";
 
 /** Represents a text paragraph with state and analysis results. */
 export default interface Paragraph {
@@ -8,8 +8,8 @@ export default interface Paragraph {
 
   status?: 'pending' | 'streaming' | 'complete' | 'error';
   errorMessage?: string;
-  /** Kind of paragraph: regular text, a title/header, or a citation/note */
-  kind?: 'text' | 'title' | 'citation';
+  /** Kind of paragraph: regular text, a title/header, citation/note, or a short blurb not worth analyzing */
+  kind?: 'text' | 'title' | 'citation' | 'short';
 
   /** 段落的中心思想，可由 LLM 提炼或用户指定 */
   centralIdea?: string;
@@ -39,11 +39,12 @@ export const preprocessingFromText = (text: string, id: number): Paragraph => {
   const isRegularParagraph = !isTitleParagraph && isValidParagraph(text);
 
   // Classify kind
-  let kind: 'text' | 'title' | 'citation';
+  let kind: 'text' | 'title' | 'citation' | 'short';
   if (isTitleParagraph) {
     kind = 'title';
   } else if (isRegularParagraph) {
-    kind = 'text';
+    // Valid paragraph but too short / sparse to merit LLM analysis
+    kind = isTooShortToAnalyze(text) ? 'short' : 'text';
   } else {
     kind = 'citation';
   }
@@ -80,8 +81,9 @@ export const preprocessingFromText = (text: string, id: number): Paragraph => {
   return {
     id,
     sentences,
-    status: kind === 'text' ? 'pending' : 'complete', // Only analyze if it is regular text
+    // Only queue for analysis if it's a full-length text paragraph
+    status: kind === 'text' ? 'pending' : 'complete',
     kind,
-    function: kind === 'title' ? 'Title' : (kind === 'citation' ? 'Citation' : 'Pending'),
+    function: kind === 'title' ? 'Title' : (kind === 'citation' ? 'Citation' : (kind === 'short' ? 'Short' : 'Pending')),
   };
 };
