@@ -5,6 +5,7 @@ import { preprocessingFromText } from '../model/structure/Paragraph';
 import { streamingMessageService } from '../services/messageService.instance';
 import './css/ReaderPage.css';
 import { chunkParagraphsByWordCount, isTitle } from '../utils/textUtils';
+import { FloatingMenu } from './FloatingMenu';
 
 interface ReaderPageProps {
     articleData: {
@@ -223,6 +224,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                     </div>
                 )}
             </main>
+            <FloatingMenu />
         </div>
     );
 };

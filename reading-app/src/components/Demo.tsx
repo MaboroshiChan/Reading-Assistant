@@ -6,6 +6,7 @@ import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
 import { chunkParagraphsByWordCount } from '../utils/textUtils';
 import { isPending } from '../model/structure/Sentence';
+import { FloatingMenu } from './FloatingMenu';
 
 import { streamingMessageService } from '../services/messageService.instance';
 
@@ -466,6 +467,7 @@ const ExampleArticle: React.FC = () => {
   }, [analyzedData, viewMode]);
 
   return (
+    <>
     <ArticleFramework
       title="Your Article Title Here"
       subtitle="An engaging subtitle that draws readers in"
@@ -491,6 +493,8 @@ const ExampleArticle: React.FC = () => {
       onLike={handleLike}
       onAnalyze={handleAnalyze}
     />
+    <FloatingMenu />
+    </>
   );
 };
 
