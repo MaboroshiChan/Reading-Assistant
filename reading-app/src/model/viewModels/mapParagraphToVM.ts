@@ -3,13 +3,12 @@ import type Paragraph from '../structure/Paragraph';
 
 export interface ParagraphViewModel {
   id: string;
-  centralIdea?: string;
+  tags?: { name: string; type: 'logic' | 'concept'; description?: string }[];
   structureType?: Paragraph['structureType'];
   function?: Paragraph['function'];
   summary?: string;
   roles?: string[];
   confidence?: number;
-  topicSentence?: { is_implicit: boolean; text: string; id?: string };
   errorMessage?: string;
 }
 
@@ -26,13 +25,12 @@ export const mapParagraphToVM = (
 ): ParagraphViewModel => {
   return {
     id: String(paragraph.id),
-    centralIdea: paragraph.centralIdea ?? analysis?.summary,
+    tags: paragraph.tags ?? analysis?.tags,
     structureType: paragraph.structureType,
     function: paragraph.function,
     summary: analysis?.summary,
     roles: analysis?.roles?.map((role) => role.role).filter(Boolean),
     confidence: analysis?.confidence,
-    topicSentence: paragraph.topicSentence ?? analysis?.topic_sentence,
     errorMessage: paragraph.errorMessage,
   };
 };

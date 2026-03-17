@@ -11,17 +11,14 @@ export default interface Paragraph {
   /** Kind of paragraph: regular text, a title/header, citation/note, or a short blurb not worth analyzing */
   kind?: 'text' | 'title' | 'citation' | 'short';
 
-  /** 段落的中心思想，可由 LLM 提炼或用户指定 */
-  centralIdea?: string;
+  /** Tags that capture the logic structure and key concepts of the paragraph */
+  tags?: { name: string; type: 'logic' | 'concept'; description?: string }[];
 
   /** 可选：结构类型，如“并列”、“对比”、“递进”、“因果”等 */
   structureType?: 'Parallel' | 'Contrast' | 'Progression' | 'Causal' | 'Narrative' | string;
 
   /** 可选：段落整体功能，如“引入”、“论证”、“结论”等 */
   function?: 'Introduction' | 'Premise' | 'Conclusion' | 'Evidence' | string;
-
-  /** Topic Sentence data */
-  topicSentence?: { is_implicit: boolean; text: string; id?: string };
 }
 
 /**

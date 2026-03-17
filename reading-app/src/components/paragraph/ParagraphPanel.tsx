@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ParagraphViewModel } from '../../model/viewModels/mapParagraphToVM';
+import { Tag } from './Tag';
 import './css/ParagraphPanel.css';
 
 interface ParagraphPanelProps {
@@ -7,7 +8,7 @@ interface ParagraphPanelProps {
 }
 
 /**
- * Renders an analysis panel displaying paragraph metadata like central idea and structure.
+ * Renders an analysis panel displaying paragraph metadata like tags and structure.
  *
  * @param props - Component properties containing the paragraph view model.
  */
@@ -23,16 +24,11 @@ export const ParagraphPanel: React.FC<ParagraphPanelProps> = ({ vm }) => {
                 )}
             </div>
             <div className="paragraph-panel-body">
-                {vm.centralIdea && (
-                    <div>
-                        <span className="paragraph-label">Central Idea:</span>
-                        {vm.centralIdea}
-                    </div>
-                )}
-                {vm.topicSentence && (
-                    <div className="paragraph-section">
-                        <span className="paragraph-label">Topic Sentence ({vm.topicSentence.is_implicit ? 'Implicit' : 'Explicit'}):</span>
-                        {vm.topicSentence.text}
+                {vm.tags && vm.tags.length > 0 && (
+                    <div className="paragraph-tags-container">
+                        {vm.tags.map((tag, idx) => (
+                            <Tag key={idx} name={tag.name} type={tag.type} description={tag.description} />
+                        ))}
                     </div>
                 )}
                 {vm.errorMessage && (
@@ -41,7 +37,7 @@ export const ParagraphPanel: React.FC<ParagraphPanelProps> = ({ vm }) => {
                         <span className="error-message">{vm.errorMessage}</span>
                     </div>
                 )}
-                {!vm.centralIdea && !vm.structureType && !vm.function && !vm.topicSentence && !vm.errorMessage && (
+                {(!vm.tags || vm.tags.length === 0) && !vm.structureType && !vm.function && !vm.errorMessage && (
                     <span className="paragraph-label">No analysis data available.</span>
                 )}
             </div>

@@ -22,9 +22,9 @@ const CACHE_PREFIX = 'paragraph';
 const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'paragraph.v1.1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
-const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims', 'topic_sentence'];
+const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims', 'tags'];
 
-export type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary' | 'topic_sentence';
+export type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary' | 'tags';
 export { PROMPT_VERSION as PARAGRAPH_PROMPT_VERSION };
 
 interface LLMParagraphAnchor {
@@ -59,7 +59,7 @@ interface LLMParagraphResponse {
   rhetoric?: LLMParagraphRhetoric[];
   claims?: LLMParagraphClaim[];
   anchors?: LLMParagraphAnchor[];
-  topic_sentence?: { is_implicit: boolean; text: string; id?: string };
+  tags?: { name: string; type: 'logic' | 'concept'; description?: string }[];
   confidence?: number;
 }
 
@@ -346,12 +346,17 @@ const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
     anchors: Array.isArray(value.anchors)
       ? coerceAnchorArray(value.anchors)
       : undefined,
-    topic_sentence: isRecord(value.topic_sentence) && typeof value.topic_sentence.text === 'string' && typeof value.topic_sentence.is_implicit === 'boolean'
-      ? {
-        is_implicit: value.topic_sentence.is_implicit,
-        text: value.topic_sentence.text,
-        id: asString(value.topic_sentence.id)
-      }
+    tags: Array.isArray(value.tags)
+      ? value.tags.reduce((acc: { name: string; type: 'logic' | 'concept'; description?: string }[], tag: unknown) => {
+        if (!isRecord(tag)) return acc;
+        const name = asString(tag.name);
+        const type = asString(tag.type) === 'logic' ? 'logic' : 'concept';
+        const description = asString(tag.description);
+        if (name) {
+          acc.push({ name, type, description });
+        }
+        return acc;
+      }, [])
       : undefined,
     confidence: asConfidence(value.confidence),
   };
@@ -509,7 +514,7 @@ const mapParagraphResponse = (
     rhetoric,
     claims,
     anchors: anchorList,
-    topic_sentence: shouldInclude('topic_sentence') ? payload.topic_sentence : undefined,
+    tags: shouldInclude('tags') ? payload.tags : undefined,
     confidence: payload.confidence,
   };
 };

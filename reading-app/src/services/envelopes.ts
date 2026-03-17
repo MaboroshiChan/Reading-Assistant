@@ -187,9 +187,10 @@ export interface AnalyzeParagraphPayload {
   doc_id: string;
   paragraph_id: string;
   paragraph_text: string;
-  options?: { tasks?: Array<'roles' | 'rhetoric' | 'claims' | 'summary' | 'topic_sentence'> };
+  options?: { tasks?: Array<'roles' | 'rhetoric' | 'claims' | 'summary' | 'tags'> };
 }
 
+export interface ParagraphTag { name: string; type: 'logic' | 'concept'; description?: string; }
 export interface ParagraphRole { role: string; anchors: Anchor[]; confidence?: number }
 export interface ParagraphRhetoric { label: string; evidence_anchors?: Anchor[]; confidence?: number }
 export interface ParagraphClaim {
@@ -206,7 +207,7 @@ export interface AnalyzeParagraphData {
   rhetoric?: ParagraphRhetoric[];
   claims?: ParagraphClaim[];
   anchors?: Anchor[];
-  topic_sentence?: { is_implicit: boolean; text: string; id?: string };
+  tags?: ParagraphTag[];
   confidence?: number; // aggregate
 }
 

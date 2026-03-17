@@ -15,6 +15,7 @@ import {
   buildParagraphPrompt,
   buildParagraphTasks,
   PARAGRAPH_PROMPT_VERSION,
+  type ParagraphTask,
 } from '../paragraph';
 
 /**
@@ -26,7 +27,7 @@ import {
  */
 const filterByTasks = (
   base: AnalyzeParagraphData,
-  tasks?: Array<'roles' | 'rhetoric' | 'claims' | 'summary'>,
+  tasks?: ParagraphTask[],
 ): AnalyzeParagraphData => {
   if (!tasks || tasks.length === 0) return base;
   const requested = new Set(tasks);
@@ -35,6 +36,7 @@ const filterByTasks = (
     roles: requested.has('roles') ? base.roles : undefined,
     rhetoric: requested.has('rhetoric') ? base.rhetoric : undefined,
     claims: requested.has('claims') ? base.claims : undefined,
+    tags: requested.has('tags') ? base.tags : undefined,
     anchors: base.anchors,
     confidence: base.confidence,
   };
@@ -111,10 +113,10 @@ export const buildMockParagraphData = async (
     rhetoric,
     claims,
     anchors: [paragraphAnchor],
-    topic_sentence: {
-      is_implicit: false,
-      text: fragments[0]?.text ?? text,
-    },
+    tags: [
+      { name: 'Introduction', type: 'logic', description: 'Sets up the context' },
+      { name: 'Core Concept', type: 'concept', description: 'The main idea of the paragraph' }
+    ],
     confidence: 0.6,
   };
 

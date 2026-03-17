@@ -71,16 +71,10 @@ export function isValidParagraph(text: string): boolean {
     return isTitle(text);
 }
 
-/** Minimum word count for a paragraph to be worth analyzing. */
-const MIN_WORDS_FOR_ANALYSIS = 30;
-
 /**
  * Returns true when a paragraph is too short to merit deep LLM analysis.
  *
- * A paragraph is considered too short when it contains only a single sentence
- * AND fewer than {@link MIN_WORDS_FOR_ANALYSIS} words.  Either condition alone
- * is not enough — one long sentence still deserves analysis, and a tight two-
- * sentence paragraph carries enough structure to be meaningful.
+ * Catches cases with very few words, or up to two sentences if the word count is low.
  *
  * @param text - Raw paragraph text.
  */
@@ -89,14 +83,21 @@ export function isTooShortToAnalyze(text: string): boolean {
     if (trimmed.length === 0) return true;
 
     const wordCount = trimmed.split(/\s+/).length;
-    if (wordCount >= MIN_WORDS_FOR_ANALYSIS) return false;
+    
+    // Extremely short blurbs (under 15 words) are always skipped (even if arbitrarily punctuated).
+    if (wordCount < 15) {
+        console.log('Skipping paragraph: ' + text);
+        return true;
+    }
+
+    // For slightly longer text (up to 30 words), skip only if it lacks structural complexity (<= 2 sentences).
+    if (wordCount >= 30) return false;
 
     // Count sentences by splitting on terminal punctuation
     const sentenceMatches = trimmed.match(/[^.!?]+[.!?]+["']?/g);
     const sentenceCount = sentenceMatches ? sentenceMatches.length : 1;
 
-    // Only suppress analysis when the content is both short AND has very few sentences
-    return sentenceCount <= 1;
+    return sentenceCount <= 2;
 }
 
 /**

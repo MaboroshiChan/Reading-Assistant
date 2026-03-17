@@ -91,7 +91,6 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         const chunks = chunkParagraphsByWordCount(skeletons, WORD_LIMIT);
 
         for (const chunk of chunks) {
-            console.log('Chunk', chunk);
             await Promise.all(chunk.map(async (p) => {
                 // Skip anything that isn't regular text (titles, citations)
                 if (p.kind !== 'text') return;
@@ -106,7 +105,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                             paragraph_id: String(p.id),
                             paragraph_text: p.sentences.map(s => s.text).join(' '),
                             options: {
-                                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'topic_sentence']
+                                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'tags']
                             }
                         },
                         { doc: { doc_id: 'extracted-doc', content_hash: 'extracted-hash' } },
@@ -119,15 +118,14 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
 
                                         // Immutable update of the paragraph
                                         const updated = { ...item };
-                                        if (partial.summary) updated.centralIdea = partial.summary;
                                         if (partial.rhetoric && partial.rhetoric.length > 0) {
                                             updated.structureType = partial.rhetoric[0].label;
                                         }
                                         if (partial.roles && partial.roles.length > 0) {
                                             updated.function = partial.roles[0].role;
                                         }
-                                        if (partial.topic_sentence) {
-                                            updated.topicSentence = partial.topic_sentence;
+                                        if (partial.tags) {
+                                            updated.tags = partial.tags;
                                         }
                                         if (partial.sentences && partial.sentences.length > 0) {
                                             updated.sentences = updated.sentences.map((s, i) => {
@@ -162,7 +160,12 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                 } catch (err) {
                     console.error(`Analysis failed for paragraph ${p.id}`, err);
                     setAnalyzedData(prev => {
-                        const newData = prev.map(item => item.id === p.id ? { ...item, status: 'error' as const, errorMessage: (err as Error).message || String(err) } : item);
+                        const newData = prev.map(item => item.id === p.id ? { 
+                            ...item, 
+                            status: 'error' as const, 
+                            errorMessage: (err as Error).message || String(err),
+                            sentences: item.sentences.map(s => ({ ...s, function: 'Error' })) // Stop the spinner loop
+                        } : item);
                         persistData(newData);
                         return newData;
                     });

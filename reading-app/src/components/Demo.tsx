@@ -300,9 +300,10 @@ const ExampleArticle: React.FC = () => {
   useEffect(() => {
     const loadContent = async () => {
       try {
+        // This is the example article for the demo
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
-        const module = await import('../../../resource/examples/TestArticles/metaphysics.txt?raw');
+        const module = await import('../../../resource/examples/TestArticles/gre-article.txt?raw');
         const text = module.default;
         const paragraphs = text.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
         setRawParagraphs(paragraphs);
@@ -359,7 +360,7 @@ const ExampleArticle: React.FC = () => {
               paragraph_id: String(p.id),
               paragraph_text: p.sentences.map(s => s.text).join(' '),
               options: {
-                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'topic_sentence']
+                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'tags']
               }
             },
             { doc: { doc_id: sessionId, content_hash: 'demo-hash' } },
@@ -377,15 +378,14 @@ const ExampleArticle: React.FC = () => {
 
                   // Immutable update of the paragraph
                   const updated = { ...item };
-                  if (partial.summary) updated.centralIdea = partial.summary;
                   if (partial.rhetoric && partial.rhetoric.length > 0) {
                     updated.structureType = partial.rhetoric[0].label;
                   }
                   if (partial.roles && partial.roles.length > 0) {
                     updated.function = partial.roles[0].role;
                   }
-                  if (partial.topic_sentence) {
-                    updated.topicSentence = partial.topic_sentence;
+                  if (partial.tags) {
+                    updated.tags = partial.tags;
                   }
                   if (partial.sentences && partial.sentences.length > 0) {
                     updated.sentences = updated.sentences.map((s, i) => {
