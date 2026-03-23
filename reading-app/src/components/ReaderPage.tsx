@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ParagraphComponent } from './paragraph/Paragraph';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
-import { streamingMessageService } from '../services/messageService.instance';
+import messageService, { streamingMessageService } from '../services/messageService.instance';
 import './css/ReaderPage.css';
 import { chunkParagraphsByWordCount, isTitle } from '../utils/textUtils';
 import { FloatingMenu } from './FloatingMenu';
 import { QuizWindow } from './quiz/QuizWindow';
+import type { QuizQuestion } from '../services/envelopes';
 
 interface ReaderPageProps {
     articleData: {
@@ -25,6 +26,8 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
     // Track if we have restored data to determine button state
     const [hasRestoredData, setHasRestoredData] = useState(false);
     const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
+    const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
+    const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
 
     // Generate a unique key for storage
     const storageKey = React.useMemo(() => {
@@ -70,6 +73,31 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
             // console.log('Saved analysis data to storage');
         });
     }, [storageKey]);
+
+    const handleGenerateQuiz = async () => {
+        if (isGeneratingQuiz) return;
+        
+        setIsGeneratingQuiz(true);
+        setIsQuizWindowOpen(true);
+        
+        try {
+            const fullText = rawParagraphs.join('\n\n');
+            const response = await messageService.analyzeQuiz({
+                doc_id: storageKey || `reader-${Date.now()}`,
+                article_text: fullText
+            });
+            
+            if (response.status === 'ok' && response.data?.questions) {
+                setQuizQuestions(response.data.questions);
+            } else {
+                console.error('Failed to generate quiz:', response.error);
+            }
+        } catch (err) {
+            console.error('Error generating quiz:', err);
+        } finally {
+            setIsGeneratingQuiz(false);
+        }
+    };
 
     const handleAnalyze = async () => {
         // If we are in "Refresh" mode (hasRestoredData or viewMode is analyzing but finished), we clear and restart
@@ -226,8 +254,13 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                     </div>
                 )}
             </main>
-            <FloatingMenu onQuizMeClick={() => setIsQuizWindowOpen(true)} />
-            <QuizWindow isOpen={isQuizWindowOpen} onClose={() => setIsQuizWindowOpen(false)} />
+            <FloatingMenu onQuizMeClick={handleGenerateQuiz} />
+            <QuizWindow 
+                isOpen={isQuizWindowOpen} 
+                onClose={() => setIsQuizWindowOpen(false)} 
+                questions={quizQuestions}
+                isLoading={isGeneratingQuiz}
+            />
         </div>
     );
 };

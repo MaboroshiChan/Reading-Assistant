@@ -7,6 +7,7 @@ import { handleParagraph } from '../handlers/paragraph';
 import { handleSentence } from '../handlers/sentence';
 import { handleSkeleton } from '../handlers/skeleton';
 import { handleSentenceStructure } from '../handlers/sentence_structure';
+import { handleQuiz } from '../handlers/quiz';
 import { errorResponse, validateEnvelope } from './validate';
 
 const UNKNOWN_REQUEST_ID = 'unknown';
@@ -61,6 +62,9 @@ const dispatch = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> =>
   } else if (envelope.type === 'analyze.sentence-structure.v1') {
     console.log('handle sentence structure');
     result = await handleSentenceStructure(envelope);
+  } else if (envelope.type === 'analyze.quiz.v1') {
+    console.log('handle quiz');
+    result = await handleQuiz(envelope);
   } else {
     const _exhaustive: never = envelope;
     return errorResponse(

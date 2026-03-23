@@ -130,7 +130,8 @@ export type AnalyzeMessageType =
   | 'analyze.skeleton.v1'
   | 'analyze.paragraph.v1'
   | 'analyze.sentence.v1'
-  | 'analyze.sentence-structure.v1';
+  | 'analyze.sentence-structure.v1'
+  | 'analyze.quiz.v1';
 
 export type MessageType = AnalyzeMessageType; // extend here in the future
 
@@ -310,6 +311,25 @@ export interface AnalyzeSentenceStructureData {
   confidence?: number;
 }
 
+// 5) analyze.quiz.v1
+export interface AnalyzeQuizPayload {
+  doc_id: string;
+  article_text: string;
+}
+
+export interface QuizQuestion {
+  id: string;
+  type: 'multiple_choice';
+  question: string;
+  options: string[];
+  correctAnswerIndex: number;
+  explanation: string;
+}
+
+export interface AnalyzeQuizData {
+  questions: QuizQuestion[];
+}
+
 // -----------------------------
 // Union helpers per message type
 // -----------------------------
@@ -350,12 +370,18 @@ export interface RequestEnvelopeSentenceStructure extends StandardEnvelopeBase {
   payload: AnalyzeSentenceStructurePayload;
 }
 
+export interface RequestEnvelopeQuiz extends StandardEnvelopeBase {
+  type: 'analyze.quiz.v1';
+  payload: AnalyzeQuizPayload;
+}
+
 // Union of every request envelope so transports can accept a single type.
 export type RequestEnvelope =
   | RequestEnvelopeSkeleton
   | RequestEnvelopeParagraph
   | RequestEnvelopeSentence
-  | RequestEnvelopeSentenceStructure;
+  | RequestEnvelopeSentenceStructure
+  | RequestEnvelopeQuiz;
 
 // Response envelopes
 // Every response echoes back tracking fields so clients can correlate requests.
@@ -391,11 +417,17 @@ export interface ResponseEnvelopeSentenceStructure extends ResponseEnvelopeBase 
   frames?: EnvelopeFrame<Partial<AnalyzeSentenceStructureData>>[];
 }
 
+export interface ResponseEnvelopeQuiz extends ResponseEnvelopeBase {
+  data?: AnalyzeQuizData;
+  frames?: EnvelopeFrame<Partial<AnalyzeQuizData>>[];
+}
+
 export type ResponseEnvelope =
   | ResponseEnvelopeSkeleton
   | ResponseEnvelopeParagraph
   | ResponseEnvelopeSentence
-  | ResponseEnvelopeSentenceStructure;
+  | ResponseEnvelopeSentenceStructure
+  | ResponseEnvelopeQuiz;
 
 // -----------------------------
 // Utility guards (optional)
@@ -406,7 +438,8 @@ export const isAnalyzeType = (t: string): t is AnalyzeMessageType =>
   t === 'analyze.skeleton.v1' ||
   t === 'analyze.paragraph.v1' ||
   t === 'analyze.sentence.v1' ||
-  t === 'analyze.sentence-structure.v1';
+  t === 'analyze.sentence-structure.v1' ||
+  t === 'analyze.quiz.v1';
 
 // Type guards that help SDK callers branch on response status.
 export const isPartial = (r: ResponseEnvelope): r is ResponseEnvelope & { status: 'partial' } => r.status === 'partial';

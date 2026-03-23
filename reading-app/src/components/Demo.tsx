@@ -8,8 +8,9 @@ import { chunkParagraphsByWordCount } from '../utils/textUtils';
 import { isPending } from '../model/structure/Sentence';
 import { FloatingMenu } from './FloatingMenu';
 import { QuizWindow } from './quiz/QuizWindow';
+import type { QuizQuestion } from '../services/envelopes';
 
-import { streamingMessageService } from '../services/messageService.instance';
+import messageService, { streamingMessageService } from '../services/messageService.instance';
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -299,6 +300,8 @@ const ExampleArticle: React.FC = () => {
   const [analyzedData, setAnalyzedData] = useState<Paragraph[]>([]);
   const [viewMode, setViewMode] = useState<'raw' | 'analyzing'>('raw');
   const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
 
   useEffect(() => {
     const loadContent = async () => {
@@ -440,6 +443,32 @@ const ExampleArticle: React.FC = () => {
     }
   };
 
+  const handleGenerateQuiz = async (): Promise<void> => {
+    if (isGeneratingQuiz) return;
+    
+    setIsGeneratingQuiz(true);
+    setIsQuizWindowOpen(true);
+    
+    try {
+      const fullText = rawParagraphs.join('\n\n');
+      const response = await messageService.analyzeQuiz({
+        doc_id: `demo-${Date.now()}`,
+        article_text: fullText
+      });
+      
+      if (response.status === 'ok' && response.data?.questions) {
+        setQuizQuestions(response.data.questions);
+      } else {
+        console.error('Failed to generate quiz:', response.error);
+        // Fallback or error handled in UI ideally, but resetting to close/retry for now
+      }
+    } catch (err) {
+      console.error('Error generating quiz:', err);
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  };
+
   // Determine content to render
   let contentNode: ReactNode;
   if (viewMode === 'raw') {
@@ -495,8 +524,13 @@ const ExampleArticle: React.FC = () => {
       onLike={handleLike}
       onAnalyze={handleAnalyze}
     />
-    <FloatingMenu onQuizMeClick={() => setIsQuizWindowOpen(true)} />
-    <QuizWindow isOpen={isQuizWindowOpen} onClose={() => setIsQuizWindowOpen(false)} />
+    <FloatingMenu onQuizMeClick={handleGenerateQuiz} />
+    <QuizWindow 
+      isOpen={isQuizWindowOpen} 
+      onClose={() => setIsQuizWindowOpen(false)} 
+      questions={quizQuestions}
+      isLoading={isGeneratingQuiz}
+    />
     </>
   );
 };
