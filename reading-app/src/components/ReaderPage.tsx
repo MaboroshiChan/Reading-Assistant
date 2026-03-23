@@ -6,6 +6,7 @@ import { streamingMessageService } from '../services/messageService.instance';
 import './css/ReaderPage.css';
 import { chunkParagraphsByWordCount, isTitle } from '../utils/textUtils';
 import { FloatingMenu } from './FloatingMenu';
+import { QuizWindow } from './quiz/QuizWindow';
 
 interface ReaderPageProps {
     articleData: {
@@ -23,6 +24,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
     const [rawParagraphs, setRawParagraphs] = useState<string[]>([]);
     // Track if we have restored data to determine button state
     const [hasRestoredData, setHasRestoredData] = useState(false);
+    const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
 
     // Generate a unique key for storage
     const storageKey = React.useMemo(() => {
@@ -224,7 +226,8 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                     </div>
                 )}
             </main>
-            <FloatingMenu />
+            <FloatingMenu onQuizMeClick={() => setIsQuizWindowOpen(true)} />
+            <QuizWindow isOpen={isQuizWindowOpen} onClose={() => setIsQuizWindowOpen(false)} />
         </div>
     );
 };

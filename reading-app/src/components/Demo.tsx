@@ -7,6 +7,7 @@ import { ParagraphComponent } from './paragraph/Paragraph';
 import { chunkParagraphsByWordCount } from '../utils/textUtils';
 import { isPending } from '../model/structure/Sentence';
 import { FloatingMenu } from './FloatingMenu';
+import { QuizWindow } from './quiz/QuizWindow';
 
 import { streamingMessageService } from '../services/messageService.instance';
 
@@ -297,6 +298,7 @@ const ExampleArticle: React.FC = () => {
   const [rawParagraphs, setRawParagraphs] = useState<string[]>([]);
   const [analyzedData, setAnalyzedData] = useState<Paragraph[]>([]);
   const [viewMode, setViewMode] = useState<'raw' | 'analyzing'>('raw');
+  const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
 
   useEffect(() => {
     const loadContent = async () => {
@@ -493,7 +495,8 @@ const ExampleArticle: React.FC = () => {
       onLike={handleLike}
       onAnalyze={handleAnalyze}
     />
-    <FloatingMenu />
+    <FloatingMenu onQuizMeClick={() => setIsQuizWindowOpen(true)} />
+    <QuizWindow isOpen={isQuizWindowOpen} onClose={() => setIsQuizWindowOpen(false)} />
     </>
   );
 };
