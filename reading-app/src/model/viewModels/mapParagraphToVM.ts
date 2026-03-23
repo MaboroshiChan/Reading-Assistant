@@ -10,6 +10,11 @@ export interface ParagraphViewModel {
   roles?: string[];
   confidence?: number;
   errorMessage?: string;
+  topicSentence?: {
+    is_implicit?: boolean;
+    text?: string;
+    id?: string | number;
+  };
 }
 
 /**
@@ -32,6 +37,7 @@ export const mapParagraphToVM = (
     roles: analysis?.roles?.map((role) => role.role).filter(Boolean),
     confidence: analysis?.confidence,
     errorMessage: paragraph.errorMessage,
+    topicSentence: paragraph.topicSentence ?? analysis?.topic_sentence,
   };
 };
 

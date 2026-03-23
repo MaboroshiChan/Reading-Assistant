@@ -19,6 +19,13 @@ export default interface Paragraph {
 
   /** 可选：段落整体功能，如“引入”、“论证”、“结论”等 */
   function?: 'Introduction' | 'Premise' | 'Conclusion' | 'Evidence' | string;
+
+  /** The topic sentence of the paragraph if it has one */
+  topicSentence?: {
+    is_implicit?: boolean;
+    text?: string;
+    id?: string | number;
+  };
 }
 
 /**

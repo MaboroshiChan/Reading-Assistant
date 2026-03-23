@@ -209,6 +209,11 @@ export interface AnalyzeParagraphData {
   anchors?: Anchor[];
   tags?: ParagraphTag[];
   confidence?: number; // aggregate
+  topic_sentence?: {
+    is_implicit?: boolean;
+    text?: string;
+    id?: string | number;
+  };
 }
 
 // 3) analyze.sentence.v1
