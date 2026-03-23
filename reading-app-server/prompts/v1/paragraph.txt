@@ -57,19 +57,16 @@ General instructions:
     - CRITICAL: Do NOT extract predicates for subclauses.
     - Include the full predicate phrase when possible (e.g., `"has been"`, `"will be used"`, `"needs to be defined"`, `"has not been focused"`).
     - Usually there should be one green predicate item per main clause.
-  - Other red key words may include:
-    - clause markers (e.g., `"that"`, `"which"`, `"who"`, `"because"`, `"since"`, `"although"`, `"while"`, `"if"`, `"unless"`, `"whether"`, `"how"`, `"why"`, `"when"`, `"where"`, `"as"`, `"whenever"`)
-    - logical connectors (e.g., `"and"`, `"or"`, `"but"`, `"for"`, `"because"`, `"therefore"`, `"rather"`)
-    - negation markers (e.g., `"not"`, `"nothing"`, `"never"`)
-    - infinitive structures when they function structurally (e.g., `"to run"`, `"to be run"`, `"to attain"`)
-    - discourse anchors (e.g., `"the first"`, `"the second"`, `"the former"`, `"the latter"`, `"after him"`, `"above all"`, `"in fact"`)
-    - essential semantic units when they express a key concept (e.g., `"two distinct meanings"`, `"little precedence"`, `"to a certain extent"`)
-  - Do not extract low-information single prepositions alone (e.g., `"of"`, `"in"`, `"to"`, `"for"`, `"by"`, `"from"`, `"on"`).
-    - Instead, include a full prepositional phrase only when it forms a meaningful semantic unit (e.g., `"in fact"`, `"after him"`, `"to a certain extent"`, `"only with"`, `"in this field"`, `"above all"`).
-  - CRITICAL: DO NOT extract subjects, objects, or modifiers in the key words.
-  - Avoid long descriptive noun phrases, full clauses, and isolated grammatical function words with little semantic value.
-  - Keep semantic phrases intact when selected.
-  - `key_words` items are usually short (1-4 words), but may be slightly longer when needed to preserve a meaningful unit.
+  - Other red key words may include ONLY structural and logical elements:
+    - clause markers (e.g., "that", "which", "who", "because", "since", "although", "while", "if", "unless", "whether", "how", "why", "when", "where", "as", "whenever")
+    - logical connectors (e.g., "and", "or", "but", "however", "therefore", "thus", "despite", "rather")
+    - negation markers (e.g., "not", "nothing", "never")
+    - infinitive structures when they function structurally (e.g., "to run", "to be run", "to attain")
+    - discourse anchors (e.g., "the first", "the second", "the former", "the latter", "in fact", "for example")
+  - ABSOLUTE PROHIBITION: DO NOT extract ANY nouns, noun phrases, subjects, objects, or descriptors as key words (e.g., do NOT extract terms like "bird species", "openness of habitats", "geographical separation"). The LLM strictly fails this often; you must NOT highlight topic vocabulary in red.
+  - Do not extract single prepositions alone (e.g., "of", "in", "to", "for", "by", "from", "on").
+  - DO NOT extract full clauses, prepositional phrases that act as modifiers, or long descriptive phrases.
+  - `key_words` items MUST be extremely short (1-2 words). Do not extract chunks of text.
   - Every sentence must contain at least one `key_words` item.
 - `roles` describe major participant roles (topic, evidence, counterpoint, etc.).
 - `sentences` must contain one object per sentence in the paragraph, preserving order.
