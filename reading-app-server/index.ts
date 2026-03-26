@@ -2,6 +2,7 @@
 import http from 'node:http';
 import { handleMsg, handleStream } from './http/router';
 import { config } from './services/config';
+import { extractJsonFromText } from './services/llmService';
 
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -33,12 +34,28 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of result.stream) {
           text += chunk;
         }
-        const data = JSON.parse(text);
+        
+        let parsed;
+        try {
+          parsed = extractJsonFromText(text);
+        } catch (e) {
+          console.error("Failed to parse stream output", e);
+          parsed = { _raw_error: text };
+        }
+
+        if (parsed && typeof parsed === 'object' && 'status' in parsed && 'request_id' in parsed) {
+          // It's already a full envelope (e.g. from cache)
+          res.setHeader('Content-Type', 'application/json');
+          res.writeHead(200);
+          res.end(JSON.stringify(parsed));
+          return;
+        }
+
         const usage = await result.usage;
         const buffered = {
           ...result,
           stream: undefined,
-          data,
+          data: parsed,
           usage,
         };
         res.setHeader('Content-Type', 'application/json');

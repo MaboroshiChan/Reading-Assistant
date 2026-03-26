@@ -61,7 +61,7 @@ export const QuizWindow: React.FC<QuizWindowProps> = ({ isOpen, onClose, questio
                 <span className="quiz-icon">🧠</span>
             </div>
             <h3 className="quiz-placeholder-title">
-                {isLoading ? "Generating Your Challenge..." : "Ready to test your knowledge?"}
+                {isLoading ? "Quizzes are waiting to be generated..." : "Ready to test your knowledge?"}
             </h3>
             <p className="quiz-placeholder-desc">
                 {isLoading 

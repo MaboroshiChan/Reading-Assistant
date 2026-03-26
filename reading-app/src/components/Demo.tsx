@@ -1,4 +1,4 @@
-import React, { useState, type ReactNode, type CSSProperties, useEffect, useMemo } from 'react';
+import React, { useState, type ReactNode, type CSSProperties, useEffect, useMemo, useCallback } from 'react';
 import './css/Demo.css';
 // import './css/Highlighted.css';
 import type Paragraph from '../model/structure/Paragraph';
@@ -443,11 +443,15 @@ const ExampleArticle: React.FC = () => {
     }
   };
 
-  const handleGenerateQuiz = async (): Promise<void> => {
-    if (isGeneratingQuiz) return;
-    
+  const [showQuizNotification, setShowQuizNotification] = useState(false);
+  const [hasQuizError, setHasQuizError] = useState(false);
+  const hasRequestedQuiz = React.useRef(false);
+
+  const fetchQuiz = useCallback(async () => {
+    if (hasRequestedQuiz.current || rawParagraphs.length === 0) return;
+    hasRequestedQuiz.current = true;
     setIsGeneratingQuiz(true);
-    setIsQuizWindowOpen(true);
+    setHasQuizError(false);
     
     try {
       const fullText = rawParagraphs.join('\n\n');
@@ -456,16 +460,32 @@ const ExampleArticle: React.FC = () => {
         article_text: fullText
       });
       
-      if (response.status === 'ok' && response.data?.questions) {
+      if (response.status === 'ok' && response.data?.questions && response.data.questions.length > 0) {
         setQuizQuestions(response.data.questions);
+        setShowQuizNotification(true);
       } else {
         console.error('Failed to generate quiz:', response.error);
-        // Fallback or error handled in UI ideally, but resetting to close/retry for now
+        setHasQuizError(true);
       }
     } catch (err) {
       console.error('Error generating quiz:', err);
+      setHasQuizError(true);
     } finally {
       setIsGeneratingQuiz(false);
+    }
+  }, [rawParagraphs]);
+
+  useEffect(() => {
+    fetchQuiz();
+  }, [fetchQuiz]);
+
+  const handleOpenQuiz = (): void => {
+    if (hasQuizError) {
+      hasRequestedQuiz.current = false;
+      fetchQuiz();
+    } else {
+      setShowQuizNotification(false);
+      setIsQuizWindowOpen(true);
     }
   };
 
@@ -524,7 +544,7 @@ const ExampleArticle: React.FC = () => {
       onLike={handleLike}
       onAnalyze={handleAnalyze}
     />
-    <FloatingMenu onQuizMeClick={handleGenerateQuiz} />
+    <FloatingMenu onQuizMeClick={handleOpenQuiz} showNotification={showQuizNotification} isGenerating={isGeneratingQuiz} hasError={hasQuizError} />
     <QuizWindow 
       isOpen={isQuizWindowOpen} 
       onClose={() => setIsQuizWindowOpen(false)} 

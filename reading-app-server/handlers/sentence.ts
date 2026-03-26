@@ -467,14 +467,14 @@ const mapSentenceResponse = (
 
   const keyWords = shouldInclude('key_words') && payload.key_phrase
     ? (() => {
-      const words: string[] = [];
+      const words: Array<{ word: string; color: 'red' | 'green' }> = [];
       // Support both string (legacy/single) and array
       const raw = payload.key_phrase;
       const candidates = Array.isArray(raw) ? raw : [raw];
 
       for (const phrase of candidates) {
         if (!phrase || typeof phrase !== 'string') continue;
-        words.push(phrase);
+        words.push({ word: phrase, color: 'green' });
         const span = findSpan(text, phrase);
         if (span) {
           const anchor = makeAnchor({ sentenceId, span, text: phrase });

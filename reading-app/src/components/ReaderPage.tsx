@@ -74,11 +74,15 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         });
     }, [storageKey]);
 
-    const handleGenerateQuiz = async () => {
-        if (isGeneratingQuiz) return;
-        
+    const [showQuizNotification, setShowQuizNotification] = useState(false);
+    const [hasQuizError, setHasQuizError] = useState(false);
+    const hasRequestedQuiz = React.useRef(false);
+
+    const fetchQuiz = useCallback(async () => {
+        if (hasRequestedQuiz.current || rawParagraphs.length === 0) return;
+        hasRequestedQuiz.current = true;
         setIsGeneratingQuiz(true);
-        setIsQuizWindowOpen(true);
+        setHasQuizError(false);
         
         try {
             const fullText = rawParagraphs.join('\n\n');
@@ -87,15 +91,32 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                 article_text: fullText
             });
             
-            if (response.status === 'ok' && response.data?.questions) {
+            if (response.status === 'ok' && response.data?.questions && response.data.questions.length > 0) {
                 setQuizQuestions(response.data.questions);
+                setShowQuizNotification(true);
             } else {
                 console.error('Failed to generate quiz:', response.error);
+                setHasQuizError(true);
             }
         } catch (err) {
             console.error('Error generating quiz:', err);
+            setHasQuizError(true);
         } finally {
             setIsGeneratingQuiz(false);
+        }
+    }, [rawParagraphs, storageKey]);
+
+    useEffect(() => {
+        fetchQuiz();
+    }, [fetchQuiz]);
+
+    const handleOpenQuiz = () => {
+        if (hasQuizError) {
+            hasRequestedQuiz.current = false;
+            fetchQuiz();
+        } else {
+            setShowQuizNotification(false);
+            setIsQuizWindowOpen(true);
         }
     };
 
@@ -254,7 +275,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                     </div>
                 )}
             </main>
-            <FloatingMenu onQuizMeClick={handleGenerateQuiz} />
+            <FloatingMenu onQuizMeClick={handleOpenQuiz} showNotification={showQuizNotification} isGenerating={isGeneratingQuiz} hasError={hasQuizError} />
             <QuizWindow 
                 isOpen={isQuizWindowOpen} 
                 onClose={() => setIsQuizWindowOpen(false)} 

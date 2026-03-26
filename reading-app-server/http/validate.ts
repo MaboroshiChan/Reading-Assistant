@@ -9,6 +9,8 @@ import type {
   RequestEnvelopeSentence,
   RequestEnvelopeSkeleton,
   RequestEnvelopeSentenceStructure,
+  AnalyzeQuizPayload,
+  RequestEnvelopeQuiz,
   ResponseEnvelope,
 } from '../../reading-app/src/services/envelopes';
 
@@ -69,6 +71,17 @@ const isSentenceStructurePayload = (
   if (!isRecord(payload.span)) return false;
   const { start, end } = payload.span as Record<string, unknown>;
   return isNumber(start) && isNumber(end) && start >= 0 && end >= start;
+};
+
+/** Type guard for Quiz analysis payload. */
+const isQuizPayload = (
+  payload: unknown,
+): payload is AnalyzeQuizPayload => {
+  if (!isRecord(payload)) return false;
+  return (
+    isString(payload.doc_id) &&
+    isString(payload.article_text)
+  );
 };
 
 /**
@@ -224,6 +237,23 @@ export const validateEnvelope = (input: unknown): ValidationResult => {
       return {
         ok: true,
         envelope: input as unknown as RequestEnvelopeSentenceStructure,
+      };
+
+    case 'analyze.quiz.v1':
+      if (!isQuizPayload(payload)) {
+        return {
+          ok: false,
+          error: makeError(
+            requestId,
+            'E.BAD_REQUEST',
+            400,
+            'Invalid quiz payload',
+          ),
+        };
+      }
+      return {
+        ok: true,
+        envelope: input as unknown as RequestEnvelopeQuiz,
       };
 
     default:
