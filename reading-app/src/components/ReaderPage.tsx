@@ -7,6 +7,7 @@ import './css/ReaderPage.css';
 import { chunkParagraphsByWordCount, isTitle } from '../utils/textUtils';
 import { FloatingMenu } from './FloatingMenu';
 import { QuizWindow } from './quiz/QuizWindow';
+import { MasteryWindow } from './mastery/MasteryWindow';
 import type { QuizQuestion } from '../services/envelopes';
 import { useUserProgress } from '../hooks/useUserProgress';
 
@@ -27,6 +28,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
     // Track if we have restored data to determine button state
     const [hasRestoredData, setHasRestoredData] = useState(false);
     const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
+    const [isMasteryWindowOpen, setIsMasteryWindowOpen] = useState(false);
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
     const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
     
@@ -277,10 +279,10 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
             </main>
             <FloatingMenu 
                 onQuizMeClick={handleOpenQuiz} 
+                onMasteryClick={() => setIsMasteryWindowOpen(true)}
                 showNotification={showQuizNotification} 
                 isGenerating={isGeneratingQuiz} 
                 hasError={hasQuizError} 
-                userProgress={userProgress}
             />
             <QuizWindow 
                 isOpen={isQuizWindowOpen} 
@@ -288,6 +290,11 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                 questions={quizQuestions}
                 isLoading={isGeneratingQuiz}
                 onCorrectAnswer={handleCorrectAnswer}
+            />
+            <MasteryWindow
+                isOpen={isMasteryWindowOpen}
+                onClose={() => setIsMasteryWindowOpen(false)}
+                userProgress={userProgress}
             />
         </div>
     );

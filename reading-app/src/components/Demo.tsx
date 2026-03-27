@@ -8,6 +8,7 @@ import { chunkParagraphsByWordCount } from '../utils/textUtils';
 import { isPending } from '../model/structure/Sentence';
 import { FloatingMenu } from './FloatingMenu';
 import { QuizWindow } from './quiz/QuizWindow';
+import { MasteryWindow } from './mastery/MasteryWindow';
 import type { QuizQuestion } from '../services/envelopes';
 import { useUserProgress } from '../hooks/useUserProgress';
 
@@ -312,6 +313,7 @@ const ExampleArticle: React.FC = () => {
   const [analyzedData, setAnalyzedData] = useState<Paragraph[]>([]);
   const [viewMode, setViewMode] = useState<'raw' | 'analyzing'>('raw');
   const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
+  const [isMasteryWindowOpen, setIsMasteryWindowOpen] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const { progress: userProgress, handleCorrectAnswer } = useUserProgress();
@@ -620,10 +622,10 @@ const ExampleArticle: React.FC = () => {
     />
     <FloatingMenu 
       onQuizMeClick={handleOpenQuiz} 
+      onMasteryClick={() => setIsMasteryWindowOpen(true)}
       showNotification={showQuizNotification} 
       isGenerating={isGeneratingQuiz} 
       hasError={hasQuizError} 
-      userProgress={userProgress}
     />
     <QuizWindow 
       isOpen={isQuizWindowOpen} 
@@ -631,6 +633,11 @@ const ExampleArticle: React.FC = () => {
       questions={quizQuestions}
       isLoading={isGeneratingQuiz}
       onCorrectAnswer={handleCorrectAnswer}
+    />
+    <MasteryWindow
+      isOpen={isMasteryWindowOpen}
+      onClose={() => setIsMasteryWindowOpen(false)}
+      userProgress={userProgress}
     />
     </>
   );
