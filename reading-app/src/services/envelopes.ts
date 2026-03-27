@@ -324,6 +324,7 @@ export interface QuizQuestion {
   options: string[];
   correctAnswerIndex: number;
   explanation: string;
+  skill: 'Facts' | 'Inference' | 'Tone' | 'Argument';
 }
 
 export interface AnalyzeQuizData {

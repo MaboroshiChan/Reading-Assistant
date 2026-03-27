@@ -8,9 +8,10 @@ interface QuizWindowProps {
     onClose: () => void;
     questions: QuizQuestion[] | null;
     isLoading: boolean;
+    onCorrectAnswer?: (skill: string) => void;
 }
 
-export const QuizWindow: React.FC<QuizWindowProps> = ({ isOpen, onClose, questions, isLoading }) => {
+export const QuizWindow: React.FC<QuizWindowProps> = ({ isOpen, onClose, questions, isLoading, onCorrectAnswer }) => {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [selectedOption, setSelectedOption] = useState<number | null>(null);
     const [isAnswerRevealed, setIsAnswerRevealed] = useState(false);
@@ -40,6 +41,9 @@ export const QuizWindow: React.FC<QuizWindowProps> = ({ isOpen, onClose, questio
         setIsAnswerRevealed(true);
         if (selectedOption === currentQ.correctAnswerIndex) {
             setScore(prev => prev + 1);
+            if (onCorrectAnswer && currentQ.skill) {
+                onCorrectAnswer(currentQ.skill);
+            }
         }
     };
 

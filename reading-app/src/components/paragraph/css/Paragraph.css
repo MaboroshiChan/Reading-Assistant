@@ -42,6 +42,33 @@
   /* Disable purple click on whole container */
 }
 
+.paragraph-reanalyze-btn {
+  position: absolute;
+  top: 0;
+  right: -24px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.paragraph.component:hover .paragraph-reanalyze-btn {
+  opacity: 0.5;
+}
+
+.paragraph-reanalyze-btn:hover {
+  opacity: 1 !important;
+  transform: scale(1.1);
+  background: rgba(0, 0, 0, 0.05);
+}
+
 @media (prefers-color-scheme: dark) {
   /* ... existing dark mode adjustments if needed ... */
+  .paragraph-reanalyze-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
 }

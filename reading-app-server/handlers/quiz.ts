@@ -103,6 +103,12 @@ const coerceQuizResponse = (value: unknown): QuizQuestion[] => {
     const id = asString(q.id) ?? `q_${Math.random().toString(36).substring(2, 9)}`;
     const question = asString(q.question);
     const explanation = asString(q.explanation);
+    let skill = asString(q.skill) as 'Facts' | 'Inference' | 'Tone' | 'Argument' | undefined;
+    
+    // Default fallback if skill is missing or invalid
+    if (skill !== 'Facts' && skill !== 'Inference' && skill !== 'Tone' && skill !== 'Argument') {
+      skill = 'Facts';
+    }
 
     if (!question || !explanation) return null;
 
@@ -113,6 +119,7 @@ const coerceQuizResponse = (value: unknown): QuizQuestion[] => {
       options,
       correctAnswerIndex,
       explanation,
+      skill,
     };
   }).filter((q): q is QuizQuestion => q !== null);
 };
@@ -137,7 +144,8 @@ const buildQuizData = async (
                 question: "What is the main topic of this mock article?",
                 options: ["Mock A", "Mock B", "Mock C", "Mock D"],
                 correctAnswerIndex: 0,
-                explanation: "This is a mock answer for testing."
+                explanation: "This is a mock answer for testing.",
+                skill: "Facts"
             }
         ]
     };

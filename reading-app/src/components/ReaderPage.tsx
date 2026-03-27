@@ -8,6 +8,7 @@ import { chunkParagraphsByWordCount, isTitle } from '../utils/textUtils';
 import { FloatingMenu } from './FloatingMenu';
 import { QuizWindow } from './quiz/QuizWindow';
 import type { QuizQuestion } from '../services/envelopes';
+import { useUserProgress } from '../hooks/useUserProgress';
 
 interface ReaderPageProps {
     articleData: {
@@ -28,6 +29,8 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
     const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
     const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+    
+    const { progress: userProgress, handleCorrectAnswer } = useUserProgress();
 
     // Generate a unique key for storage
     const storageKey = React.useMemo(() => {
@@ -106,18 +109,15 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         }
     }, [rawParagraphs, storageKey]);
 
-    useEffect(() => {
-        fetchQuiz();
-    }, [fetchQuiz]);
+    // Quiz will be fetched manually via button click.
 
     const handleOpenQuiz = () => {
-        if (hasQuizError) {
-            hasRequestedQuiz.current = false;
+        setIsQuizWindowOpen(true);
+        if (!hasRequestedQuiz.current || hasQuizError) {
+            if (hasQuizError) hasRequestedQuiz.current = false;
             fetchQuiz();
-        } else {
-            setShowQuizNotification(false);
-            setIsQuizWindowOpen(true);
         }
+        setShowQuizNotification(false);
     };
 
     const handleAnalyze = async () => {
@@ -275,12 +275,19 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                     </div>
                 )}
             </main>
-            <FloatingMenu onQuizMeClick={handleOpenQuiz} showNotification={showQuizNotification} isGenerating={isGeneratingQuiz} hasError={hasQuizError} />
+            <FloatingMenu 
+                onQuizMeClick={handleOpenQuiz} 
+                showNotification={showQuizNotification} 
+                isGenerating={isGeneratingQuiz} 
+                hasError={hasQuizError} 
+                userProgress={userProgress}
+            />
             <QuizWindow 
                 isOpen={isQuizWindowOpen} 
                 onClose={() => setIsQuizWindowOpen(false)} 
                 questions={quizQuestions}
                 isLoading={isGeneratingQuiz}
+                onCorrectAnswer={handleCorrectAnswer}
             />
         </div>
     );

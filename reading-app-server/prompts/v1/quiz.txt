@@ -19,7 +19,8 @@ Always respond with a single JSON object using this shape:
         "string"
       ],
       "correctAnswerIndex": 0,
-      "explanation": "string"
+      "explanation": "string",
+      "skill": "string"
     }
   ]
 }
@@ -30,6 +31,7 @@ General instructions:
 - Questions should vary in difficulty and type (e.g., factual recall, inference, main idea, vocabulary in context).
 - `id` should be a unique string identifier for the question (e.g., "q1", "q2").
 - `type` is always "multiple_choice".
+- `skill` MUST be exactly one of the following categories: "Facts", "Inference", "Tone", or "Argument".
 - `options` must be an array of exactly 4 plausible choices. One is the correct answer. The other three must be "Deceptive Distractors" designed using these specific ETS/College Board "trap" styles:
   1. The "Half-Right, Half-Wrong": The first half of the statement is perfectly accurate according to the passage, but the second half adds a detail that is false or not mentioned.
   2. The "Rotten Spot": A perfectly good answer that contains one single word (like "always," "never," or "only") that makes the statement too extreme to be true.

@@ -13,6 +13,7 @@ import { SentenceBridge as ImportedSentenceBridge } from "../sentence/Bridge";
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
+  onReanalyze?: (id: number) => void;
 }
 
 /**
@@ -20,7 +21,7 @@ interface ParagraphComponentProps {
  *
  * @param props - Component properties containing the paragraph data.
  */
-export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
+export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph, onReanalyze }) => {
   // Special rendering for titles
   if (paragraph.kind === 'title') {
     return (
@@ -168,8 +169,18 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
         }}
       />
 
-      <div className="paragraph-content-wrapper" style={{ flex: 1 }}>
+      <div className="paragraph-content-wrapper" style={{ flex: 1, position: 'relative' }}>
         {isClicked && <ParagraphPanel vm={paragraphVm} />}
+        {onReanalyze && isInteractive && (
+          <button 
+            className="paragraph-reanalyze-btn" 
+            onClick={(e) => { e.stopPropagation(); onReanalyze(paragraph.id); }}
+            title="Reanalyze Paragraph"
+            type="button"
+          >
+            🔄
+          </button>
+        )}
 
         <div className="paragraph-content" onClick={handleClick}>
           {paragraph.sentences.map((sentence, index) => {
