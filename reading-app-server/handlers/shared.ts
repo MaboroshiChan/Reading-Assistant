@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import type {
   Anchor,
   AnchorSpan,
-} from '../../reading-app/src/services/envelopes';
+} from '../../packages/contracts/src';
 
 export interface SentenceFragment {
   text: string;

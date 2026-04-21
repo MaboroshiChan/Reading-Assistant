@@ -9,7 +9,7 @@ import type {
   RequestEnvelopeSentence,
   ResponseEnvelopeSentence,
   SentenceRole,
-} from '../../reading-app/src/services/envelopes';
+} from '../../packages/contracts/src';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { json as llmJson, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';

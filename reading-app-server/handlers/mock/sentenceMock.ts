@@ -4,7 +4,7 @@ import type {
   ModalMarker,
   RequestEnvelopeSentence,
   SentenceRole,
-} from '../../../reading-app/src/services/envelopes';
+} from '../../../packages/contracts/src';
 import { makeAnchor, tokenize } from '../shared';
 import { handlerLog } from '../logger';
 import {

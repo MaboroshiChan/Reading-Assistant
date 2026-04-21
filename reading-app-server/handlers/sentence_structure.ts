@@ -6,7 +6,7 @@ import type {
   ResponseEnvelopeSentenceStructure,
   SentenceStructureAnalysisData,
   SentenceStructureUnitData,
-} from '../../reading-app/src/services/envelopes';
+} from '../../packages/contracts/src';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { buildStableCacheKey, hashString } from './shared';

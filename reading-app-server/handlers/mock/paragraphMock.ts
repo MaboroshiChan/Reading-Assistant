@@ -4,7 +4,7 @@ import type {
   ParagraphRole,
   ParagraphRhetoric,
   RequestEnvelopeParagraph,
-} from '../../../reading-app/src/services/envelopes';
+} from '../../../packages/contracts/src';
 import {
   makeAnchor,
   splitIntoSentences,

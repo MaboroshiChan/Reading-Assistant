@@ -3,7 +3,7 @@ import type {
   RequestEnvelopeSkeleton,
   SkeletonParagraph,
   SkeletonSentence,
-} from '../../../reading-app/src/services/envelopes';
+} from '../../../packages/contracts/src';
 import { hashString, splitIntoSentences, summarize } from '../shared';
 
 /**

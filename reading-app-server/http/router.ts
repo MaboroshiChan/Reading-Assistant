@@ -1,7 +1,7 @@
 import type {
   RequestEnvelope,
   ResponseEnvelope,
-} from '../../reading-app/src/services/envelopes';
+} from '../../packages/contracts/src';
 import type { CallReturn } from '../services/llmService';
 import { handleParagraph } from '../handlers/paragraph';
 import { handleSentence } from '../handlers/sentence';

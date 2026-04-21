@@ -3,7 +3,7 @@ import type {
   SentenceStructureAnalysisData,
   SentenceStructureUnitData,
   RequestEnvelopeSentenceStructure,
-} from '../../../reading-app/src/services/envelopes';
+} from '../../../packages/contracts/src';
 
 const createUnitId = (prefix: string, index: number): string => `${prefix}-${index.toString(36)}`;
 

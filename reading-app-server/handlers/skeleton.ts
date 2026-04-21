@@ -2,7 +2,7 @@ import type {
   AnalyzeSkeletonData,
   RequestEnvelopeSkeleton,
   ResponseEnvelopeSkeleton,
-} from '../../reading-app/src/services/envelopes';
+} from '../../packages/contracts/src';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { hashString } from './shared';
