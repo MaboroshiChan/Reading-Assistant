@@ -6,6 +6,7 @@ const sentence_1 = require("../handlers/sentence");
 const skeleton_1 = require("../handlers/skeleton");
 const sentence_structure_1 = require("../handlers/sentence_structure");
 const quiz_1 = require("../handlers/quiz");
+const knowledge_extraction_1 = require("../handlers/knowledge_extraction");
 const validate_1 = require("./validate");
 const UNKNOWN_REQUEST_ID = 'unknown';
 /**
@@ -55,6 +56,10 @@ const dispatch = async (envelope) => {
     else if (envelope.type === 'analyze.quiz.v1') {
         console.log('handle quiz');
         result = await (0, quiz_1.handleQuiz)(envelope);
+    }
+    else if (envelope.type === 'analyze.knowledge-extraction.v1') {
+        console.log('handle knowledge extraction');
+        result = await (0, knowledge_extraction_1.handleKnowledgeExtraction)(envelope);
     }
     else {
         const _exhaustive = envelope;

@@ -15,23 +15,13 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -56,27 +46,24 @@ const buildCacheKey = (req) => {
         payload: req.payload,
         context: req.context ?? {},
         prompt_version: PROMPT_VERSION,
-        model: config_1.config.useMockLLM ? `mock:${config_1.config.model}` : config_1.config.model,
+        model: config_1.config.model,
     });
 };
-let cachedQuizPrompt = null;
+let cachedQuizSystemPrompt = null;
 /**
  * Loads the quiz generation prompt from the filesystem, with caching.
  */
-const loadQuizPrompt = async () => {
-    if (cachedQuizPrompt)
-        return cachedQuizPrompt;
-    cachedQuizPrompt = await promises_1.default.readFile(PROMPT_PATH, 'utf8');
-    return cachedQuizPrompt;
+const loadQuizSystemPrompt = async () => {
+    if (cachedQuizSystemPrompt)
+        return cachedQuizSystemPrompt;
+    cachedQuizSystemPrompt = (await promises_1.default.readFile(PROMPT_PATH, 'utf8')).trim();
+    return cachedQuizSystemPrompt;
 };
 /**
  * Builds the full LLM prompt for quiz generation.
  */
-const buildPrompt = async (req) => {
-    const basePrompt = (await loadQuizPrompt()).trim();
+const buildUserPrompt = (req) => {
     const sections = [
-        basePrompt,
-        '',
         `Document ID: ${req.payload.doc_id}`,
         `Prompt Version: ${PROMPT_VERSION}`,
         '',
@@ -145,48 +132,21 @@ const coerceQuizResponse = (value) => {
  * Orchestrates quiz data collection from LLM.
  */
 const buildQuizData = async (req) => {
-    if (config_1.config.useMockLLM) {
-        (0, logger_1.handlerLog)('quiz', 'building mock payload', {
-            requestId: req.request_id,
-            mock: true,
-        });
-        const mockData = {
-            questions: [
-                {
-                    id: "mock_q1",
-                    type: "multiple_choice",
-                    question: "What is the main topic of this mock article?",
-                    options: ["Mock A", "Mock B", "Mock C", "Mock D"],
-                    correctAnswerIndex: 0,
-                    explanation: "This is a mock answer for testing.",
-                    skill: "Facts"
-                }
-            ]
-        };
-        const text = JSON.stringify(mockData);
-        const stream = (async function* () {
-            yield text;
-        })();
-        return {
-            data: stream,
-            usage: Promise.resolve({
-                modelId: `mock:${config_1.config.model}`,
-                inputTokens: 0,
-                outputTokens: 0,
-            }),
-        };
-    }
     (0, logger_1.handlerLog)('quiz', 'building LLM prompt', {
         requestId: req.request_id,
         promptVersion: PROMPT_VERSION,
     });
-    const prompt = await buildPrompt(req);
+    const [systemPrompt, userPrompt] = await Promise.all([
+        loadQuizSystemPrompt(),
+        Promise.resolve(buildUserPrompt(req)),
+    ]);
+    const llmClient = (0, llmService_1.createLLMClient)({ systemPrompt });
     (0, logger_1.handlerLog)('quiz', 'LLM prompt prepared', {
         requestId: req.request_id,
-        promptLength: prompt.length,
-        mock: false,
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: userPrompt.length,
     });
-    return (0, llmService_1.json)(prompt);
+    return llmClient.json(userPrompt);
 };
 /**
  * The main handler for quiz generation requests.
@@ -194,7 +154,6 @@ const buildQuizData = async (req) => {
 const handleQuiz = async (req) => {
     (0, logger_1.handlerLog)('quiz', 'request received', {
         requestId: req.request_id,
-        mock: config_1.config.useMockLLM,
         promptVersion: PROMPT_VERSION,
     });
     const cacheKey = buildCacheKey(req);
@@ -229,15 +188,9 @@ const handleQuiz = async (req) => {
         // Background processing
         try {
             const usage = await usagePromise;
-            let data;
-            if (config_1.config.useMockLLM) {
-                data = JSON.parse(text);
-            }
-            else {
-                const object = (0, llmService_1.extractJsonFromText)(text);
-                const questions = coerceQuizResponse(object);
-                data = { questions };
-            }
+            const object = (0, llmService_1.extractJsonFromText)(text);
+            const questions = coerceQuizResponse(object);
+            const data = { questions };
             const response = {
                 request_id: req.request_id,
                 status: 'ok',

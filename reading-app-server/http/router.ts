@@ -8,6 +8,7 @@ import { handleSentence } from '../handlers/sentence';
 import { handleSkeleton } from '../handlers/skeleton';
 import { handleSentenceStructure } from '../handlers/sentence_structure';
 import { handleQuiz } from '../handlers/quiz';
+import { handleKnowledgeExtraction } from '../handlers/knowledge_extraction';
 import { errorResponse, validateEnvelope } from './validate';
 
 const UNKNOWN_REQUEST_ID = 'unknown';
@@ -65,6 +66,9 @@ const dispatch = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> =>
   } else if (envelope.type === 'analyze.quiz.v1') {
     console.log('handle quiz');
     result = await handleQuiz(envelope);
+  } else if (envelope.type === 'analyze.knowledge-extraction.v1') {
+    console.log('handle knowledge extraction');
+    result = await handleKnowledgeExtraction(envelope);
   } else {
     const _exhaustive: never = envelope;
     return errorResponse(

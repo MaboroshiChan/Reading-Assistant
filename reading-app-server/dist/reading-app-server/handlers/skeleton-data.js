@@ -1,14 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildMockSkeletonData = void 0;
-const shared_1 = require("../shared");
+exports.buildSkeletonData = void 0;
+const shared_1 = require("./shared");
 /**
- * Generates mock skeleton data (paragraphs and sentences) for a document.
+ * Generates deterministic skeleton data (paragraphs and sentences) for a document.
  *
  * @param req - The request envelope.
- * @returns Mock AnalyzeSkeletonData.
+ * @returns Generated AnalyzeSkeletonData.
  */
-const buildMockSkeletonData = (req) => {
+const buildSkeletonData = (req) => {
     const paragraphs = [];
     const sentences = [];
     req.payload.sections.forEach((section, sectionIndex) => {
@@ -45,7 +45,7 @@ const buildMockSkeletonData = (req) => {
         data.entity_index = Array.from({ length: Math.min(3, req.payload.options.max_entities) }).map((_, idx) => ({
             id: `entity-${idx + 1}`,
             type: 'TERM',
-            canonical: `Mock Entity ${idx + 1}`,
+            canonical: `Entity ${idx + 1}`,
             aliases: [],
             spans: [],
         }));
@@ -54,10 +54,10 @@ const buildMockSkeletonData = (req) => {
         data.embeddings_meta = {
             dim: 768,
             chunking: 'sentence',
-            index_id: `mock-index-${(0, shared_1.hashString)(req.payload.doc_id).slice(0, 6)}`,
+            index_id: `index-${(0, shared_1.hashString)(req.payload.doc_id).slice(0, 6)}`,
         };
     }
     return data;
 };
-exports.buildMockSkeletonData = buildMockSkeletonData;
-//# sourceMappingURL=skeletonMock.js.map
+exports.buildSkeletonData = buildSkeletonData;
+//# sourceMappingURL=skeleton-data.js.map

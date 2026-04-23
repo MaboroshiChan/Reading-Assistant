@@ -2,10 +2,8 @@
  * llmService.ts — Minimal LLM Adapter (no any)
  *
  * Purpose
- *  - Provide a tiny, framework-agnostic client for LLM calls used by handlers.
- *  - Two entrypoints:
- *      1) complete(): prompt → plain text
- *      2) json<T>(): prompt → structured JSON (runtime-validated if you pass a validator)
+ *  - Provide a tiny, framework-agnostic client factory for LLM calls used by handlers.
+ *  - Each client is created with a stable system prompt and then executes user prompts.
  *  - Decoupled from client envelopes; handlers decide prompts and DTO types.
  *
  * Notes
@@ -46,53 +44,66 @@ export interface CompleteResult {
   usage: LLMUsage;
 }
 
+export interface LLMClientFactoryOptions {
+  systemPrompt: string;
+  model?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+  timeoutMs?: number;
+}
+
+export interface LLMClient {
+  complete(userPrompt: string, opts?: LLMOptions): Promise<CompleteResult>;
+  json(userPrompt: string, opts?: LLMOptions): Promise<CallReturn<string>>;
+}
+
 // -----------------------------
 // Public API
 // -----------------------------
 
 /**
- * Performs a plain-text completion using the LLM.
- *
- * @param prompt - The full text prompt for the LLM.
- * @param opts - Configuration options for the completion.
- * @returns A promise resolving to a CompleteResult (text and usage).
+ * Creates a reusable LLM client bound to a stable system prompt.
  */
-export async function complete(prompt: string, opts: LLMOptions = {}): Promise<CompleteResult> {
-  const { data, usage } = await callLLM({
-    prompt,
-    responseAs: 'text',
-    model: opts.model ?? config.model,
-    temperature: opts.temperature ?? config.temperature,
-    maxOutputTokens: opts.maxOutputTokens,
-    timeoutMs: opts.timeoutMs ?? config.timeoutMs,
-    signal: opts.signal,
-  });
-
-  let text = '';
-  for await (const chunk of data) {
-    text += chunk;
+export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMClient {
+  const systemPrompt = factoryOptions.systemPrompt.trim();
+  if (!systemPrompt) {
+    throw new Error('LLM client factory requires a non-empty system prompt');
   }
 
-  return { text, usage: await usage };
-}
+  return {
+    async complete(userPrompt: string, opts: LLMOptions = {}): Promise<CompleteResult> {
+      const { data, usage } = await callLLM({
+        systemPrompt,
+        userPrompt,
+        responseAs: 'text',
+        model: opts.model ?? factoryOptions.model ?? config.model,
+        temperature: opts.temperature ?? factoryOptions.temperature ?? config.temperature,
+        maxOutputTokens: opts.maxOutputTokens ?? factoryOptions.maxOutputTokens,
+        timeoutMs: opts.timeoutMs ?? factoryOptions.timeoutMs ?? config.timeoutMs,
+        signal: opts.signal,
+      });
 
-/**
- * Performs a JSON-structured completion using the LLM.
- *
- * @param prompt - The full text prompt for the LLM.
- * @param opts - Configuration options for the completion.
- * @returns A promise resolving to a CallReturn (stream and usage).
- */
-export async function json(prompt: string, opts: LLMOptions = {}): Promise<CallReturn<string>> {
-  return callLLM({
-    prompt,
-    responseAs: 'json',
-    model: opts.model ?? config.model,
-    temperature: opts.temperature ?? config.temperature,
-    maxOutputTokens: opts.maxOutputTokens,
-    timeoutMs: opts.timeoutMs ?? config.timeoutMs,
-    signal: opts.signal,
-  });
+      let text = '';
+      for await (const chunk of data) {
+        text += chunk;
+      }
+
+      return { text, usage: await usage };
+    },
+
+    json(userPrompt: string, opts: LLMOptions = {}): Promise<CallReturn<string>> {
+      return callLLM({
+        systemPrompt,
+        userPrompt,
+        responseAs: 'json',
+        model: opts.model ?? factoryOptions.model ?? config.model,
+        temperature: opts.temperature ?? factoryOptions.temperature ?? config.temperature,
+        maxOutputTokens: opts.maxOutputTokens ?? factoryOptions.maxOutputTokens,
+        timeoutMs: opts.timeoutMs ?? factoryOptions.timeoutMs ?? config.timeoutMs,
+        signal: opts.signal,
+      });
+    },
+  };
 }
 
 // -----------------------------
@@ -100,7 +111,8 @@ export async function json(prompt: string, opts: LLMOptions = {}): Promise<CallR
 // -----------------------------
 
 interface CallArgs {
-  prompt: string;
+  systemPrompt: string;
+  userPrompt: string;
   responseAs: 'text' | 'json';
   model: string;
   temperature?: number;
@@ -114,17 +126,13 @@ const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
 const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
 
 /**
- * Calls the appropriate LLM implementation (real or mock) based on configuration.
+ * Calls the configured LLM implementation.
  *
  * @param args - Arguments for the LLM call.
  * @returns A promise resolving to a CallReturn with streaming data and usage.
  */
 async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
   await logPromptIfDebug(args);
-
-  if (config.useMockLLM) {
-    return callMockLLM(args);
-  }
 
   // Note: The Google Generative AI Node SDK does not currently expose a simple AbortSignal hook
   // for generateContent in the same way fetch does, but we can respect the timeout for the wrapper.
@@ -139,6 +147,7 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
     console.log(`LLM model is ${args.model}`);
     const model = genAI.getGenerativeModel({
       model: args.model,
+      systemInstruction: args.systemPrompt,
       generationConfig: {
         maxOutputTokens: args.maxOutputTokens,
         temperature: args.temperature,
@@ -146,7 +155,7 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
       },
     });
 
-    const result: GenerateContentStreamResult = await model.generateContentStream(args.prompt);
+    const result: GenerateContentStreamResult = await model.generateContentStream(args.userPrompt);
 
     const usagePromise = result.response.then(res => ({
       inputTokens: res.usageMetadata?.promptTokenCount || 0,
@@ -200,55 +209,20 @@ async function logPromptIfDebug(args: CallArgs): Promise<void> {
     responseAs: args.responseAs,
     temperature: args.temperature,
     maxOutputTokens: args.maxOutputTokens,
-    prompt: args.prompt,
+    systemPrompt: args.systemPrompt,
+    userPrompt: args.userPrompt,
   };
 
   try {
     await fs.mkdir(LOG_DIR, { recursive: true });
     await fs.appendFile(LOG_FILE, `${JSON.stringify(entry)}\n`, 'utf8');
     console.log(
-      `[llm-debug] ${timestamp} model=${args.model} responseAs=${args.responseAs}\n${args.prompt}`,
+      `[llm-debug] ${timestamp} model=${args.model} responseAs=${args.responseAs}\n${formatDebugPrompt(args)}`,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[llm-debug] failed to persist prompt log: ${message}`);
   }
-}
-
-/**
- * Simulates an LLM call for testing or development.
- *
- * @param args - Arguments for the LLM call.
- * @returns A promise resolving to a CallReturn with mock data.
- */
-async function callMockLLM(args: CallArgs): Promise<CallReturn<string>> {
-  if (args.signal?.aborted) {
-    throw new Error('Mock LLM call aborted');
-  }
-
-  const usage: LLMUsage = {
-    modelId: `mock:${args.model}`,
-    inputTokens: 0,
-    outputTokens: 0,
-  };
-
-  let text: string;
-  if (args.responseAs === 'text') {
-    text = `[mock:${args.model}] ${truncate(args.prompt.replace(/\s+/g, ' ').trim(), 200)}`;
-  } else {
-    const json = extractJsonFromPrompt(args.prompt) ?? {
-      mock: true,
-      model: args.model,
-      prompt_preview: truncate(args.prompt, 200),
-    };
-    text = JSON.stringify(json, null, 2);
-  }
-
-  const data = (async function* () {
-    yield text;
-  })();
-
-  return { data, usage: Promise.resolve(usage) };
 }
 
 /**
@@ -276,7 +250,9 @@ async function persistLLMResponse(args: CallArgs, text: string): Promise<void> {
       responseAs: args.responseAs,
       text: text || null,
       parsed: parsed ?? undefined,
-      prompt: config.debugMode ? args.prompt : undefined,
+      systemPrompt: config.debugMode ? args.systemPrompt : undefined,
+      userPrompt: config.debugMode ? args.userPrompt : undefined,
+      prompt: config.debugMode ? formatDebugPrompt(args) : undefined,
     };
     const filePath = path.join(RESPONSE_DIR, `${safeStamp}_${args.model}.json`);
     await fs.writeFile(filePath, JSON.stringify(record, null, 2), 'utf8');
@@ -327,6 +303,16 @@ function normalizeError(error: unknown): Error {
   return new Error('Unknown LLM client error');
 }
 
+function formatDebugPrompt(args: CallArgs): string {
+  return [
+    '[System Prompt]',
+    args.systemPrompt,
+    '',
+    '[User Prompt]',
+    args.userPrompt,
+  ].join('\n');
+}
+
 /**
  * Truncates a string to a maximum length, adding an ellipsis if necessary.
  *
@@ -340,7 +326,7 @@ function truncate(text: string, maxLen: number): string {
 }
 
 /**
- * Attempts to extract JSON from a prompt string, used for mock LLM simulations.
+ * Attempts to extract JSON from a prompt string for deterministic prompt-derived data.
  *
  * @param prompt - The prompt containing a potential JSON block.
  * @returns The parsed JSON or null.

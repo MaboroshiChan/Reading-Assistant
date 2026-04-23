@@ -6,7 +6,7 @@ import type {
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { hashString } from './shared';
-import { buildMockSkeletonData } from './mock/skeletonMock';
+import { buildSkeletonData as generateSkeletonData } from './skeleton-data';
 import { handlerLog } from './logger';
 import type { CallReturn } from '../services/llmService';
 
@@ -25,42 +25,25 @@ const buildCacheKey = (req: RequestEnvelopeSkeleton): string => {
 };
 
 /**
- * Orchestrates skeleton data collection. Currently defaults to mock data.
+ * Orchestrates skeleton data collection. Skeleton analysis currently uses
+ * the deterministic builder until a live LLM-backed implementation lands.
  *
  * @param req - The request envelope.
  * @returns A promise resolving to the call results.
  */
-const buildSkeletonData = async (
+const prepareSkeletonData = async (
   req: RequestEnvelopeSkeleton,
 ): Promise<CallReturn<string>> => {
-  if (config.useMockLLM) {
-    handlerLog('skeleton', 'building mock payload', {
-      requestId: req.request_id,
-      docId: req.payload.doc_id,
-    });
-    const mockData = await buildMockSkeletonData(req);
-    const text = JSON.stringify(mockData);
-    return {
-      data: (async function* () { yield text; })(),
-      usage: Promise.resolve({
-        modelId: `mock:${config.model}`,
-        inputTokens: 0,
-        outputTokens: 0,
-      }),
-    };
-  }
-
-  handlerLog('skeleton', 'building LLM payload', {
+  handlerLog('skeleton', 'building generated payload', {
     requestId: req.request_id,
     docId: req.payload.doc_id,
   });
-  // TODO: integrate with real LLM-backed skeleton endpoint.
-  const mockData = await buildMockSkeletonData(req);
-  const text = JSON.stringify(mockData);
+  const data = generateSkeletonData(req);
+  const text = JSON.stringify(data);
   return {
     data: (async function* () { yield text; })(),
     usage: Promise.resolve({
-      modelId: `mock:${config.model}`,
+      modelId: config.model,
       inputTokens: 0,
       outputTokens: 0,
     }),
@@ -78,7 +61,6 @@ export const handleSkeleton = async (
 ): Promise<CallReturn<string>> => {
   handlerLog('skeleton', 'request received', {
     requestId: req.request_id,
-    mock: config.useMockLLM,
   });
   const cacheKey = buildCacheKey(req);
   const cached = cache.get<ResponseEnvelopeSkeleton>(cacheKey);
@@ -97,7 +79,7 @@ export const handleSkeleton = async (
   }
 
   const started = Date.now();
-  const { data: stream, usage: usagePromise } = await buildSkeletonData(req);
+  const { data: stream, usage: usagePromise } = await prepareSkeletonData(req);
 
   const tappedStream = (async function* () {
     let text = '';
@@ -112,7 +94,7 @@ export const handleSkeleton = async (
 
       handlerLog('skeleton', 'data prepared', {
         requestId: req.request_id,
-        source: config.useMockLLM ? 'mock' : 'llm',
+        source: 'generated',
       });
 
       const response: ResponseEnvelopeSkeleton = {

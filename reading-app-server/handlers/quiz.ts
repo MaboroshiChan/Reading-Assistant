@@ -8,7 +8,7 @@ import type {
 } from '../../packages/contracts/src';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
-import { json as llmJson, extractJsonFromText, type CallReturn } from '../services/llmService';
+import { createLLMClient, extractJsonFromText, type CallReturn } from '../services/llmService';
 import { buildStableCacheKey } from './shared';
 import { handlerLog } from './logger';
 
@@ -25,29 +25,26 @@ const buildCacheKey = (req: RequestEnvelopeQuiz): string => {
     payload: req.payload,
     context: req.context ?? {},
     prompt_version: PROMPT_VERSION,
-    model: config.useMockLLM ? `mock:${config.model}` : config.model,
+    model: config.model,
   });
 };
 
-let cachedQuizPrompt: string | null = null;
+let cachedQuizSystemPrompt: string | null = null;
 
 /**
  * Loads the quiz generation prompt from the filesystem, with caching.
  */
-const loadQuizPrompt = async (): Promise<string> => {
-  if (cachedQuizPrompt) return cachedQuizPrompt;
-  cachedQuizPrompt = await fs.readFile(PROMPT_PATH, 'utf8');
-  return cachedQuizPrompt;
+const loadQuizSystemPrompt = async (): Promise<string> => {
+  if (cachedQuizSystemPrompt) return cachedQuizSystemPrompt;
+  cachedQuizSystemPrompt = (await fs.readFile(PROMPT_PATH, 'utf8')).trim();
+  return cachedQuizSystemPrompt;
 };
 
 /**
  * Builds the full LLM prompt for quiz generation.
  */
-const buildPrompt = async (req: RequestEnvelopeQuiz): Promise<string> => {
-  const basePrompt = (await loadQuizPrompt()).trim();
+const buildUserPrompt = (req: RequestEnvelopeQuiz): string => {
   const sections: string[] = [
-    basePrompt,
-    '',
     `Document ID: ${req.payload.doc_id}`,
     `Prompt Version: ${PROMPT_VERSION}`,
     '',
@@ -131,52 +128,22 @@ const coerceQuizResponse = (value: unknown): QuizQuestion[] => {
 const buildQuizData = async (
   req: RequestEnvelopeQuiz,
 ): Promise<CallReturn<string>> => {
-  if (config.useMockLLM) {
-    handlerLog('quiz', 'building mock payload', {
-      requestId: req.request_id,
-      mock: true,
-    });
-    const mockData: AnalyzeQuizData = {
-        questions: [
-            {
-                id: "mock_q1",
-                type: "multiple_choice",
-                question: "What is the main topic of this mock article?",
-                options: ["Mock A", "Mock B", "Mock C", "Mock D"],
-                correctAnswerIndex: 0,
-                explanation: "This is a mock answer for testing.",
-                skill: "Facts"
-            }
-        ]
-    };
-    const text = JSON.stringify(mockData);
-    const stream = (async function* () {
-      yield text;
-    })();
-    return {
-      data: stream,
-      usage: Promise.resolve({
-        modelId: `mock:${config.model}`,
-        inputTokens: 0,
-        outputTokens: 0,
-      }),
-    };
-  }
-
   handlerLog('quiz', 'building LLM prompt', {
     requestId: req.request_id,
     promptVersion: PROMPT_VERSION,
   });
-  
-  const prompt = await buildPrompt(req);
-  
+  const [systemPrompt, userPrompt] = await Promise.all([
+    loadQuizSystemPrompt(),
+    Promise.resolve(buildUserPrompt(req)),
+  ]);
+  const llmClient = createLLMClient({ systemPrompt });
   handlerLog('quiz', 'LLM prompt prepared', {
     requestId: req.request_id,
-    promptLength: prompt.length,
-    mock: false,
+    systemPromptLength: systemPrompt.length,
+    userPromptLength: userPrompt.length,
   });
-  
-  return llmJson(prompt);
+
+  return llmClient.json(userPrompt);
 };
 
 /**
@@ -187,7 +154,6 @@ export const handleQuiz = async (
 ): Promise<CallReturn<string>> => {
   handlerLog('quiz', 'request received', {
     requestId: req.request_id,
-    mock: config.useMockLLM,
     promptVersion: PROMPT_VERSION,
   });
   
@@ -227,15 +193,9 @@ export const handleQuiz = async (
     // Background processing
     try {
       const usage = await usagePromise;
-      let data: AnalyzeQuizData;
-      
-      if (config.useMockLLM) {
-        data = JSON.parse(text) as AnalyzeQuizData;
-      } else {
-        const object = extractJsonFromText(text);
-        const questions = coerceQuizResponse(object);
-        data = { questions };
-      }
+      const object = extractJsonFromText(text);
+      const questions = coerceQuizResponse(object);
+      const data: AnalyzeQuizData = { questions };
 
       const response: ResponseEnvelopeQuiz = {
         request_id: req.request_id,

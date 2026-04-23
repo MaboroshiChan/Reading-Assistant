@@ -33,8 +33,7 @@ exports.createApp = createApp;
 const bootstrap = async () => {
     const app = await (0, exports.createApp)();
     await app.listen(runtime_config_1.config.port);
-    const mode = runtime_config_1.config.useMockLLM ? 'MOCK_LLM' : 'LIVE_LLM';
-    console.log(`server on :${runtime_config_1.config.port} (${mode})`);
+    console.log(`server on :${runtime_config_1.config.port}`);
 };
 exports.bootstrap = bootstrap;
 if (require.main === module) {

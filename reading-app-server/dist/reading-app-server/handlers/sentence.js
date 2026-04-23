@@ -15,23 +15,13 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -43,7 +33,6 @@ const config_1 = require("../services/config");
 const cache = __importStar(require("../services/cache"));
 const llmService_1 = require("../services/llmService");
 const shared_1 = require("./shared");
-const sentenceMock_1 = require("./mock/sentenceMock");
 const logger_1 = require("./logger");
 const CACHE_PREFIX = 'sentence';
 const CACHE_VERSION = 'v2';
@@ -119,20 +108,20 @@ const buildCacheKey = (req) => {
         payload: req.payload,
         context: req.context ?? {},
         prompt_version: PROMPT_VERSION,
-        model: config_1.config.useMockLLM ? `mock:${config_1.config.model}` : config_1.config.model,
+        model: config_1.config.model,
     });
 };
-let cachedSentencePrompt = null;
+let cachedSentenceSystemPrompt = null;
 /**
  * Loads the sentence analysis prompt from the filesystem, with caching.
  *
  * @returns The prompt text.
  */
-const loadSentencePrompt = async () => {
-    if (cachedSentencePrompt)
-        return cachedSentencePrompt;
-    cachedSentencePrompt = await promises_1.default.readFile(PROMPT_PATH, 'utf8');
-    return cachedSentencePrompt;
+const loadSentenceSystemPrompt = async () => {
+    if (cachedSentenceSystemPrompt)
+        return cachedSentenceSystemPrompt;
+    cachedSentenceSystemPrompt = (await promises_1.default.readFile(PROMPT_PATH, 'utf8')).trim();
+    return cachedSentenceSystemPrompt;
 };
 /**
  * Determines and orders the analysis tasks to be performed.
@@ -198,12 +187,9 @@ const formatContext = (req) => {
  * @param req - The request envelope.
  * @returns A promise resolving to the prompt string.
  */
-const buildPrompt = async (req) => {
-    const basePrompt = (await loadSentencePrompt()).trim();
+const buildPrompt = (req) => {
     const tasks = buildTasks(req);
     const sections = [
-        basePrompt,
-        '',
         `Document ID: ${req.payload.doc_id}`,
         `Sentence ID: ${req.payload.sentence_id}`,
         `Prompt Version: ${PROMPT_VERSION}`,
@@ -223,52 +209,34 @@ const buildPrompt = async (req) => {
 };
 exports.buildSentencePrompt = buildPrompt;
 /**
- * Orchestrates the data collection for sentence analysis,
- * either by calling the LLM or using mock data.
+ * Orchestrates the data collection for sentence analysis.
  *
  * @param req - The request envelope.
  * @returns A promise resolving to the LLM call return (stream and usage).
  */
 const buildSentenceData = async (req) => {
     const tasks = buildTasks(req);
-    if (config_1.config.useMockLLM) {
-        (0, logger_1.handlerLog)('sentence', 'building mock payload', {
-            requestId: req.request_id,
-            sentenceId: req.payload.sentence_id,
-            promptVersion: PROMPT_VERSION,
-            mock: true,
-        });
-        const mockData = await (0, sentenceMock_1.buildMockSentenceData)(req);
-        const text = JSON.stringify(mockData);
-        const stream = (async function* () {
-            yield text;
-        })();
-        return {
-            data: stream,
-            usage: Promise.resolve({
-                modelId: `mock:${config_1.config.model}`,
-                inputTokens: 0,
-                outputTokens: 0,
-            }),
-        };
-    }
     (0, logger_1.handlerLog)('sentence', 'building LLM payload', {
         requestId: req.request_id,
         sentenceId: req.payload.sentence_id,
         promptVersion: PROMPT_VERSION,
         tasks,
     });
-    const prompt = await buildPrompt(req);
+    const [systemPrompt, userPrompt] = await Promise.all([
+        loadSentenceSystemPrompt(),
+        Promise.resolve(buildPrompt(req)),
+    ]);
+    const llmClient = (0, llmService_1.createLLMClient)({ systemPrompt });
     (0, logger_1.handlerLog)('sentence', 'LLM prompt prepared', {
         requestId: req.request_id,
         sentenceId: req.payload.sentence_id,
         promptVersion: PROMPT_VERSION,
         tasks,
-        promptLength: prompt.length,
-        prompt,
-        mock: false,
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: userPrompt.length,
+        prompt: userPrompt,
     });
-    return (0, llmService_1.json)(prompt);
+    return llmClient.json(userPrompt);
 };
 /**
  * The main handler for sentence analysis requests.
@@ -280,7 +248,6 @@ const buildSentenceData = async (req) => {
 const handleSentence = async (req) => {
     (0, logger_1.handlerLog)('sentence', 'request received', {
         requestId: req.request_id,
-        mock: config_1.config.useMockLLM,
         promptVersion: PROMPT_VERSION,
     });
     const cacheKey = buildCacheKey(req);
@@ -315,14 +282,8 @@ const handleSentence = async (req) => {
         // Background processing: parse, map, and cache
         try {
             const usage = await usagePromise;
-            let data;
-            if (config_1.config.useMockLLM) {
-                data = JSON.parse(text);
-            }
-            else {
-                const object = coerceSentenceResponse((0, llmService_1.extractJsonFromText)(text));
-                data = mapSentenceResponse(object, req);
-            }
+            const object = coerceSentenceResponse((0, llmService_1.extractJsonFromText)(text));
+            const data = mapSentenceResponse(object, req);
             const response = {
                 request_id: req.request_id,
                 status: 'ok',

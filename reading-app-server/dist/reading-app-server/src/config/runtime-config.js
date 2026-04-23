@@ -3,8 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.config = exports.appConfig = exports.createAppConfig = void 0;
-exports.getOpenAIApiKey = getOpenAIApiKey;
+exports.getOpenAIApiKey = exports.config = exports.appConfig = exports.createAppConfig = void 0;
 const node_fs_1 = require("node:fs");
 const node_path_1 = __importDefault(require("node:path"));
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -27,10 +26,9 @@ loadEnvFiles();
 const createAppConfig = () => ({
     port: Number(process.env.PORT ?? 8787),
     model: process.env.MODEL_ID ?? 'gemini-2.5-flash',
-    timeoutMs: 50_000,
+    timeoutMs: 50000,
     cacheMax: 500,
-    cacheTtlMs: 7 * 24 * 3600_000,
-    useMockLLM: process.env.MOCK_LLM === '1' || process.env.NODE_ENV === 'test',
+    cacheTtlMs: 7 * 24 * 3600000,
     debugMode: process.env.LLM_DEBUG === '1' || process.env.DEBUG_LLM === '1',
     thinking: false,
     temperature: 0.1,
@@ -47,4 +45,5 @@ exports.config = new Proxy({}, {
 function getOpenAIApiKey() {
     return process.env.GEMINI_API_KEY ?? '';
 }
+exports.getOpenAIApiKey = getOpenAIApiKey;
 //# sourceMappingURL=runtime-config.js.map

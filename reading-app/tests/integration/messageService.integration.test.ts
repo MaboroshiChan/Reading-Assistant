@@ -12,8 +12,6 @@ describe('MessageService integration (real server)', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
-    process.env.MOCK_LLM = '1';
-
     server = http.createServer(async (req, res) => {
       if (req.method === 'GET' && req.url === '/ping') {
         res.setHeader('Content-Type', 'application/json');

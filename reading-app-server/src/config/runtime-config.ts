@@ -9,7 +9,6 @@ export interface Config {
   timeoutMs: number;
   cacheMax: number;
   cacheTtlMs: number;
-  useMockLLM: boolean;
   debugMode: boolean;
   thinking: boolean;
   temperature: number;
@@ -39,7 +38,6 @@ export const createAppConfig = (): Config => ({
   timeoutMs: 50_000,
   cacheMax: 500,
   cacheTtlMs: 7 * 24 * 3600_000,
-  useMockLLM: process.env.MOCK_LLM === '1' || process.env.NODE_ENV === 'test',
   debugMode: process.env.LLM_DEBUG === '1' || process.env.DEBUG_LLM === '1',
   thinking: false,
   temperature: 0.1,

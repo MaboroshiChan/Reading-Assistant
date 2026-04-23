@@ -13,9 +13,10 @@ const health_controller_1 = require("./health.controller");
 const runtime_config_1 = require("./config/runtime-config");
 const message_controller_1 = require("./message/message.controller");
 const message_http_service_1 = require("./message/message-http.service");
-let AppModule = class AppModule {
+const book_ingestion_module_1 = require("./modules/book-ingestion/book-ingestion.module");
+const quiz_workflow_module_1 = require("./modules/quiz-workflow/quiz-workflow.module");
+let AppModule = exports.AppModule = class AppModule {
 };
-exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
@@ -24,6 +25,8 @@ exports.AppModule = AppModule = __decorate([
                 ignoreEnvFile: true,
                 load: [runtime_config_1.appConfig],
             }),
+            book_ingestion_module_1.BookIngestionModule,
+            quiz_workflow_module_1.QuizWorkflowModule,
         ],
         controllers: [health_controller_1.HealthController, message_controller_1.MessageController],
         providers: [message_http_service_1.MessageHttpService],

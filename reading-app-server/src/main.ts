@@ -32,8 +32,7 @@ export const createApp = async (): Promise<INestApplication> => {
 export const bootstrap = async (): Promise<void> => {
   const app = await createApp();
   await app.listen(config.port);
-  const mode = config.useMockLLM ? 'MOCK_LLM' : 'LIVE_LLM';
-  console.log(`server on :${config.port} (${mode})`);
+  console.log(`server on :${config.port}`);
 };
 
 if (require.main === module) {

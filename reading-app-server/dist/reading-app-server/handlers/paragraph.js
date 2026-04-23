@@ -15,23 +15,13 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -43,7 +33,6 @@ const config_1 = require("../services/config");
 const cache = __importStar(require("../services/cache"));
 const llmService_1 = require("../services/llmService");
 const shared_1 = require("./shared");
-const paragraphMock_1 = require("./mock/paragraphMock");
 const logger_1 = require("./logger");
 const CACHE_PREFIX = 'paragraph';
 const CACHE_VERSION = 'v2';
@@ -62,20 +51,20 @@ const buildCacheKey = (req) => {
         payload: req.payload,
         context: req.context ?? {},
         prompt_version: PROMPT_VERSION,
-        model: config_1.config.useMockLLM ? `mock:${config_1.config.model}` : config_1.config.model,
+        model: config_1.config.model,
     });
 };
-let cachedParagraphPrompt = null;
+let cachedParagraphSystemPrompt = null;
 /**
  * Loads the paragraph analysis prompt from the filesystem, with caching.
  *
  * @returns The prompt text.
  */
-const loadParagraphPrompt = async () => {
-    if (cachedParagraphPrompt)
-        return cachedParagraphPrompt;
-    cachedParagraphPrompt = await promises_1.default.readFile(PROMPT_PATH, 'utf8');
-    return cachedParagraphPrompt;
+const loadParagraphSystemPrompt = async () => {
+    if (cachedParagraphSystemPrompt)
+        return cachedParagraphSystemPrompt;
+    cachedParagraphSystemPrompt = (await promises_1.default.readFile(PROMPT_PATH, 'utf8')).trim();
+    return cachedParagraphSystemPrompt;
 };
 /**
  * Determines and orders the analysis tasks for a paragraph.
@@ -141,12 +130,9 @@ const formatContext = (req) => {
  * @param req - The request envelope.
  * @returns A promise resolving to the prompt string.
  */
-const buildPrompt = async (req) => {
-    const basePrompt = (await loadParagraphPrompt()).trim();
+const buildPrompt = (req) => {
     const tasks = buildTasks(req);
     const sections = [
-        basePrompt,
-        '',
         `Document ID: ${req.payload.doc_id}`,
         `Paragraph ID: ${req.payload.paragraph_id}`,
         `Prompt Version: ${PROMPT_VERSION}`,
@@ -166,50 +152,33 @@ const buildPrompt = async (req) => {
 };
 exports.buildParagraphPrompt = buildPrompt;
 /**
- * Orchestrates paragraph data collection from LLM or mock source.
+ * Orchestrates paragraph data collection from the LLM.
  *
  * @param req - The request envelope.
  * @returns A promise resolving to the call results.
  */
 const buildParagraphData = async (req) => {
     const tasks = buildTasks(req);
-    if (config_1.config.useMockLLM) {
-        (0, logger_1.handlerLog)('paragraph', 'building mock payload', {
-            requestId: req.request_id,
-            paragraphId: req.payload.paragraph_id,
-            promptVersion: PROMPT_VERSION,
-            mock: true,
-        });
-        const mockData = await (0, paragraphMock_1.buildMockParagraphData)(req);
-        const text = JSON.stringify(mockData);
-        const stream = (async function* () {
-            yield text;
-        })();
-        return {
-            data: stream,
-            usage: Promise.resolve({
-                modelId: `mock:${config_1.config.model}`,
-                inputTokens: 0,
-                outputTokens: 0,
-            }),
-        };
-    }
     (0, logger_1.handlerLog)('paragraph', 'building LLM prompt', {
         requestId: req.request_id,
         tasks,
         promptVersion: PROMPT_VERSION,
     });
-    const prompt = await buildPrompt(req);
+    const [systemPrompt, userPrompt] = await Promise.all([
+        loadParagraphSystemPrompt(),
+        Promise.resolve(buildPrompt(req)),
+    ]);
+    const llmClient = (0, llmService_1.createLLMClient)({ systemPrompt });
     (0, logger_1.handlerLog)('paragraph', 'LLM prompt prepared', {
         requestId: req.request_id,
         paragraphId: req.payload.paragraph_id,
         promptVersion: PROMPT_VERSION,
         tasks,
-        promptLength: prompt.length,
-        prompt,
-        mock: false,
+        systemPromptLength: systemPrompt.length,
+        userPromptLength: userPrompt.length,
+        prompt: userPrompt,
     });
-    return (0, llmService_1.json)(prompt);
+    return llmClient.json(userPrompt);
 };
 /**
  * The main handler for paragraph analysis requests.
@@ -221,7 +190,6 @@ const handleParagraph = async (req) => {
     (0, logger_1.handlerLog)('paragraph', 'request received', {
         requestId: req.request_id,
         paragraphId: req.payload.paragraph_id,
-        mock: config_1.config.useMockLLM,
         promptVersion: PROMPT_VERSION,
     });
     const cacheKey = buildCacheKey(req);
@@ -256,14 +224,8 @@ const handleParagraph = async (req) => {
         // Background processing
         try {
             const usage = await usagePromise;
-            let data;
-            if (config_1.config.useMockLLM) {
-                data = JSON.parse(text);
-            }
-            else {
-                const object = coerceParagraphResponse((0, llmService_1.extractJsonFromText)(text));
-                data = mapParagraphResponse(object, req);
-            }
+            const object = coerceParagraphResponse((0, llmService_1.extractJsonFromText)(text));
+            const data = mapParagraphResponse(object, req);
             const response = {
                 request_id: req.request_id,
                 status: 'ok',

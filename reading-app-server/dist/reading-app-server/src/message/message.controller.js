@@ -16,7 +16,7 @@ exports.MessageController = void 0;
 const common_1 = require("@nestjs/common");
 const llmService_1 = require("../../services/llmService");
 const message_http_service_1 = require("./message-http.service");
-let MessageController = class MessageController {
+let MessageController = exports.MessageController = class MessageController {
     messageHttpService;
     constructor(messageHttpService) {
         this.messageHttpService = messageHttpService;
@@ -76,7 +76,6 @@ let MessageController = class MessageController {
         res.end();
     }
 };
-exports.MessageController = MessageController;
 __decorate([
     (0, common_1.Post)('msg'),
     __param(0, (0, common_1.Body)()),

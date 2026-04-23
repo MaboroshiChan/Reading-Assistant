@@ -3,16 +3,16 @@ import type {
   RequestEnvelopeSkeleton,
   SkeletonParagraph,
   SkeletonSentence,
-} from '../../../packages/contracts/src';
-import { hashString, splitIntoSentences, summarize } from '../shared';
+} from '../../packages/contracts/src';
+import { hashString, splitIntoSentences, summarize } from './shared';
 
 /**
- * Generates mock skeleton data (paragraphs and sentences) for a document.
+ * Generates deterministic skeleton data (paragraphs and sentences) for a document.
  *
  * @param req - The request envelope.
- * @returns Mock AnalyzeSkeletonData.
+ * @returns Generated AnalyzeSkeletonData.
  */
-export const buildMockSkeletonData = (
+export const buildSkeletonData = (
   req: RequestEnvelopeSkeleton,
 ): AnalyzeSkeletonData => {
   const paragraphs: SkeletonParagraph[] = [];
@@ -56,7 +56,7 @@ export const buildMockSkeletonData = (
     data.entity_index = Array.from({ length: Math.min(3, req.payload.options.max_entities) }).map((_, idx) => ({
       id: `entity-${idx + 1}`,
       type: 'TERM',
-      canonical: `Mock Entity ${idx + 1}`,
+      canonical: `Entity ${idx + 1}`,
       aliases: [],
       spans: [],
     }));
@@ -66,7 +66,7 @@ export const buildMockSkeletonData = (
     data.embeddings_meta = {
       dim: 768,
       chunking: 'sentence',
-      index_id: `mock-index-${hashString(req.payload.doc_id).slice(0, 6)}`,
+      index_id: `index-${hashString(req.payload.doc_id).slice(0, 6)}`,
     };
   }
 

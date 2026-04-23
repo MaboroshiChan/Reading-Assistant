@@ -15,29 +15,19 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleSkeleton = void 0;
 const config_1 = require("../services/config");
 const cache = __importStar(require("../services/cache"));
 const shared_1 = require("./shared");
-const skeletonMock_1 = require("./mock/skeletonMock");
+const skeleton_data_1 = require("./skeleton-data");
 const logger_1 = require("./logger");
 const CACHE_PREFIX = 'skeleton';
 /**
@@ -52,39 +42,23 @@ const buildCacheKey = (req) => {
     return `${CACHE_PREFIX}:${payloadKey}:${contextKey}`;
 };
 /**
- * Orchestrates skeleton data collection. Currently defaults to mock data.
+ * Orchestrates skeleton data collection. Skeleton analysis currently uses
+ * the deterministic builder until a live LLM-backed implementation lands.
  *
  * @param req - The request envelope.
  * @returns A promise resolving to the call results.
  */
-const buildSkeletonData = async (req) => {
-    if (config_1.config.useMockLLM) {
-        (0, logger_1.handlerLog)('skeleton', 'building mock payload', {
-            requestId: req.request_id,
-            docId: req.payload.doc_id,
-        });
-        const mockData = await (0, skeletonMock_1.buildMockSkeletonData)(req);
-        const text = JSON.stringify(mockData);
-        return {
-            data: (async function* () { yield text; })(),
-            usage: Promise.resolve({
-                modelId: `mock:${config_1.config.model}`,
-                inputTokens: 0,
-                outputTokens: 0,
-            }),
-        };
-    }
-    (0, logger_1.handlerLog)('skeleton', 'building LLM payload', {
+const prepareSkeletonData = async (req) => {
+    (0, logger_1.handlerLog)('skeleton', 'building generated payload', {
         requestId: req.request_id,
         docId: req.payload.doc_id,
     });
-    // TODO: integrate with real LLM-backed skeleton endpoint.
-    const mockData = await (0, skeletonMock_1.buildMockSkeletonData)(req);
-    const text = JSON.stringify(mockData);
+    const data = (0, skeleton_data_1.buildSkeletonData)(req);
+    const text = JSON.stringify(data);
     return {
         data: (async function* () { yield text; })(),
         usage: Promise.resolve({
-            modelId: `mock:${config_1.config.model}`,
+            modelId: config_1.config.model,
             inputTokens: 0,
             outputTokens: 0,
         }),
@@ -99,7 +73,6 @@ const buildSkeletonData = async (req) => {
 const handleSkeleton = async (req) => {
     (0, logger_1.handlerLog)('skeleton', 'request received', {
         requestId: req.request_id,
-        mock: config_1.config.useMockLLM,
     });
     const cacheKey = buildCacheKey(req);
     const cached = cache.get(cacheKey);
@@ -117,7 +90,7 @@ const handleSkeleton = async (req) => {
         };
     }
     const started = Date.now();
-    const { data: stream, usage: usagePromise } = await buildSkeletonData(req);
+    const { data: stream, usage: usagePromise } = await prepareSkeletonData(req);
     const tappedStream = (async function* () {
         let text = '';
         for await (const chunk of stream) {
@@ -129,7 +102,7 @@ const handleSkeleton = async (req) => {
             const data = JSON.parse(text);
             (0, logger_1.handlerLog)('skeleton', 'data prepared', {
                 requestId: req.request_id,
-                source: config_1.config.useMockLLM ? 'mock' : 'llm',
+                source: 'generated',
             });
             const response = {
                 request_id: req.request_id,
