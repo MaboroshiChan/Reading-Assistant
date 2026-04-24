@@ -14,7 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HealthController = void 0;
 const common_1 = require("@nestjs/common");
-let HealthController = exports.HealthController = class HealthController {
+let HealthController = class HealthController {
     ping(req) {
         const remote = req.socket.remoteAddress ?? 'unknown';
         console.log(`[server] ping received from ${remote} @ ${new Date().toISOString()}`);
@@ -24,6 +24,7 @@ let HealthController = exports.HealthController = class HealthController {
         };
     }
 };
+exports.HealthController = HealthController;
 __decorate([
     (0, common_1.Get)('ping'),
     __param(0, (0, common_1.Req)()),

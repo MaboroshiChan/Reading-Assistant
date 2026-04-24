@@ -1,10 +1,17 @@
 "use strict";
 /*
- * Shared request/response contracts for the reading-app server message endpoints.
- * These types intentionally stay close to the existing Swift envelope contract.
+ * envelopes.ts — Client↔Service Envelope Types (v1)
+ * Contract-only TypeScript types for your reading-app network layer.
+ * These mirror the “Envelope v1” spec we agreed on: a unified message envelope,
+ * standardized context, four analysis message types, frames for partial results,
+ * error semantics, caching hints, and observability fields.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isOk = exports.isError = exports.isPartial = exports.isAnalyzeType = void 0;
+// -----------------------------
+// Utility guards (optional)
+// -----------------------------
+// Quick predicate for narrowing string -> AnalyzeMessageType.
 const isAnalyzeType = (t) => t === 'analyze.skeleton.v1' ||
     t === 'analyze.paragraph.v1' ||
     t === 'analyze.sentence.v1' ||
@@ -12,6 +19,7 @@ const isAnalyzeType = (t) => t === 'analyze.skeleton.v1' ||
     t === 'analyze.quiz.v1' ||
     t === 'analyze.knowledge-extraction.v1';
 exports.isAnalyzeType = isAnalyzeType;
+// Type guards that help SDK callers branch on response status.
 const isPartial = (r) => r.status === 'partial';
 exports.isPartial = isPartial;
 const isError = (r) => r.status === 'error';

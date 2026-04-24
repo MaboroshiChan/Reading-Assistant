@@ -10,7 +10,7 @@ exports.QuizWorkflowRepository = void 0;
 const common_1 = require("@nestjs/common");
 const node_crypto_1 = require("node:crypto");
 const chapterKey = (bookId, chapterId) => `${bookId}::${chapterId}`;
-let QuizWorkflowRepository = exports.QuizWorkflowRepository = class QuizWorkflowRepository {
+let QuizWorkflowRepository = class QuizWorkflowRepository {
     runs = new Map();
     runIdsByIdempotencyKey = new Map();
     latestResultsByChapter = new Map();
@@ -128,6 +128,7 @@ let QuizWorkflowRepository = exports.QuizWorkflowRepository = class QuizWorkflow
         return updated;
     }
 };
+exports.QuizWorkflowRepository = QuizWorkflowRepository;
 exports.QuizWorkflowRepository = QuizWorkflowRepository = __decorate([
     (0, common_1.Injectable)()
 ], QuizWorkflowRepository);

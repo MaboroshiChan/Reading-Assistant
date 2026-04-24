@@ -11,10 +11,13 @@ const common_1 = require("@nestjs/common");
 const book_ingestion_controller_1 = require("./book-ingestion.controller");
 const book_ingestion_repository_1 = require("./book-ingestion.repository");
 const book_ingestion_service_1 = require("./book-ingestion.service");
-let BookIngestionModule = exports.BookIngestionModule = class BookIngestionModule {
+const knowledge_extraction_workflow_module_1 = require("../knowledge-extraction-workflow/knowledge-extraction-workflow.module");
+let BookIngestionModule = class BookIngestionModule {
 };
+exports.BookIngestionModule = BookIngestionModule;
 exports.BookIngestionModule = BookIngestionModule = __decorate([
     (0, common_1.Module)({
+        imports: [(0, common_1.forwardRef)(() => knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule)],
         controllers: [book_ingestion_controller_1.BookIngestionController],
         providers: [book_ingestion_repository_1.BookIngestionRepository, book_ingestion_service_1.BookIngestionService],
         exports: [book_ingestion_repository_1.BookIngestionRepository, book_ingestion_service_1.BookIngestionService],

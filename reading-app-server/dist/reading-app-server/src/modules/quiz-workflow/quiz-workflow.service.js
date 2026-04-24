@@ -29,7 +29,7 @@ const isPlainObject = (value) => typeof value === 'object' && value !== null && 
 const asString = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
 const asNumber = (value) => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 let cachedQuizSystemPrompt = null;
-let QuizWorkflowService = exports.QuizWorkflowService = class QuizWorkflowService {
+let QuizWorkflowService = class QuizWorkflowService {
     bookIngestionRepository;
     quizWorkflowRepository;
     constructor(bookIngestionRepository, quizWorkflowRepository) {
@@ -354,6 +354,7 @@ let QuizWorkflowService = exports.QuizWorkflowService = class QuizWorkflowServic
         return value;
     }
 };
+exports.QuizWorkflowService = QuizWorkflowService;
 exports.QuizWorkflowService = QuizWorkflowService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)(book_ingestion_repository_1.BookIngestionRepository)),

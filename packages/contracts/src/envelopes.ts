@@ -131,7 +131,8 @@ export type AnalyzeMessageType =
   | 'analyze.paragraph.v1'
   | 'analyze.sentence.v1'
   | 'analyze.sentence-structure.v1'
-  | 'analyze.quiz.v1';
+  | 'analyze.quiz.v1'
+  | 'analyze.knowledge-extraction.v1';
 
 export type MessageType = AnalyzeMessageType; // extend here in the future
 
@@ -331,6 +332,99 @@ export interface AnalyzeQuizData {
   questions: QuizQuestion[];
 }
 
+// 6) analyze.knowledge-extraction.v1
+export interface AnalyzeKnowledgeExtractionPayload {
+  doc_id: string;
+  chapter_id: string;
+  chapter_text: string;
+  chapter_title?: string;
+  chunk_id?: string;
+  chunk_index?: number;
+  total_chunks?: number;
+  memory_context?: string;
+}
+
+export interface KnowledgeEvidence {
+  quote: string;
+}
+
+export interface KnowledgePerson {
+  local_id: string;
+  name: string;
+  aliases?: string[];
+  description?: string;
+  roles?: string[];
+  traits?: string[];
+  evidence?: KnowledgeEvidence[];
+}
+
+export interface KnowledgeIdea {
+  local_id: string;
+  label: string;
+  description?: string;
+  kind: 'claim' | 'belief' | 'question' | 'principle' | 'conflict';
+  evidence?: KnowledgeEvidence[];
+}
+
+export interface KnowledgeEvent {
+  local_id: string;
+  label: string;
+  description?: string;
+  participant_local_ids?: string[];
+  time_hint?: string;
+  place_hint?: string;
+  evidence?: KnowledgeEvidence[];
+}
+
+export interface KnowledgeEntity {
+  local_id: string;
+  label: string;
+  type: 'organization' | 'place' | 'time' | 'object' | 'other';
+  description?: string;
+  evidence?: KnowledgeEvidence[];
+}
+
+export interface KnowledgeTheme {
+  local_id: string;
+  label: string;
+  strength?: number;
+  description?: string;
+  evidence?: KnowledgeEvidence[];
+}
+
+export interface KnowledgeRelation {
+  local_id: string;
+  from_id: string;
+  from_type: 'person' | 'idea' | 'event' | 'entity' | 'theme';
+  to_id: string;
+  to_type: 'person' | 'idea' | 'event' | 'entity' | 'theme';
+  relation_type:
+    | 'knows'
+    | 'supports'
+    | 'opposes'
+    | 'extends'
+    | 'causes'
+    | 'participates_in'
+    | 'located_in'
+    | 'happens_at'
+    | 'reflects'
+    | 'related_to';
+  description?: string;
+  confidence?: number;
+  evidence?: KnowledgeEvidence[];
+}
+
+export interface AnalyzeKnowledgeExtractionData {
+  title: string;
+  summary: string;
+  people: KnowledgePerson[];
+  ideas: KnowledgeIdea[];
+  events: KnowledgeEvent[];
+  entities: KnowledgeEntity[];
+  themes: KnowledgeTheme[];
+  relations: KnowledgeRelation[];
+}
+
 // -----------------------------
 // Union helpers per message type
 // -----------------------------
@@ -376,13 +470,19 @@ export interface RequestEnvelopeQuiz extends StandardEnvelopeBase {
   payload: AnalyzeQuizPayload;
 }
 
+export interface RequestEnvelopeKnowledgeExtraction extends StandardEnvelopeBase {
+  type: 'analyze.knowledge-extraction.v1';
+  payload: AnalyzeKnowledgeExtractionPayload;
+}
+
 // Union of every request envelope so transports can accept a single type.
 export type RequestEnvelope =
   | RequestEnvelopeSkeleton
   | RequestEnvelopeParagraph
   | RequestEnvelopeSentence
   | RequestEnvelopeSentenceStructure
-  | RequestEnvelopeQuiz;
+  | RequestEnvelopeQuiz
+  | RequestEnvelopeKnowledgeExtraction;
 
 // Response envelopes
 // Every response echoes back tracking fields so clients can correlate requests.
@@ -423,12 +523,18 @@ export interface ResponseEnvelopeQuiz extends ResponseEnvelopeBase {
   frames?: EnvelopeFrame<Partial<AnalyzeQuizData>>[];
 }
 
+export interface ResponseEnvelopeKnowledgeExtraction extends ResponseEnvelopeBase {
+  data?: AnalyzeKnowledgeExtractionData;
+  frames?: EnvelopeFrame<Partial<AnalyzeKnowledgeExtractionData>>[];
+}
+
 export type ResponseEnvelope =
   | ResponseEnvelopeSkeleton
   | ResponseEnvelopeParagraph
   | ResponseEnvelopeSentence
   | ResponseEnvelopeSentenceStructure
-  | ResponseEnvelopeQuiz;
+  | ResponseEnvelopeQuiz
+  | ResponseEnvelopeKnowledgeExtraction;
 
 // -----------------------------
 // Utility guards (optional)
@@ -440,7 +546,8 @@ export const isAnalyzeType = (t: string): t is AnalyzeMessageType =>
   t === 'analyze.paragraph.v1' ||
   t === 'analyze.sentence.v1' ||
   t === 'analyze.sentence-structure.v1' ||
-  t === 'analyze.quiz.v1';
+  t === 'analyze.quiz.v1' ||
+  t === 'analyze.knowledge-extraction.v1';
 
 // Type guards that help SDK callers branch on response status.
 export const isPartial = (r: ResponseEnvelope): r is ResponseEnvelope & { status: 'partial' } => r.status === 'partial';

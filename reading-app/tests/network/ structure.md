@@ -36,7 +36,7 @@
 
     1. 读 envelope → 生成 prompt（可用快照）
     2. 命中缓存直接返回
-    3. 调用 **mock** 的 llmService.json 产出 DTO
+    3. 调用 llmService.json 产出 DTO
     4. anchors 填充与返回结构
   * 价值：跑通最关键链路；其他 handler 可复用同样套路。
 * `http/router.ts`（/msg 入口）
@@ -53,9 +53,9 @@
 
 #### 服务端
 
-* `services/llmService.ts`（在 mock 模式下）
+* `services/llmService.ts`
 
-  * 测什么：不连真模型，mock fetch：
+  * 测什么：不连真模型，stub fetch：
 
     1. 能解析 Responses API 文本/JSON（含 `json fenced`）
     2. 错误时抛出

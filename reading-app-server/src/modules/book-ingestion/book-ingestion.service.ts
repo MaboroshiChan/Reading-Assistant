@@ -3,6 +3,8 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import type {
   GetChapterResponseDto,
@@ -11,7 +13,10 @@ import type {
   UpsertBookPageFragmentRequestDto,
   UpsertBookPageFragmentResponseDto,
 } from './book-ingestion.dto';
+import { bookIngestionLog } from './book-ingestion.logger';
 import { BookIngestionRepository } from './book-ingestion.repository';
+import { config } from '../../config/runtime-config';
+import { KnowledgeExtractionWorkflowService } from '../knowledge-extraction-workflow/knowledge-extraction-workflow.service';
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
@@ -29,9 +34,16 @@ const coerceNonNegativeInteger = (value: unknown, fieldName: string): number => 
 @Injectable()
 export class BookIngestionService {
   private readonly repository: BookIngestionRepository;
+  private readonly knowledgeExtractionWorkflowService?: KnowledgeExtractionWorkflowService;
 
-  constructor(@Inject(BookIngestionRepository) repository: BookIngestionRepository) {
+  constructor(
+    @Inject(BookIngestionRepository) repository: BookIngestionRepository,
+    @Optional()
+    @Inject(forwardRef(() => KnowledgeExtractionWorkflowService))
+    knowledgeExtractionWorkflowService?: KnowledgeExtractionWorkflowService,
+  ) {
     this.repository = repository;
+    this.knowledgeExtractionWorkflowService = knowledgeExtractionWorkflowService;
   }
 
   parseUpsertRequest(
@@ -39,6 +51,12 @@ export class BookIngestionService {
     params: UpsertBookPageFragmentParamsDto,
   ): UpsertBookPageFragmentRequestDto {
     if (!rawBody || rawBody.trim() === '') {
+      bookIngestionLog('request.parse_failed', {
+        reason: 'empty_body',
+        bookId: params.bookId,
+        chapterId: params.chapterId,
+        pageIndex: params.pageIndex,
+      });
       throw new BadRequestException('Request body cannot be empty');
     }
 
@@ -46,12 +64,25 @@ export class BookIngestionService {
     try {
       parsed = JSON.parse(rawBody);
     } catch (error) {
+      bookIngestionLog('request.parse_failed', {
+        reason: 'invalid_json',
+        bookId: params.bookId,
+        chapterId: params.chapterId,
+        pageIndex: params.pageIndex,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw new BadRequestException(
         `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
     if (!isPlainObject(parsed)) {
+      bookIngestionLog('request.parse_failed', {
+        reason: 'non_object_body',
+        bookId: params.bookId,
+        chapterId: params.chapterId,
+        pageIndex: params.pageIndex,
+      });
       throw new BadRequestException('Request body must be a JSON object');
     }
 
@@ -62,16 +93,43 @@ export class BookIngestionService {
     const pageIndex = coerceNonNegativeInteger(parsed.pageIndex, 'pageIndex');
 
     if (params.bookId !== bookId) {
+      bookIngestionLog('request.parse_failed', {
+        reason: 'book_id_mismatch',
+        pathBookId: params.bookId,
+        bodyBookId: bookId,
+        chapterId,
+        pageIndex,
+      });
       throw new BadRequestException('Path bookId does not match body bookId');
     }
     if (params.chapterId !== chapterId) {
+      bookIngestionLog('request.parse_failed', {
+        reason: 'chapter_id_mismatch',
+        bookId,
+        pathChapterId: params.chapterId,
+        bodyChapterId: chapterId,
+        pageIndex,
+      });
       throw new BadRequestException('Path chapterId does not match body chapterId');
     }
     if (params.pageIndex !== pageIndex) {
+      bookIngestionLog('request.parse_failed', {
+        reason: 'page_index_mismatch',
+        bookId,
+        chapterId,
+        pathPageIndex: params.pageIndex,
+        bodyPageIndex: pageIndex,
+      });
       throw new BadRequestException('Path pageIndex does not match body pageIndex');
     }
 
     if (!isPlainObject(parsed.pageParagraphs) || Object.keys(parsed.pageParagraphs).length === 0) {
+      bookIngestionLog('request.parse_failed', {
+        reason: 'invalid_page_paragraphs',
+        bookId,
+        chapterId,
+        pageIndex,
+      });
       throw new BadRequestException('pageParagraphs must be a non-empty object');
     }
 
@@ -96,6 +154,17 @@ export class BookIngestionService {
       ? undefined
       : this.requireOptionalString(parsed.chapterTitle, 'chapterTitle');
 
+    bookIngestionLog('request.parsed', {
+      bookId,
+      chapterId,
+      chapterIndex,
+      chapterTitle,
+      pageIndex,
+      sourceHash,
+      paragraphCount: Object.keys(pageParagraphs).length,
+      hasBookMetadata: bookMetadata !== undefined,
+    });
+
     return {
       bookId,
       chapterId,
@@ -112,6 +181,30 @@ export class BookIngestionService {
     input: UpsertBookPageFragmentRequestDto,
   ): UpsertBookPageFragmentResponseDto {
     const result = this.repository.upsertPageFragment(input);
+    const chapterTextAvailable = result.chapter.chapterTextMaterialized.trim().length > 0;
+
+    bookIngestionLog('page.upsert_completed', {
+      bookId: result.book.bookId,
+      chapterId: result.chapter.chapterId,
+      chapterIndex: result.chapter.chapterIndex,
+      pageIndex: result.page.pageIndex,
+      sourceHash: result.page.sourceHash,
+      deduped: result.deduped,
+      snapshotVersion: result.book.snapshotVersion,
+      pageCountInChapter: result.chapter.pages.size,
+      chapterContentHash: result.chapter.chapterContentHash,
+      chapterTextAvailable,
+      pageTextLength: result.page.pageTextMaterialized.length,
+    });
+
+    if (
+      config.autoSubmitKnowledgeExtractionWorkflow
+      && !result.deduped
+      && chapterTextAvailable
+      && this.knowledgeExtractionWorkflowService
+    ) {
+      void this.submitKnowledgeExtractionWorkflowAfterIngestion(result);
+    }
 
     return {
       bookId: result.book.bookId,
@@ -123,8 +216,44 @@ export class BookIngestionService {
       snapshotVersion: result.book.snapshotVersion,
       chapterContentHash: result.chapter.chapterContentHash,
       pageCountInChapter: result.chapter.pages.size,
-      chapterTextAvailable: result.chapter.chapterTextMaterialized.trim().length > 0,
+      chapterTextAvailable,
     };
+  }
+
+  private async submitKnowledgeExtractionWorkflowAfterIngestion(
+    result: ReturnType<BookIngestionRepository['upsertPageFragment']>,
+  ): Promise<void> {
+    try {
+      const response = this.knowledgeExtractionWorkflowService?.submitKnowledgeExtractionWorkflow({
+        bookId: result.book.bookId,
+        chapterId: result.chapter.chapterId,
+        chapterIndex: result.chapter.chapterIndex,
+        workflowVersion: 'v1',
+        expectedSnapshotVersion: result.book.snapshotVersion,
+        expectedChapterContentHash: result.chapter.chapterContentHash,
+      });
+
+      bookIngestionLog('knowledge_extraction_workflow.auto_submitted', {
+        bookId: result.book.bookId,
+        chapterId: result.chapter.chapterId,
+        chapterIndex: result.chapter.chapterIndex,
+        pageIndex: result.page.pageIndex,
+        snapshotVersion: result.book.snapshotVersion,
+        chapterContentHash: result.chapter.chapterContentHash,
+        workflowRunId: response?.workflowRunId,
+        deduped: response?.deduped,
+      });
+    } catch (error) {
+      bookIngestionLog('knowledge_extraction_workflow.auto_submit_failed', {
+        bookId: result.book.bookId,
+        chapterId: result.chapter.chapterId,
+        chapterIndex: result.chapter.chapterIndex,
+        pageIndex: result.page.pageIndex,
+        snapshotVersion: result.book.snapshotVersion,
+        chapterContentHash: result.chapter.chapterContentHash,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   getChapter(bookId: string, chapterId: string): GetChapterResponseDto {
@@ -132,8 +261,21 @@ export class BookIngestionService {
     const book = this.repository.getBook(bookId);
 
     if (!chapter || !book) {
+      bookIngestionLog('chapter.read_miss', {
+        bookId,
+        chapterId,
+      });
       throw new NotFoundException('Chapter not found');
     }
+
+    bookIngestionLog('chapter.read_hit', {
+      bookId,
+      chapterId,
+      chapterIndex: chapter.chapterIndex,
+      snapshotVersion: book.snapshotVersion,
+      pageCount: chapter.pages.size,
+      chapterContentHash: chapter.chapterContentHash,
+    });
 
     return {
       bookId,
@@ -154,8 +296,23 @@ export class BookIngestionService {
     const book = this.repository.getBook(bookId);
 
     if (!chapter || !page || !book) {
+      bookIngestionLog('page.read_miss', {
+        bookId,
+        chapterId,
+        pageIndex,
+      });
       throw new NotFoundException('Page not found');
     }
+
+    bookIngestionLog('page.read_hit', {
+      bookId,
+      chapterId,
+      chapterIndex: chapter.chapterIndex,
+      pageIndex,
+      sourceHash: page.sourceHash,
+      snapshotVersion: book.snapshotVersion,
+      paragraphCount: Object.keys(page.pageParagraphs).length,
+    });
 
     return {
       bookId,
@@ -175,6 +332,10 @@ export class BookIngestionService {
   parsePageIndex(rawPageIndex: string): number {
     const parsed = Number(rawPageIndex);
     if (!Number.isInteger(parsed) || parsed < 0) {
+      bookIngestionLog('request.parse_failed', {
+        reason: 'invalid_page_index_param',
+        rawPageIndex,
+      });
       throw new BadRequestException('pageIndex must be a non-negative integer');
     }
     return parsed;

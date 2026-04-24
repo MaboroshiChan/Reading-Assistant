@@ -15,13 +15,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -53,6 +63,22 @@ const RELATION_TYPES = new Set([
     'related_to',
 ]);
 const IDEA_KINDS = new Set(['claim', 'belief', 'question', 'principle', 'conflict']);
+const asIdeaKind = (value) => {
+    const kind = asString(value);
+    return kind && IDEA_KINDS.has(kind) ? kind : undefined;
+};
+const asEntityType = (value) => {
+    const type = asString(value);
+    return type && ENTITY_TYPES.has(type) ? type : undefined;
+};
+const asNodeType = (value) => {
+    const type = asString(value);
+    return type && NODE_TYPES.has(type) ? type : undefined;
+};
+const asRelationType = (value) => {
+    const type = asString(value);
+    return type && RELATION_TYPES.has(type) ? type : undefined;
+};
 const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 const asString = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
 const asNumber = (value) => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -110,12 +136,12 @@ const sanitizeIdeas = (value) => {
         const label = asString(item.label);
         if (!label)
             return null;
-        const kind = asString(item.kind);
+        const kind = asIdeaKind(item.kind);
         return {
             local_id: asString(item.local_id) ?? `i${index + 1}`,
             label,
             description: asString(item.description),
-            kind: kind && IDEA_KINDS.has(kind) ? kind : 'claim',
+            kind: kind ?? 'claim',
             evidence: sanitizeEvidence(item.evidence),
         };
     })
@@ -153,13 +179,13 @@ const sanitizeEntities = (value) => {
         if (!isRecord(item))
             return null;
         const label = asString(item.label);
-        const type = asString(item.type);
+        const type = asEntityType(item.type);
         if (!label || !type)
             return null;
         return {
             local_id: asString(item.local_id) ?? `n${index + 1}`,
             label,
-            type: ENTITY_TYPES.has(type) ? type : 'other',
+            type,
             description: asString(item.description),
             evidence: sanitizeEvidence(item.evidence),
         };
@@ -197,20 +223,20 @@ const sanitizeRelations = (value) => {
         if (!isRecord(item))
             return null;
         const fromId = asString(item.from_id);
-        const fromType = asString(item.from_type);
+        const fromType = asNodeType(item.from_type);
         const toId = asString(item.to_id);
-        const toType = asString(item.to_type);
+        const toType = asNodeType(item.to_type);
         if (!fromId || !fromType || !toId || !toType)
             return null;
-        const relationType = asString(item.relation_type);
+        const relationType = asRelationType(item.relation_type);
         const confidence = asNumber(item.confidence);
         return {
             local_id: asString(item.local_id) ?? `r${index + 1}`,
             from_id: fromId,
-            from_type: NODE_TYPES.has(fromType) ? fromType : 'entity',
+            from_type: fromType,
             to_id: toId,
-            to_type: NODE_TYPES.has(toType) ? toType : 'entity',
-            relation_type: relationType && RELATION_TYPES.has(relationType) ? relationType : 'related_to',
+            to_type: toType,
+            relation_type: relationType ?? 'related_to',
             description: asString(item.description),
             confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
             evidence: sanitizeEvidence(item.evidence),

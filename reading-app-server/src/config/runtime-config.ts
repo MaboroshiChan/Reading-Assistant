@@ -12,6 +12,7 @@ export interface Config {
   debugMode: boolean;
   thinking: boolean;
   temperature: number;
+  autoSubmitKnowledgeExtractionWorkflow: boolean;
 }
 
 const loadEnvFiles = (): void => {
@@ -41,6 +42,8 @@ export const createAppConfig = (): Config => ({
   debugMode: process.env.LLM_DEBUG === '1' || process.env.DEBUG_LLM === '1',
   thinking: false,
   temperature: 0.1,
+  autoSubmitKnowledgeExtractionWorkflow:
+    process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === '1',
 });
 
 export const appConfig = registerAs('app', createAppConfig);

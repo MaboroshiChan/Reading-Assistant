@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BookIngestionController = void 0;
 const common_1 = require("@nestjs/common");
 const book_ingestion_service_1 = require("./book-ingestion.service");
-let BookIngestionController = exports.BookIngestionController = class BookIngestionController {
+let BookIngestionController = class BookIngestionController {
     bookIngestionService;
     constructor(bookIngestionService) {
         this.bookIngestionService = bookIngestionService;
@@ -36,6 +36,7 @@ let BookIngestionController = exports.BookIngestionController = class BookIngest
         return this.bookIngestionService.getPage(bookId, chapterId, this.bookIngestionService.parsePageIndex(rawPageIndex));
     }
 };
+exports.BookIngestionController = BookIngestionController;
 __decorate([
     (0, common_1.Post)(':bookId/chapters/:chapterId/pages/:pageIndex'),
     __param(0, (0, common_1.Param)('bookId')),

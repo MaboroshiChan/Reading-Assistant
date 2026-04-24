@@ -5,6 +5,7 @@ import { appConfig } from './config/runtime-config';
 import { MessageController } from './message/message.controller';
 import { MessageHttpService } from './message/message-http.service';
 import { BookIngestionModule } from './modules/book-ingestion/book-ingestion.module';
+import { KnowledgeExtractionWorkflowModule } from './modules/knowledge-extraction-workflow/knowledge-extraction-workflow.module';
 import { QuizWorkflowModule } from './modules/quiz-workflow/quiz-workflow.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { QuizWorkflowModule } from './modules/quiz-workflow/quiz-workflow.module
       load: [appConfig],
     }),
     BookIngestionModule,
+    KnowledgeExtractionWorkflowModule,
     QuizWorkflowModule,
   ],
   controllers: [HealthController, MessageController],

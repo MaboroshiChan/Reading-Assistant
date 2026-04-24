@@ -1,7 +1,14 @@
-import { describe, expect, test } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, test } from 'vitest';
 import { BookIngestionRepository } from '../src/modules/book-ingestion/book-ingestion.repository';
 
 describe('BookIngestionRepository', () => {
+  afterEach(async () => {
+    delete process.env.BOOK_INGESTION_DATA_DIR;
+  });
+
   test('creates canonical book/chapter/page state and materializes sorted page text', () => {
     const repository = new BookIngestionRepository();
 
@@ -115,5 +122,42 @@ describe('BookIngestionRepository', () => {
       'earlier page updated\n\nlater page',
     );
     expect(changed.chapter.chapterContentHash).not.toBe('');
+  });
+
+  test('reloads persisted canonical state across repository instances', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'book-ingestion-store-'));
+    process.env.BOOK_INGESTION_DATA_DIR = dataDir;
+
+    const firstRepository = new BookIngestionRepository();
+    firstRepository.upsertPageFragment({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Persisted Chapter',
+      pageIndex: 2,
+      sourceHash: 'hash-page-2-v1',
+      pageParagraphs: {
+        '0': 'persisted paragraph one',
+        '1': 'persisted paragraph two',
+      },
+      bookMetadata: {
+        title: 'Persistent Book',
+      },
+    });
+
+    const secondRepository = new BookIngestionRepository();
+    const restoredBook = secondRepository.getBook('book-1');
+    const restoredChapter = secondRepository.getChapter('book-1', 'chapter-1');
+    const restoredPage = secondRepository.getPage('book-1', 'chapter-1', 2);
+
+    expect(restoredBook?.bookMetadata).toEqual({ title: 'Persistent Book' });
+    expect(restoredBook?.snapshotVersion).toBe(1);
+    expect(restoredChapter?.chapterTitle).toBe('Persisted Chapter');
+    expect(restoredChapter?.chapterTextMaterialized).toBe(
+      'persisted paragraph one\n\npersisted paragraph two',
+    );
+    expect(restoredPage?.pageTextMaterialized).toBe(
+      'persisted paragraph one\n\npersisted paragraph two',
+    );
   });
 });

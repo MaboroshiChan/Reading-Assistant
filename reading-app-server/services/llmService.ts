@@ -125,6 +125,7 @@ const LOG_DIR = path.join(__dirname, '..', 'log');
 const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
 const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
 
+
 /**
  * Calls the configured LLM implementation.
  *
@@ -133,6 +134,7 @@ const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response'
  */
 async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
   await logPromptIfDebug(args);
+
 
   // Note: The Google Generative AI Node SDK does not currently expose a simple AbortSignal hook
   // for generateContent in the same way fetch does, but we can respect the timeout for the wrapper.
@@ -194,6 +196,7 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
     throw normalizeError(error);
   }
 }
+
 
 /**
  * Logs the LLM prompt to the filesystem if debug mode is enabled.
@@ -313,54 +316,4 @@ function formatDebugPrompt(args: CallArgs): string {
   ].join('\n');
 }
 
-/**
- * Truncates a string to a maximum length, adding an ellipsis if necessary.
- *
- * @param text - The string to truncate.
- * @param maxLen - The maximum allowed length.
- * @returns The truncated string.
- */
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 3)}...`;
-}
 
-/**
- * Attempts to extract JSON from a prompt string for deterministic prompt-derived data.
- *
- * @param prompt - The prompt containing a potential JSON block.
- * @returns The parsed JSON or null.
- */
-function extractJsonFromPrompt(prompt: string): unknown | null {
-  const fenceMatch = prompt.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenceMatch ? fenceMatch[1] : findFirstJsonBlock(prompt);
-  if (!candidate) return null;
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Finds the first balanced curly-brace block in a string.
- *
- * @param prompt - The string to search.
- * @returns The first JSON-like block or null.
- */
-function findFirstJsonBlock(prompt: string): string | null {
-  const firstBrace = prompt.indexOf('{');
-  if (firstBrace === -1) return null;
-  let depth = 0;
-  for (let i = firstBrace; i < prompt.length; i++) {
-    const char = prompt[i];
-    if (char === '{') depth += 1;
-    if (char === '}') {
-      depth -= 1;
-      if (depth === 0) {
-        return prompt.slice(firstBrace, i + 1);
-      }
-    }
-  }
-  return null;
-}

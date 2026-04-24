@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import type {
   CanonicalBookRecord,
   CanonicalChapterRecord,
@@ -7,6 +9,7 @@ import type {
   UpsertPageFragmentInput,
   UpsertPageFragmentResult,
 } from './book-ingestion.types';
+import { bookIngestionLog } from './book-ingestion.logger';
 
 interface SortedParagraphEntry {
   key: string;
@@ -15,6 +18,21 @@ interface SortedParagraphEntry {
 
 const hashText = (input: string): string =>
   createHash('sha256').update(input).digest('hex');
+
+const DEFAULT_DATA_DIR = path.join(__dirname, '..', '..', '..', 'data', 'book-ingestion');
+const DEFAULT_STORE_FILE = 'store.json';
+
+interface SerializedCanonicalChapterRecord extends Omit<CanonicalChapterRecord, 'pages'> {
+  pages: Record<string, CanonicalPageRecord>;
+}
+
+interface SerializedCanonicalBookRecord extends Omit<CanonicalBookRecord, 'chapters'> {
+  chapters: Record<string, SerializedCanonicalChapterRecord>;
+}
+
+interface SerializedBookIngestionStore {
+  books: Record<string, SerializedCanonicalBookRecord>;
+}
 
 const sortParagraphEntries = (
   pageParagraphs: Record<string, string>,
@@ -37,6 +55,12 @@ const sortParagraphEntries = (
 @Injectable()
 export class BookIngestionRepository {
   private readonly books = new Map<string, CanonicalBookRecord>();
+  private readonly storePath: string;
+
+  constructor(dataDir = process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR) {
+    this.storePath = path.join(dataDir, DEFAULT_STORE_FILE);
+    this.loadPersistedStore();
+  }
 
   upsertPageFragment(input: UpsertPageFragmentInput): UpsertPageFragmentResult {
     const currentTimestamp = new Date().toISOString();
@@ -45,6 +69,14 @@ export class BookIngestionRepository {
     const existingPage = chapter.pages.get(input.pageIndex);
 
     if (existingPage && existingPage.sourceHash === input.sourceHash) {
+      bookIngestionLog('page.deduped', {
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        chapterIndex: input.chapterIndex,
+        pageIndex: input.pageIndex,
+        sourceHash: input.sourceHash,
+        snapshotVersion: book.snapshotVersion,
+      });
       return {
         book,
         chapter,
@@ -84,6 +116,19 @@ export class BookIngestionRepository {
     book.updatedAt = currentTimestamp;
 
     this.materializeChapter(chapter, currentTimestamp);
+    this.persistStore();
+    bookIngestionLog('page.persisted', {
+      bookId: input.bookId,
+      chapterId: input.chapterId,
+      chapterIndex: chapter.chapterIndex,
+      pageIndex: input.pageIndex,
+      sourceHash: input.sourceHash,
+      paragraphCount: sortedParagraphs.length,
+      paragraphKeys: sortedParagraphs.map((entry) => entry.key),
+      pageTextLength: pageTextMaterialized.length,
+      snapshotVersion: book.snapshotVersion,
+      chapterContentHash: chapter.chapterContentHash,
+    });
 
     return {
       book,
@@ -116,6 +161,7 @@ export class BookIngestionRepository {
       chapters: new Map<string, CanonicalChapterRecord>(),
     };
     this.books.set(bookId, created);
+    bookIngestionLog('book.created', { bookId, timestamp });
     return created;
   }
 
@@ -138,6 +184,13 @@ export class BookIngestionRepository {
       updatedAt: timestamp,
     };
     book.chapters.set(input.chapterId, created);
+    bookIngestionLog('chapter.created', {
+      bookId: input.bookId,
+      chapterId: input.chapterId,
+      chapterIndex: input.chapterIndex,
+      chapterTitle: input.chapterTitle,
+      timestamp,
+    });
     return created;
   }
 
@@ -150,5 +203,84 @@ export class BookIngestionRepository {
     chapter.chapterTextMaterialized = chapterTextMaterialized;
     chapter.chapterContentHash = hashText(chapterTextMaterialized);
     chapter.updatedAt = timestamp;
+    bookIngestionLog('chapter.materialized', {
+      bookId: chapter.bookId,
+      chapterId: chapter.chapterId,
+      chapterIndex: chapter.chapterIndex,
+      pageCount: chapter.pages.size,
+      chapterTextLength: chapter.chapterTextMaterialized.length,
+      chapterContentHash: chapter.chapterContentHash,
+      timestamp,
+    });
+  }
+
+  private loadPersistedStore(): void {
+    try {
+      if (!fs.existsSync(this.storePath)) {
+        return;
+      }
+
+      const raw = fs.readFileSync(this.storePath, 'utf8');
+      if (!raw.trim()) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as SerializedBookIngestionStore;
+      for (const [bookId, book] of Object.entries(parsed.books ?? {})) {
+        this.books.set(bookId, this.deserializeBook(book));
+      }
+    } catch (error) {
+      console.warn('[book-ingestion] failed to load persisted store', error);
+    }
+  }
+
+  private persistStore(): void {
+    try {
+      fs.mkdirSync(path.dirname(this.storePath), { recursive: true });
+      const payload: SerializedBookIngestionStore = {
+        books: Object.fromEntries(
+          Array.from(this.books.entries()).map(([bookId, book]) => [bookId, this.serializeBook(book)]),
+        ),
+      };
+      const tempPath = `${this.storePath}.tmp`;
+      fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2), 'utf8');
+      fs.renameSync(tempPath, this.storePath);
+    } catch (error) {
+      console.warn('[book-ingestion] failed to persist store', error);
+    }
+  }
+
+  private serializeBook(book: CanonicalBookRecord): SerializedCanonicalBookRecord {
+    return {
+      ...book,
+      chapters: Object.fromEntries(
+        Array.from(book.chapters.entries()).map(([chapterId, chapter]) => [
+          chapterId,
+          {
+            ...chapter,
+            pages: Object.fromEntries(
+              Array.from(chapter.pages.entries()).map(([pageIndex, page]) => [String(pageIndex), page]),
+            ),
+          },
+        ]),
+      ),
+    };
+  }
+
+  private deserializeBook(book: SerializedCanonicalBookRecord): CanonicalBookRecord {
+    return {
+      ...book,
+      chapters: new Map(
+        Object.entries(book.chapters ?? {}).map(([chapterId, chapter]) => [
+          chapterId,
+          {
+            ...chapter,
+            pages: new Map(
+              Object.entries(chapter.pages ?? {}).map(([pageIndex, page]) => [Number(pageIndex), page]),
+            ),
+          },
+        ]),
+      ),
+    };
   }
 }

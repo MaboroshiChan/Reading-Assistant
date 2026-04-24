@@ -1,4 +1,5 @@
 import type {
+  AnalyzeKnowledgeExtractionPayload,
   AnalyzeParagraphPayload,
   AnalyzeQuizPayload,
   AnalyzeSentencePayload,
@@ -8,6 +9,7 @@ import type {
   RequestEnvelope,
   RequestEnvelopeParagraph,
   RequestEnvelopeQuiz,
+  RequestEnvelopeKnowledgeExtraction,
   RequestEnvelopeSentence,
   RequestEnvelopeSentenceStructure,
   RequestEnvelopeSkeleton,
@@ -76,6 +78,17 @@ const isQuizPayload = (
   return (
     isString(payload.doc_id) &&
     isString(payload.article_text)
+  );
+};
+
+const isKnowledgeExtractionPayload = (
+  payload: unknown,
+): payload is AnalyzeKnowledgeExtractionPayload => {
+  if (!isRecord(payload)) return false;
+  return (
+    isString(payload.doc_id) &&
+    isString(payload.chapter_id) &&
+    isString(payload.chapter_text)
   );
 };
 
@@ -234,6 +247,23 @@ export const validateEnvelope = (input: unknown): ValidationResult => {
       return {
         ok: true,
         envelope: input as unknown as RequestEnvelopeQuiz,
+      };
+
+    case 'analyze.knowledge-extraction.v1':
+      if (!isKnowledgeExtractionPayload(payload)) {
+        return {
+          ok: false,
+          error: makeError(
+            requestId,
+            'E.BAD_REQUEST',
+            400,
+            'Invalid knowledge extraction payload',
+          ),
+        };
+      }
+      return {
+        ok: true,
+        envelope: input as unknown as RequestEnvelopeKnowledgeExtraction,
       };
 
     default:

@@ -12,8 +12,9 @@ const book_ingestion_module_1 = require("../book-ingestion/book-ingestion.module
 const quiz_workflow_controller_1 = require("./quiz-workflow.controller");
 const quiz_workflow_repository_1 = require("./quiz-workflow.repository");
 const quiz_workflow_service_1 = require("./quiz-workflow.service");
-let QuizWorkflowModule = exports.QuizWorkflowModule = class QuizWorkflowModule {
+let QuizWorkflowModule = class QuizWorkflowModule {
 };
+exports.QuizWorkflowModule = QuizWorkflowModule;
 exports.QuizWorkflowModule = QuizWorkflowModule = __decorate([
     (0, common_1.Module)({
         imports: [book_ingestion_module_1.BookIngestionModule],

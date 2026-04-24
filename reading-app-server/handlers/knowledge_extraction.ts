@@ -39,6 +39,31 @@ const RELATION_TYPES = new Set([
 ]);
 const IDEA_KINDS = new Set(['claim', 'belief', 'question', 'principle', 'conflict']);
 
+type KnowledgeIdeaKind = KnowledgeIdea['kind'];
+type KnowledgeEntityType = KnowledgeEntity['type'];
+type KnowledgeNodeType = KnowledgeRelation['from_type'];
+type KnowledgeRelationType = KnowledgeRelation['relation_type'];
+
+const asIdeaKind = (value: unknown): KnowledgeIdeaKind | undefined => {
+  const kind = asString(value);
+  return kind && IDEA_KINDS.has(kind) ? (kind as KnowledgeIdeaKind) : undefined;
+};
+
+const asEntityType = (value: unknown): KnowledgeEntityType | undefined => {
+  const type = asString(value);
+  return type && ENTITY_TYPES.has(type) ? (type as KnowledgeEntityType) : undefined;
+};
+
+const asNodeType = (value: unknown): KnowledgeNodeType | undefined => {
+  const type = asString(value);
+  return type && NODE_TYPES.has(type) ? (type as KnowledgeNodeType) : undefined;
+};
+
+const asRelationType = (value: unknown): KnowledgeRelationType | undefined => {
+  const type = asString(value);
+  return type && RELATION_TYPES.has(type) ? (type as KnowledgeRelationType) : undefined;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -95,12 +120,12 @@ const sanitizeIdeas = (value: unknown): KnowledgeIdea[] | undefined => {
       if (!isRecord(item)) return null;
       const label = asString(item.label);
       if (!label) return null;
-      const kind = asString(item.kind);
+      const kind = asIdeaKind(item.kind);
       return {
         local_id: asString(item.local_id) ?? `i${index + 1}`,
         label,
         description: asString(item.description),
-        kind: kind && IDEA_KINDS.has(kind) ? kind : 'claim',
+        kind: kind ?? 'claim',
         evidence: sanitizeEvidence(item.evidence),
       };
     })
@@ -135,12 +160,12 @@ const sanitizeEntities = (value: unknown): KnowledgeEntity[] | undefined => {
     .map((item, index): KnowledgeEntity | null => {
       if (!isRecord(item)) return null;
       const label = asString(item.label);
-      const type = asString(item.type);
+      const type = asEntityType(item.type);
       if (!label || !type) return null;
       return {
         local_id: asString(item.local_id) ?? `n${index + 1}`,
         label,
-        type: ENTITY_TYPES.has(type) ? type : 'other',
+        type,
         description: asString(item.description),
         evidence: sanitizeEvidence(item.evidence),
       };
@@ -175,19 +200,19 @@ const sanitizeRelations = (value: unknown): KnowledgeRelation[] | undefined => {
     .map((item, index): KnowledgeRelation | null => {
       if (!isRecord(item)) return null;
       const fromId = asString(item.from_id);
-      const fromType = asString(item.from_type);
+      const fromType = asNodeType(item.from_type);
       const toId = asString(item.to_id);
-      const toType = asString(item.to_type);
+      const toType = asNodeType(item.to_type);
       if (!fromId || !fromType || !toId || !toType) return null;
-      const relationType = asString(item.relation_type);
+      const relationType = asRelationType(item.relation_type);
       const confidence = asNumber(item.confidence);
       return {
         local_id: asString(item.local_id) ?? `r${index + 1}`,
         from_id: fromId,
-        from_type: NODE_TYPES.has(fromType) ? fromType : 'entity',
+        from_type: fromType,
         to_id: toId,
-        to_type: NODE_TYPES.has(toType) ? toType : 'entity',
-        relation_type: relationType && RELATION_TYPES.has(relationType) ? relationType : 'related_to',
+        to_type: toType,
+        relation_type: relationType ?? 'related_to',
         description: asString(item.description),
         confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
         evidence: sanitizeEvidence(item.evidence),

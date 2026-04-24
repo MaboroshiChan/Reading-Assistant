@@ -9,7 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MessageHttpService = void 0;
 const common_1 = require("@nestjs/common");
 const router_1 = require("../../http/router");
-let MessageHttpService = exports.MessageHttpService = class MessageHttpService {
+let MessageHttpService = class MessageHttpService {
     handleMsg(raw) {
         return (0, router_1.handleMsg)(raw);
     }
@@ -17,6 +17,7 @@ let MessageHttpService = exports.MessageHttpService = class MessageHttpService {
         return (0, router_1.handleStream)(raw);
     }
 };
+exports.MessageHttpService = MessageHttpService;
 exports.MessageHttpService = MessageHttpService = __decorate([
     (0, common_1.Injectable)()
 ], MessageHttpService);

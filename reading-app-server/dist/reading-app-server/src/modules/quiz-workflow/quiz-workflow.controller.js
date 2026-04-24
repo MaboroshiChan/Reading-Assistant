@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.QuizWorkflowController = void 0;
 const common_1 = require("@nestjs/common");
 const quiz_workflow_service_1 = require("./quiz-workflow.service");
-let QuizWorkflowController = exports.QuizWorkflowController = class QuizWorkflowController {
+let QuizWorkflowController = class QuizWorkflowController {
     quizWorkflowService;
     constructor(quizWorkflowService) {
         this.quizWorkflowService = quizWorkflowService;
@@ -34,6 +34,7 @@ let QuizWorkflowController = exports.QuizWorkflowController = class QuizWorkflow
         return this.quizWorkflowService.getLatestChapterQuiz(bookId, chapterId);
     }
 };
+exports.QuizWorkflowController = QuizWorkflowController;
 __decorate([
     (0, common_1.Post)('workflows/quiz'),
     __param(0, (0, common_1.Body)()),

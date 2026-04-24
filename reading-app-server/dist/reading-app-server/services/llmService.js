@@ -15,7 +15,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.extractJsonFromText = exports.createLLMClient = void 0;
+exports.createLLMClient = createLLMClient;
+exports.extractJsonFromText = extractJsonFromText;
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
 const config_1 = require("./config");
@@ -63,7 +64,6 @@ function createLLMClient(factoryOptions) {
         },
     };
 }
-exports.createLLMClient = createLLMClient;
 const LOG_DIR = node_path_1.default.join(__dirname, '..', 'log');
 const LOG_FILE = node_path_1.default.join(LOG_DIR, 'prompts.log');
 const RESPONSE_DIR = node_path_1.default.join(__dirname, '..', '..', 'resource', 'LLM_response');
@@ -220,7 +220,6 @@ function extractJsonFromText(text) {
         }
     }
 }
-exports.extractJsonFromText = extractJsonFromText;
 /**
  * Removes markdown code fences from a string.
  *
@@ -251,59 +250,5 @@ function formatDebugPrompt(args) {
         '[User Prompt]',
         args.userPrompt,
     ].join('\n');
-}
-/**
- * Truncates a string to a maximum length, adding an ellipsis if necessary.
- *
- * @param text - The string to truncate.
- * @param maxLen - The maximum allowed length.
- * @returns The truncated string.
- */
-function truncate(text, maxLen) {
-    if (text.length <= maxLen)
-        return text;
-    return `${text.slice(0, maxLen - 3)}...`;
-}
-/**
- * Attempts to extract JSON from a prompt string for deterministic prompt-derived data.
- *
- * @param prompt - The prompt containing a potential JSON block.
- * @returns The parsed JSON or null.
- */
-function extractJsonFromPrompt(prompt) {
-    const fenceMatch = prompt.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const candidate = fenceMatch ? fenceMatch[1] : findFirstJsonBlock(prompt);
-    if (!candidate)
-        return null;
-    try {
-        return JSON.parse(candidate);
-    }
-    catch {
-        return null;
-    }
-}
-/**
- * Finds the first balanced curly-brace block in a string.
- *
- * @param prompt - The string to search.
- * @returns The first JSON-like block or null.
- */
-function findFirstJsonBlock(prompt) {
-    const firstBrace = prompt.indexOf('{');
-    if (firstBrace === -1)
-        return null;
-    let depth = 0;
-    for (let i = firstBrace; i < prompt.length; i++) {
-        const char = prompt[i];
-        if (char === '{')
-            depth += 1;
-        if (char === '}') {
-            depth -= 1;
-            if (depth === 0) {
-                return prompt.slice(firstBrace, i + 1);
-            }
-        }
-    }
-    return null;
 }
 //# sourceMappingURL=llmService.js.map
