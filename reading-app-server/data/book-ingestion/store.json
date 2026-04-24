@@ -6511,8 +6511,8 @@
     },
     "book-1": {
       "bookId": "book-1",
-      "snapshotVersion": 10,
-      "updatedAt": "2026-04-24T05:56:53.044Z",
+      "snapshotVersion": 11,
+      "updatedAt": "2026-04-24T15:20:49.604Z",
       "chapters": {
         "ch-1": {
           "bookId": "book-1",
@@ -6556,9 +6556,24 @@
         "chapter-1": {
           "bookId": "book-1",
           "chapterId": "chapter-1",
-          "chapterIndex": 2,
-          "chapterTitle": "Chapter Two",
+          "chapterIndex": 1,
+          "chapterTitle": "Chapter One",
           "pages": {
+            "0": {
+              "pageIndex": 0,
+              "sourceHash": "hash-1",
+              "pageParagraphs": {
+                "0": "paragraph one",
+                "1": "paragraph two"
+              },
+              "pageTextMaterialized": "paragraph one\n\nparagraph two",
+              "paragraphHashes": {
+                "0": "afef4525660fccb0ad82af74d02231089529af979cd0b6e979681f5624510f9c",
+                "1": "19a24fded3a242021fd2a98b528fa143d7c20234bad8b19a084c296a064d9a01"
+              },
+              "createdAt": "2026-04-24T15:20:49.604Z",
+              "updatedAt": "2026-04-24T15:20:49.604Z"
+            },
             "1": {
               "pageIndex": 1,
               "sourceHash": "hash-1",
@@ -6607,9 +6622,9 @@
               "updatedAt": "2026-04-24T05:56:52.722Z"
             }
           },
-          "chapterTextMaterialized": "paragraph one\n\nparagraph two\n\nparagraph one\n\nparagraph two\n\nsecond paragraph\n\ntenth paragraph\n\nappendix paragraph",
-          "chapterContentHash": "0e4c5115305f9b3d7d22a0e933033d885e0b7d4a2142bf1f237570e9d61ed1fc",
-          "updatedAt": "2026-04-24T05:56:53.044Z"
+          "chapterTextMaterialized": "paragraph one\n\nparagraph two\n\nparagraph one\n\nparagraph two\n\nparagraph one\n\nparagraph two\n\nsecond paragraph\n\ntenth paragraph\n\nappendix paragraph",
+          "chapterContentHash": "f936c64c3801d6df656431d9048fdbf1f71347e3dfe62277f4c73392707c68e8",
+          "updatedAt": "2026-04-24T15:20:49.604Z"
         }
       },
       "bookMetadata": {

@@ -7,7 +7,6 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import type {
   AnalyzeKnowledgeExtractionData,
   KnowledgeEntity,
@@ -20,6 +19,8 @@ import type {
 } from '../../../../packages/contracts/src';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
 import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
+import { workflowLog } from '../workflow.logger';
+import { resolvePromptPath } from '../../utils/prompt-path';
 import type {
   GetKnowledgeExtractionWorkflowResultResponseDto,
   GetKnowledgeExtractionWorkflowStatusResponseDto,
@@ -35,16 +36,7 @@ import type {
 } from './knowledge-extraction-workflow.types';
 
 const PROMPT_VERSION = 'knowledge_extraction.v2.0';
-const PROMPT_PATH = path.join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  '..',
-  'prompts',
-  'v1',
-  'knowledge_extraction.txt',
-);
+const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
 
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
 const NODE_TYPES = new Set(['person', 'idea', 'event', 'entity', 'theme']);
@@ -93,6 +85,10 @@ export class KnowledgeExtractionWorkflowService {
 
   parseSubmitRequest(rawBody: string | undefined): SubmitKnowledgeExtractionWorkflowRequestDto {
     if (!rawBody || rawBody.trim() === '') {
+      workflowLog('request.parse_failed', {
+        workflowKind: 'knowledge_extraction',
+        reason: 'empty_body',
+      });
       throw new BadRequestException('Request body cannot be empty');
     }
 
@@ -100,12 +96,21 @@ export class KnowledgeExtractionWorkflowService {
     try {
       parsed = JSON.parse(rawBody);
     } catch (error) {
+      workflowLog('request.parse_failed', {
+        workflowKind: 'knowledge_extraction',
+        reason: 'invalid_json',
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw new BadRequestException(
         `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
     if (!isPlainObject(parsed)) {
+      workflowLog('request.parse_failed', {
+        workflowKind: 'knowledge_extraction',
+        reason: 'non_object_body',
+      });
       throw new BadRequestException('Request body must be a JSON object');
     }
 
@@ -113,7 +118,7 @@ export class KnowledgeExtractionWorkflowService {
       ? 'v1'
       : this.requireString(parsed.workflowVersion, 'workflowVersion');
 
-    return {
+    const request = {
       bookId: this.requireString(parsed.bookId, 'bookId'),
       chapterId: this.requireString(parsed.chapterId, 'chapterId'),
       chapterIndex: this.requireNonNegativeInteger(parsed.chapterIndex, 'chapterIndex'),
@@ -131,6 +136,20 @@ export class KnowledgeExtractionWorkflowService {
         ? undefined
         : this.requireString(parsed.requestedByUserId, 'requestedByUserId'),
     };
+
+    workflowLog('request.parsed', {
+      workflowKind: 'knowledge_extraction',
+      bookId: request.bookId,
+      chapterId: request.chapterId,
+      chapterIndex: request.chapterIndex,
+      workflowVersion: request.workflowVersion,
+      hasIdempotencyKey: request.idempotencyKey !== undefined,
+      expectedSnapshotVersion: request.expectedSnapshotVersion,
+      expectedChapterContentHash: request.expectedChapterContentHash,
+      requestedByUserId: request.requestedByUserId,
+    });
+
+    return request;
   }
 
   submitKnowledgeExtractionWorkflow(
@@ -187,11 +206,29 @@ export class KnowledgeExtractionWorkflowService {
     const canonicalRun = deduped
       ? this.knowledgeExtractionWorkflowRepository.getRun(run.id) ?? run
       : run;
+    workflowLog('run.submitted', {
+      workflowKind: canonicalRun.kind,
+      workflowRunId: canonicalRun.id,
+      bookId: canonicalRun.bookId,
+      chapterId: canonicalRun.chapterId,
+      chapterIndex: canonicalRun.chapterIndex,
+      workflowVersion: canonicalRun.workflowVersion,
+      deduped,
+      status: canonicalRun.status,
+    });
     return this.toSubmitResponse(canonicalRun, deduped);
   }
 
   getWorkflowStatus(workflowRunId: string): GetKnowledgeExtractionWorkflowStatusResponseDto {
     const run = this.requireRun(workflowRunId);
+    workflowLog('status.read_hit', {
+      workflowKind: run.kind,
+      workflowRunId: run.id,
+      bookId: run.bookId,
+      chapterId: run.chapterId,
+      status: run.status,
+      resultAvailable: Boolean(run.output),
+    });
     return this.toStatusResponse(run);
   }
 
@@ -205,6 +242,20 @@ export class KnowledgeExtractionWorkflowService {
     ) {
       throw new ConflictException('Knowledge extraction workflow result is not available yet');
     }
+
+    workflowLog('result.read_hit', {
+      workflowKind: run.kind,
+      workflowRunId: run.id,
+      bookId: run.bookId,
+      chapterId: run.chapterId,
+      status: run.status,
+      peopleCount: run.output.people?.length ?? 0,
+      ideaCount: run.output.ideas?.length ?? 0,
+      eventCount: run.output.events?.length ?? 0,
+      entityCount: run.output.entities?.length ?? 0,
+      themeCount: run.output.themes?.length ?? 0,
+      relationCount: run.output.relations?.length ?? 0,
+    });
 
     return {
       workflowRunId: run.id,
@@ -230,8 +281,23 @@ export class KnowledgeExtractionWorkflowService {
   ): GetLatestChapterKnowledgeExtractionResponseDto {
     const result = this.knowledgeExtractionWorkflowRepository.getLatestResult(bookId, chapterId);
     if (!result) {
+      workflowLog('latest_result.read_miss', {
+        workflowKind: 'knowledge_extraction',
+        bookId,
+        chapterId,
+      });
       throw new NotFoundException('No completed knowledge extraction workflow result found for chapter');
     }
+
+    workflowLog('latest_result.read_hit', {
+      workflowKind: 'knowledge_extraction',
+      workflowRunId: result.workflowRunId,
+      bookId,
+      chapterId,
+      chapterIndex: result.chapterIndex,
+      workflowVersion: result.workflowVersion,
+      snapshotVersion: result.snapshotVersion,
+    });
 
     return {
       workflowRunId: result.workflowRunId,
@@ -650,6 +716,10 @@ export class KnowledgeExtractionWorkflowService {
   private requireRun(workflowRunId: string): KnowledgeExtractionWorkflowRunRecord {
     const run = this.knowledgeExtractionWorkflowRepository.getRun(workflowRunId);
     if (!run) {
+      workflowLog('status.read_miss', {
+        workflowKind: 'knowledge_extraction',
+        workflowRunId,
+      });
       throw new NotFoundException('Knowledge extraction workflow run not found');
     }
     return run;

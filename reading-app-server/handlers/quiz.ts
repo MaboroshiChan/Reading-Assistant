@@ -9,13 +9,14 @@ import type {
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { createLLMClient, extractJsonFromText, type CallReturn } from '../services/llmService';
+import { resolvePromptPath } from '../src/utils/prompt-path';
 import { buildStableCacheKey } from './shared';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'quiz';
 const CACHE_VERSION = 'v1';
 const PROMPT_VERSION = 'quiz.v1.0';
-const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'quiz.txt');
+const PROMPT_PATH = resolvePromptPath('quiz.txt');
 
 /**
  * Builds a cache key for quiz generation requests.

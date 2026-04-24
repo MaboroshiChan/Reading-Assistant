@@ -15,13 +15,14 @@ import type {
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { createLLMClient, extractJsonFromText, type CallReturn } from '../services/llmService';
+import { resolvePromptPath } from '../src/utils/prompt-path';
 import { buildStableCacheKey, summarize } from './shared';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'knowledge-extraction';
 const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'knowledge_extraction.v2.0';
-const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'knowledge_extraction.txt');
+const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
 
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
 const NODE_TYPES = new Set(['person', 'idea', 'event', 'entity', 'theme']);

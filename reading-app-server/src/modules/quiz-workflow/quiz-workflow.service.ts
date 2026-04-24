@@ -6,8 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
+import { workflowLog } from '../workflow.logger';
+import { resolvePromptPath } from '../../utils/prompt-path';
 import type {
   GetLatestChapterQuizResponseDto,
   GetQuizWorkflowResultResponseDto,
@@ -26,7 +27,7 @@ import { config } from '../../config/runtime-config';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
 
 const PROMPT_VERSION = 'quiz.v1.0';
-const PROMPT_PATH = path.join(__dirname, '..', '..', '..', '..', 'prompts', 'v1', 'quiz.txt');
+const PROMPT_PATH = resolvePromptPath('quiz.txt');
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
@@ -57,6 +58,10 @@ export class QuizWorkflowService {
 
   parseSubmitRequest(rawBody: string | undefined): SubmitQuizWorkflowRequestDto {
     if (!rawBody || rawBody.trim() === '') {
+      workflowLog('request.parse_failed', {
+        workflowKind: 'quiz_generation',
+        reason: 'empty_body',
+      });
       throw new BadRequestException('Request body cannot be empty');
     }
 
@@ -64,12 +69,21 @@ export class QuizWorkflowService {
     try {
       parsed = JSON.parse(rawBody);
     } catch (error) {
+      workflowLog('request.parse_failed', {
+        workflowKind: 'quiz_generation',
+        reason: 'invalid_json',
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw new BadRequestException(
         `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
     if (!isPlainObject(parsed)) {
+      workflowLog('request.parse_failed', {
+        workflowKind: 'quiz_generation',
+        reason: 'non_object_body',
+      });
       throw new BadRequestException('Request body must be a JSON object');
     }
 
@@ -77,7 +91,7 @@ export class QuizWorkflowService {
       ? 'v1'
       : this.requireString(parsed.workflowVersion, 'workflowVersion');
 
-    return {
+    const request = {
       bookId: this.requireString(parsed.bookId, 'bookId'),
       chapterId: this.requireString(parsed.chapterId, 'chapterId'),
       chapterIndex: this.requireNonNegativeInteger(parsed.chapterIndex, 'chapterIndex'),
@@ -95,6 +109,20 @@ export class QuizWorkflowService {
         ? undefined
         : this.requireString(parsed.requestedByUserId, 'requestedByUserId'),
     };
+
+    workflowLog('request.parsed', {
+      workflowKind: 'quiz_generation',
+      bookId: request.bookId,
+      chapterId: request.chapterId,
+      chapterIndex: request.chapterIndex,
+      workflowVersion: request.workflowVersion,
+      hasIdempotencyKey: request.idempotencyKey !== undefined,
+      expectedSnapshotVersion: request.expectedSnapshotVersion,
+      expectedChapterContentHash: request.expectedChapterContentHash,
+      requestedByUserId: request.requestedByUserId,
+    });
+
+    return request;
   }
 
   submitQuizWorkflow(request: SubmitQuizWorkflowRequestDto): SubmitQuizWorkflowResponseDto {
@@ -145,11 +173,29 @@ export class QuizWorkflowService {
     }
 
     const canonicalRun = deduped ? this.quizWorkflowRepository.getRun(run.id) ?? run : run;
+    workflowLog('run.submitted', {
+      workflowKind: canonicalRun.kind,
+      workflowRunId: canonicalRun.id,
+      bookId: canonicalRun.bookId,
+      chapterId: canonicalRun.chapterId,
+      chapterIndex: canonicalRun.chapterIndex,
+      workflowVersion: canonicalRun.workflowVersion,
+      deduped,
+      status: canonicalRun.status,
+    });
     return this.toSubmitResponse(canonicalRun, deduped);
   }
 
   getWorkflowStatus(workflowRunId: string): GetQuizWorkflowStatusResponseDto {
     const run = this.requireRun(workflowRunId);
+    workflowLog('status.read_hit', {
+      workflowKind: run.kind,
+      workflowRunId: run.id,
+      bookId: run.bookId,
+      chapterId: run.chapterId,
+      status: run.status,
+      resultAvailable: Boolean(run.output),
+    });
     return this.toStatusResponse(run);
   }
 
@@ -163,6 +209,15 @@ export class QuizWorkflowService {
     ) {
       throw new ConflictException('Quiz workflow result is not available yet');
     }
+
+    workflowLog('result.read_hit', {
+      workflowKind: run.kind,
+      workflowRunId: run.id,
+      bookId: run.bookId,
+      chapterId: run.chapterId,
+      status: run.status,
+      resultQuestionCount: run.output.questions.length,
+    });
 
     return {
       workflowRunId: run.id,
@@ -185,8 +240,23 @@ export class QuizWorkflowService {
   getLatestChapterQuiz(bookId: string, chapterId: string): GetLatestChapterQuizResponseDto {
     const result = this.quizWorkflowRepository.getLatestResult(bookId, chapterId);
     if (!result) {
+      workflowLog('latest_result.read_miss', {
+        workflowKind: 'quiz_generation',
+        bookId,
+        chapterId,
+      });
       throw new NotFoundException('No completed quiz workflow result found for chapter');
     }
+
+    workflowLog('latest_result.read_hit', {
+      workflowKind: 'quiz_generation',
+      workflowRunId: result.workflowRunId,
+      bookId,
+      chapterId,
+      chapterIndex: result.chapterIndex,
+      workflowVersion: result.workflowVersion,
+      snapshotVersion: result.snapshotVersion,
+    });
 
     return {
       workflowRunId: result.workflowRunId,
@@ -447,6 +517,10 @@ export class QuizWorkflowService {
   private requireRun(workflowRunId: string): QuizWorkflowRunRecord {
     const run = this.quizWorkflowRepository.getRun(workflowRunId);
     if (!run) {
+      workflowLog('status.read_miss', {
+        workflowKind: 'quiz_generation',
+        workflowRunId,
+      });
       throw new NotFoundException('Quiz workflow run not found');
     }
     return run;

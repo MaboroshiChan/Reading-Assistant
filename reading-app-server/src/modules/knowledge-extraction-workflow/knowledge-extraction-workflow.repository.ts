@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { workflowLog } from '../workflow.logger';
 import type {
   KnowledgeExtractionWorkflowResultPayload,
   KnowledgeExtractionWorkflowRunRecord,
@@ -23,6 +24,17 @@ export class KnowledgeExtractionWorkflowRepository {
     if (existingRunId) {
       const existingRun = this.runs.get(existingRunId);
       if (existingRun) {
+        workflowLog('run.deduped', {
+          workflowKind: existingRun.kind,
+          workflowRunId: existingRun.id,
+          dedupedWorkflowRunId: existingRun.id,
+          bookId: existingRun.bookId,
+          chapterId: existingRun.chapterId,
+          chapterIndex: existingRun.chapterIndex,
+          workflowVersion: existingRun.workflowVersion,
+          idempotencyKey: existingRun.idempotencyKey,
+          status: existingRun.status,
+        });
         return {
           run: { ...existingRun, deduped: true },
           deduped: true,
@@ -53,6 +65,16 @@ export class KnowledgeExtractionWorkflowRepository {
 
     this.runs.set(run.id, run);
     this.runIdsByIdempotencyKey.set(input.idempotencyKey, run.id);
+    workflowLog('run.queued', {
+      workflowKind: run.kind,
+      workflowRunId: run.id,
+      bookId: run.bookId,
+      chapterId: run.chapterId,
+      chapterIndex: run.chapterIndex,
+      workflowVersion: run.workflowVersion,
+      idempotencyKey: run.idempotencyKey,
+      requestedByUserId: run.requestedByUserId,
+    });
 
     return { run, deduped: false };
   }
@@ -74,6 +96,15 @@ export class KnowledgeExtractionWorkflowRepository {
       deduped: false,
     };
     this.runs.set(workflowRunId, updated);
+    workflowLog('run.running', {
+      workflowKind: updated.kind,
+      workflowRunId: updated.id,
+      bookId: updated.bookId,
+      chapterId: updated.chapterId,
+      chapterIndex: updated.chapterIndex,
+      workflowVersion: updated.workflowVersion,
+      startedAt: updated.startedAt,
+    });
     return updated;
   }
 
@@ -116,6 +147,23 @@ export class KnowledgeExtractionWorkflowRepository {
       updatedAt: timestamp,
     };
     this.latestResultsByChapter.set(chapterKey(updated.bookId, updated.chapterId), storedResult);
+    workflowLog('run.completed', {
+      workflowKind: updated.kind,
+      workflowRunId: updated.id,
+      bookId: updated.bookId,
+      chapterId: updated.chapterId,
+      chapterIndex: updated.chapterIndex,
+      workflowVersion: updated.workflowVersion,
+      snapshotVersion: updated.snapshotVersion,
+      chapterContentHash: updated.chapterContentHash,
+      peopleCount: args.result.people?.length ?? 0,
+      ideaCount: args.result.ideas?.length ?? 0,
+      eventCount: args.result.events?.length ?? 0,
+      entityCount: args.result.entities?.length ?? 0,
+      themeCount: args.result.themes?.length ?? 0,
+      relationCount: args.result.relations?.length ?? 0,
+      completedAt: updated.completedAt,
+    });
 
     return updated;
   }
@@ -151,6 +199,17 @@ export class KnowledgeExtractionWorkflowRepository {
       deduped: false,
     };
     this.runs.set(workflowRunId, updated);
+    workflowLog(`run.${status}`, {
+      workflowKind: updated.kind,
+      workflowRunId: updated.id,
+      bookId: updated.bookId,
+      chapterId: updated.chapterId,
+      chapterIndex: updated.chapterIndex,
+      workflowVersion: updated.workflowVersion,
+      errorCode: code,
+      errorMessage: message,
+      completedAt: updated.completedAt,
+    });
     return updated;
   }
 }
