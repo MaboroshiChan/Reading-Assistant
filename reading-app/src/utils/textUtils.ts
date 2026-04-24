@@ -72,6 +72,35 @@ export function isValidParagraph(text: string): boolean {
 }
 
 /**
+ * Returns true when a paragraph is too short to merit deep LLM analysis.
+ *
+ * Catches cases with very few words, or up to two sentences if the word count is low.
+ *
+ * @param text - Raw paragraph text.
+ */
+export function isTooShortToAnalyze(text: string): boolean {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return true;
+
+    const wordCount = trimmed.split(/\s+/).length;
+    
+    // Extremely short blurbs (under 15 words) are always skipped (even if arbitrarily punctuated).
+    if (wordCount < 15) {
+        console.log('Skipping paragraph: ' + text);
+        return true;
+    }
+
+    // For slightly longer text (up to 30 words), skip only if it lacks structural complexity (<= 2 sentences).
+    if (wordCount >= 30) return false;
+
+    // Count sentences by splitting on terminal punctuation
+    const sentenceMatches = trimmed.match(/[^.!?]+[.!?]+["']?/g);
+    const sentenceCount = sentenceMatches ? sentenceMatches.length : 1;
+
+    return sentenceCount <= 2;
+}
+
+/**
  * Checks if a text block looks like a title.
  * Heuristic: Shorter than 20 words and does not end with terminal punctuation.
  * @param text - The text to check.

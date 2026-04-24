@@ -5,26 +5,25 @@ import type {
   Anchor,
   RequestEnvelopeParagraph,
   ResponseEnvelopeParagraph,
-} from '../../reading-app/src/services/envelopes';
+} from '../../packages/contracts/src';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
-import { json as llmJson, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
+import { createLLMClient, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
 import {
   buildStableCacheKey,
   makeAnchor,
   sortAnchors,
   summarize,
 } from './shared';
-import { buildMockParagraphData } from './mock/paragraphMock';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'paragraph';
 const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'paragraph.v1.1';
 const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
-const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims', 'topic_sentence'];
+const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims', 'tags'];
 
-export type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary' | 'topic_sentence';
+export type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary' | 'tags';
 export { PROMPT_VERSION as PARAGRAPH_PROMPT_VERSION };
 
 interface LLMParagraphAnchor {
@@ -59,7 +58,7 @@ interface LLMParagraphResponse {
   rhetoric?: LLMParagraphRhetoric[];
   claims?: LLMParagraphClaim[];
   anchors?: LLMParagraphAnchor[];
-  topic_sentence?: { is_implicit: boolean; text: string; id?: string };
+  tags?: { name: string; type: 'logic' | 'concept'; description?: string }[];
   confidence?: number;
 }
 
@@ -74,21 +73,21 @@ const buildCacheKey = (req: RequestEnvelopeParagraph): string => {
     payload: req.payload,
     context: req.context ?? {},
     prompt_version: PROMPT_VERSION,
-    model: config.useMockLLM ? `mock:${config.model}` : config.model,
+    model: config.model,
   });
 };
 
-let cachedParagraphPrompt: string | null = null;
+let cachedParagraphSystemPrompt: string | null = null;
 
 /**
  * Loads the paragraph analysis prompt from the filesystem, with caching.
  *
  * @returns The prompt text.
  */
-const loadParagraphPrompt = async (): Promise<string> => {
-  if (cachedParagraphPrompt) return cachedParagraphPrompt;
-  cachedParagraphPrompt = await fs.readFile(PROMPT_PATH, 'utf8');
-  return cachedParagraphPrompt;
+const loadParagraphSystemPrompt = async (): Promise<string> => {
+  if (cachedParagraphSystemPrompt) return cachedParagraphSystemPrompt;
+  cachedParagraphSystemPrompt = (await fs.readFile(PROMPT_PATH, 'utf8')).trim();
+  return cachedParagraphSystemPrompt;
 };
 
 /**
@@ -156,12 +155,9 @@ const formatContext = (req: RequestEnvelopeParagraph): string | null => {
  * @param req - The request envelope.
  * @returns A promise resolving to the prompt string.
  */
-const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
-  const basePrompt = (await loadParagraphPrompt()).trim();
+const buildPrompt = (req: RequestEnvelopeParagraph): string => {
   const tasks = buildTasks(req);
   const sections: string[] = [
-    basePrompt,
-    '',
     `Document ID: ${req.payload.doc_id}`,
     `Paragraph ID: ${req.payload.paragraph_id}`,
     `Prompt Version: ${PROMPT_VERSION}`,
@@ -187,7 +183,7 @@ const buildPrompt = async (req: RequestEnvelopeParagraph): Promise<string> => {
 };
 
 /**
- * Orchestrates paragraph data collection from LLM or mock source.
+ * Orchestrates paragraph data collection from the LLM.
  *
  * @param req - The request envelope.
  * @returns A promise resolving to the call results.
@@ -197,44 +193,26 @@ const buildParagraphData = async (
 ): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
-  if (config.useMockLLM) {
-    handlerLog('paragraph', 'building mock payload', {
-      requestId: req.request_id,
-      paragraphId: req.payload.paragraph_id,
-      promptVersion: PROMPT_VERSION,
-      mock: true,
-    });
-    const mockData = await buildMockParagraphData(req);
-    const text = JSON.stringify(mockData);
-    const stream = (async function* () {
-      yield text;
-    })();
-    return {
-      data: stream,
-      usage: Promise.resolve({
-        modelId: `mock:${config.model}`,
-        inputTokens: 0,
-        outputTokens: 0,
-      }),
-    };
-  }
-
   handlerLog('paragraph', 'building LLM prompt', {
     requestId: req.request_id,
     tasks,
     promptVersion: PROMPT_VERSION,
   });
-  const prompt = await buildPrompt(req);
+  const [systemPrompt, userPrompt] = await Promise.all([
+    loadParagraphSystemPrompt(),
+    Promise.resolve(buildPrompt(req)),
+  ]);
+  const llmClient = createLLMClient({ systemPrompt });
   handlerLog('paragraph', 'LLM prompt prepared', {
     requestId: req.request_id,
     paragraphId: req.payload.paragraph_id,
     promptVersion: PROMPT_VERSION,
     tasks,
-    promptLength: prompt.length,
-    prompt,
-    mock: false,
+    systemPromptLength: systemPrompt.length,
+    userPromptLength: userPrompt.length,
+    prompt: userPrompt,
   });
-  return llmJson(prompt);
+  return llmClient.json(userPrompt);
 };
 
 /**
@@ -249,7 +227,6 @@ export const handleParagraph = async (
   handlerLog('paragraph', 'request received', {
     requestId: req.request_id,
     paragraphId: req.payload.paragraph_id,
-    mock: config.useMockLLM,
     promptVersion: PROMPT_VERSION,
   });
   const cacheKey = buildCacheKey(req);
@@ -287,13 +264,8 @@ export const handleParagraph = async (
     // Background processing
     try {
       const usage = await usagePromise;
-      let data: AnalyzeParagraphData;
-      if (config.useMockLLM) {
-        data = JSON.parse(text) as AnalyzeParagraphData;
-      } else {
-        const object = coerceParagraphResponse(extractJsonFromText(text));
-        data = mapParagraphResponse(object, req);
-      }
+      const object = coerceParagraphResponse(extractJsonFromText(text));
+      const data: AnalyzeParagraphData = mapParagraphResponse(object, req);
 
       const response: ResponseEnvelopeParagraph = {
         request_id: req.request_id,
@@ -346,12 +318,17 @@ const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
     anchors: Array.isArray(value.anchors)
       ? coerceAnchorArray(value.anchors)
       : undefined,
-    topic_sentence: isRecord(value.topic_sentence) && typeof value.topic_sentence.text === 'string' && typeof value.topic_sentence.is_implicit === 'boolean'
-      ? {
-        is_implicit: value.topic_sentence.is_implicit,
-        text: value.topic_sentence.text,
-        id: asString(value.topic_sentence.id)
-      }
+    tags: Array.isArray(value.tags)
+      ? value.tags.reduce((acc: { name: string; type: 'logic' | 'concept'; description?: string }[], tag: unknown) => {
+        if (!isRecord(tag)) return acc;
+        const name = asString(tag.name);
+        const type = asString(tag.type) === 'logic' ? 'logic' : 'concept';
+        const description = asString(tag.description);
+        if (name) {
+          acc.push({ name, type, description });
+        }
+        return acc;
+      }, [])
       : undefined,
     confidence: asConfidence(value.confidence),
   };
@@ -509,7 +486,7 @@ const mapParagraphResponse = (
     rhetoric,
     claims,
     anchors: anchorList,
-    topic_sentence: shouldInclude('topic_sentence') ? payload.topic_sentence : undefined,
+    tags: shouldInclude('tags') ? payload.tags : undefined,
     confidence: payload.confidence,
   };
 };

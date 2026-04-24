@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import getPort from 'get-port'
 import waitPort from 'wait-port'
+import { resolve } from 'node:path'
 
 export default async function() {
   // If the caller already provided a live server URL, skip spawning.
@@ -17,10 +18,10 @@ export default async function() {
   // 传给被测服务的环境变量（你服务端代码要用 process.env.PORT / HOST）
   const env = { ...process.env, PORT: String(port), HOST: host }
 
-  // 👇 请改成你 reading-app-server 的入口（ts-node / node dist 都行）
+  const tsxPath = resolve(process.cwd(), 'node_modules/tsx/dist/cli.mjs')
   const child = spawn(
-    'node',
-    ['reading-app-server/dist/index.js'],
+    process.execPath,
+    [tsxPath, '--tsconfig', 'reading-app-server/tsconfig.json', 'reading-app-server/src/main.ts'],
     { env, stdio: 'inherit' }
   )
 

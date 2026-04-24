@@ -6,13 +6,12 @@ import type {
   ResponseEnvelopeSentenceStructure,
   SentenceStructureAnalysisData,
   SentenceStructureUnitData,
-} from '../../reading-app/src/services/envelopes';
+} from '../../packages/contracts/src';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { buildStableCacheKey, hashString } from './shared';
-import { buildMockSentenceStructureData } from './mock/sentence_structure_mock';
 import { handlerLog } from './logger';
-import { json as llmJson, extractJsonFromText, type CallReturn } from '../services/llmService';
+import { createLLMClient, extractJsonFromText, type CallReturn } from '../services/llmService';
 
 const CACHE_PREFIX = 'sentence-structure';
 const CACHE_VERSION = 'v1';
@@ -169,7 +168,7 @@ const buildCacheKey = (req: RequestEnvelopeSentenceStructure): string => {
     payload: req.payload,
     context: req.context ?? {},
     prompt_version: PROMPT_VERSION,
-    model: config.useMockLLM ? `mock:${config.model}` : config.model,
+    model: config.model,
   });
 };
 
@@ -191,17 +190,17 @@ const buildTasks = (req: RequestEnvelopeSentenceStructure): SentenceStructureTas
   return ordered.length ? ordered : [...TASK_ORDER];
 };
 
-let cachedPrompt: string | null = null;
+let cachedSystemPrompt: string | null = null;
 
 /**
  * Loads the sentence structure prompt from the filesystem, with caching.
  *
  * @returns The prompt text.
  */
-const loadPrompt = async (): Promise<string> => {
-  if (cachedPrompt) return cachedPrompt;
-  cachedPrompt = await fs.readFile(PROMPT_PATH, 'utf8');
-  return cachedPrompt;
+const loadSystemPrompt = async (): Promise<string> => {
+  if (cachedSystemPrompt) return cachedSystemPrompt;
+  cachedSystemPrompt = (await fs.readFile(PROMPT_PATH, 'utf8')).trim();
+  return cachedSystemPrompt;
 };
 
 /**
@@ -274,14 +273,11 @@ const formatContext = (req: RequestEnvelopeSentenceStructure): string | null => 
   return lines.length ? lines.join('\n') : null;
 };
 
-const buildPrompt = async (req: RequestEnvelopeSentenceStructure): Promise<string> => {
-  const basePrompt = (await loadPrompt()).trim();
+const buildPrompt = (req: RequestEnvelopeSentenceStructure): string => {
   const tasks = buildTasks(req);
   const { fragmentText, sentenceText } = extractFragmentText(req);
 
   const sections: string[] = [
-    basePrompt,
-    '',
     `Prompt Version: ${PROMPT_VERSION}`,
     `Model Target: ${config.model}`,
     `Document ID: ${req.payload.doc_id}`,
@@ -307,8 +303,7 @@ const buildPrompt = async (req: RequestEnvelopeSentenceStructure): Promise<strin
 };
 
 /**
- * Orchestrates the data collection for sentence structure analysis,
- * either by calling the LLM or using mock data.
+ * Orchestrates the data collection for sentence structure analysis.
  *
  * @param req - The request envelope.
  * @returns A promise resolving to the LLM call return (stream and usage).
@@ -318,42 +313,26 @@ const buildSentenceStructureData = async (
 ): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
-  if (config.useMockLLM) {
-    handlerLog('sentence_structure', 'building mock payload', {
-      requestId: req.request_id,
-      sentenceId: req.payload.sentence_id,
-      tasks,
-    });
-    const mockData = buildMockSentenceStructureData(req);
-    const text = JSON.stringify(mockData);
-    const stream = (async function* () {
-      yield text;
-    })();
-    return {
-      data: stream,
-      usage: Promise.resolve({
-        modelId: `mock:${config.model}`,
-        inputTokens: 0,
-        outputTokens: 0,
-      }),
-    };
-  }
-
   handlerLog('sentence_structure', 'building LLM payload', {
     requestId: req.request_id,
     sentenceId: req.payload.sentence_id,
     promptVersion: PROMPT_VERSION,
     tasks,
   });
-  const prompt = await buildPrompt(req);
+  const [systemPrompt, userPrompt] = await Promise.all([
+    loadSystemPrompt(),
+    Promise.resolve(buildPrompt(req)),
+  ]);
+  const llmClient = createLLMClient({ systemPrompt });
   handlerLog('sentence_structure', 'LLM prompt prepared', {
     requestId: req.request_id,
     sentenceId: req.payload.sentence_id,
     promptVersion: PROMPT_VERSION,
     tasks,
-    promptLength: prompt.length,
+    systemPromptLength: systemPrompt.length,
+    userPromptLength: userPrompt.length,
   });
-  return llmJson(prompt);
+  return llmClient.json(userPrompt);
 };
 
 /**
@@ -370,7 +349,6 @@ export const handleSentenceStructure = async (
 
   handlerLog('sentence_structure', 'request received', {
     requestId: req.request_id,
-    mock: config.useMockLLM,
     promptVersion: PROMPT_VERSION,
   });
 
@@ -412,13 +390,9 @@ export const handleSentenceStructure = async (
     // Background processing
     try {
       const usage = await usagePromise;
-      let data: AnalyzeSentenceStructureData;
-      if (config.useMockLLM) {
-        data = JSON.parse(text) as AnalyzeSentenceStructureData;
-      } else {
-        const object = extractJsonFromText(text);
-        data = mapSentenceStructureResponse(object, req, buildTasks(req));
-      }
+      const object = extractJsonFromText(text);
+      const data: AnalyzeSentenceStructureData =
+        mapSentenceStructureResponse(object, req, buildTasks(req));
 
       void persistNormalizedSentenceStructure(req, data);
 

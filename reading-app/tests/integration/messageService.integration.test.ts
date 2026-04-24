@@ -5,14 +5,13 @@ import MessageService from '../../src/services/messageService';
 import NetworkClient from '../../src/services/networkClient';
 import type { AnalyzeSkeletonPayload } from '../../src/services/envelopes';
 import { handleMsg } from '../../../reading-app-server/http/router';
+import { extractJsonFromText } from '../../../reading-app-server/services/llmService';
 
 describe('MessageService integration (real server)', () => {
   let server: http.Server;
   let baseUrl: string;
 
   beforeAll(async () => {
-    process.env.MOCK_LLM = '1';
-
     server = http.createServer(async (req, res) => {
       if (req.method === 'GET' && req.url === '/ping') {
         res.setHeader('Content-Type', 'application/json');
@@ -26,6 +25,33 @@ describe('MessageService integration (real server)', () => {
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
           const result = await handleMsg(body);
+
+          if (result.stream) {
+            let text = '';
+            for await (const chunk of result.stream) {
+              text += chunk;
+            }
+
+            let parsed: unknown;
+            try {
+              parsed = extractJsonFromText(text);
+            } catch {
+              parsed = { _raw_error: text };
+            }
+
+            const usage = await result.usage;
+            res.setHeader('Content-Type', 'application/json');
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              ...result,
+              stream: undefined,
+              served_from: 'fresh',
+              data: parsed,
+              usage,
+            }));
+            return;
+          }
+
           res.setHeader('Content-Type', 'application/json');
           const statusCode = result.status === 'error'
             ? result.error?.http ?? 500

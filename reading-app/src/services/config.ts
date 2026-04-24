@@ -4,7 +4,6 @@ interface Config {
     timeoutMs: number;
     cacheMax: number;
     cacheTtlMs: number;
-    useMockLLM: boolean;
     debugMode: boolean;
 }
 
@@ -36,11 +35,10 @@ const getEnv = (key: string, defaultValue: string = ""): string => {
 
 export const config: Config = {
     apiBaseUrl: getEnv("API_BASE_URL", "http://localhost:8787"),
-    model: getEnv("MODEL_ID", "gemini-2.5-flash"),
+    model: getEnv("MODEL_ID", "gemini-3.0-flash"),
     timeoutMs: Number(getEnv("TIMEOUT_MS", "50000")),
     cacheMax: Number(getEnv("CACHE_MAX", "100")),
     cacheTtlMs: Number(getEnv("CACHE_TTL_MS", "3600000")),
-    useMockLLM: getEnv("MOCK_LLM") === "1" || getEnv("TEST_MODE") === "1",
     debugMode: getEnv("DEBUG_MODE") === "1"
 };
 

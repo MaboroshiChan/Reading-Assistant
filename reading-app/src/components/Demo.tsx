@@ -1,4 +1,4 @@
-import React, { useState, type ReactNode, type CSSProperties, useEffect, useMemo } from 'react';
+import React, { useState, type ReactNode, type CSSProperties, useEffect, useMemo, useCallback } from 'react';
 import './css/Demo.css';
 // import './css/Highlighted.css';
 import type Paragraph from '../model/structure/Paragraph';
@@ -6,8 +6,13 @@ import { preprocessingFromText } from '../model/structure/Paragraph';
 import { ParagraphComponent } from './paragraph/Paragraph';
 import { chunkParagraphsByWordCount } from '../utils/textUtils';
 import { isPending } from '../model/structure/Sentence';
+import { FloatingMenu } from './FloatingMenu';
+import { QuizWindow } from './quiz/QuizWindow';
+import { MasteryWindow } from './mastery/MasteryWindow';
+import type { QuizQuestion } from '../services/envelopes';
+import { useUserProgress } from '../hooks/useUserProgress';
 
-import { streamingMessageService } from '../services/messageService.instance';
+import messageService, { streamingMessageService } from '../services/messageService.instance';
 
 // Type definitions
 export interface ArticleFrameworkProps {
@@ -41,6 +46,8 @@ export interface ArticleFrameworkProps {
   onSave?: () => void;
   onLike?: (liked: boolean) => void;
   onAnalyze?: () => void;
+  onReanalyzeAll?: () => void;
+  isAnalyzing?: boolean;
 
   // Custom components
   HeaderComponent?: React.ComponentType;
@@ -106,6 +113,8 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
   onSave,
   onLike,
   onAnalyze,
+  onReanalyzeAll,
+  isAnalyzing,
 
   // Custom components
   HeaderComponent,
@@ -237,8 +246,15 @@ const ArticleFramework: React.FC<ArticleFrameworkProps> = ({
 
             {onAnalyze && (
               <button className="action-btn" onClick={onAnalyze} type="button">
-                <span>✨</span>
-                <span>AI Analysis</span>
+                <span>{isAnalyzing ? '📖' : '✨'}</span>
+                <span>{isAnalyzing ? 'Show Origin' : 'AI Analysis'}</span>
+              </button>
+            )}
+
+            {isAnalyzing && onReanalyzeAll && (
+              <button className="action-btn" onClick={onReanalyzeAll} type="button">
+                <span>🔄</span>
+                <span>Reanalyze</span>
               </button>
             )}
           </div>
@@ -296,13 +312,19 @@ const ExampleArticle: React.FC = () => {
   const [rawParagraphs, setRawParagraphs] = useState<string[]>([]);
   const [analyzedData, setAnalyzedData] = useState<Paragraph[]>([]);
   const [viewMode, setViewMode] = useState<'raw' | 'analyzing'>('raw');
+  const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
+  const [isMasteryWindowOpen, setIsMasteryWindowOpen] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const { progress: userProgress, handleCorrectAnswer } = useUserProgress();
 
   useEffect(() => {
     const loadContent = async () => {
       try {
+        // This is the example article for the demo
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
-        const module = await import('../../../resource/examples/TestArticles/metaphysics.txt?raw');
+        const module = await import('../../../resource/examples/TestArticles/gre-article.txt?raw');
         const text = module.default;
         const paragraphs = text.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
         setRawParagraphs(paragraphs);
@@ -325,9 +347,7 @@ const ExampleArticle: React.FC = () => {
     console.log('Like:', liked);
   };
 
-  const handleAnalyze = async (): Promise<void> => {
-    if (viewMode === 'analyzing') return;
-
+  const runAnalysis = async () => {
     // 1. Preprocessing: Convert raw text to "Pending" Paragraph skeletons immediately
     const skeletons = rawParagraphs
       .map((text, index) => preprocessingFromText(text, index + 1));
@@ -335,69 +355,39 @@ const ExampleArticle: React.FC = () => {
     setViewMode('analyzing');
 
     // 2. Streaming Analysis (Chunked)
-
     const WORD_LIMIT = 400; // Max total words per concurrent batch of paragraphs
-    // Generate a unique session ID for this analysis run to avoid server collisions on refresh
     const sessionId = `demo-${Date.now()}`;
-
     const chunks = chunkParagraphsByWordCount(skeletons, WORD_LIMIT);
 
     for (const chunk of chunks) {
       await Promise.all(chunk.map(async (p) => {
-        // Skip anything that isn't regular text (titles, citations)
         if (p.kind !== 'text') return;
-
-        // Mark as streaming
         setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'streaming' } : item));
-
         let hasSentenceData = false;
-
         try {
           await streamingMessageService.analyzeParagraph(
             {
               doc_id: sessionId,
               paragraph_id: String(p.id),
               paragraph_text: p.sentences.map(s => s.text).join(' '),
-              options: {
-                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'topic_sentence']
-              }
+              options: { tasks: ['roles', 'rhetoric', 'summary', 'claims', 'tags'] }
             },
             { doc: { doc_id: sessionId, content_hash: 'demo-hash' } },
             {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               onPartial: (partial: any) => {
-                // Check if we actually got sentence data in this chunk
                 if (partial.sentences && Array.isArray(partial.sentences) && partial.sentences.length > 0) {
                   hasSentenceData = true;
                 }
-
-                // console.log(`[Stream] Paragraph ${p.id} partial:`, partial);
                 setAnalyzedData(prev => prev.map(item => {
                   if (item.id !== p.id) return item;
-
-                  // Immutable update of the paragraph
                   const updated = { ...item };
-                  if (partial.summary) updated.centralIdea = partial.summary;
-                  if (partial.rhetoric && partial.rhetoric.length > 0) {
-                    updated.structureType = partial.rhetoric[0].label;
-                  }
-                  if (partial.roles && partial.roles.length > 0) {
-                    updated.function = partial.roles[0].role;
-                  }
-                  if (partial.topic_sentence) {
-                    updated.topicSentence = partial.topic_sentence;
-                  }
+                  if (partial.rhetoric && partial.rhetoric.length > 0) updated.structureType = partial.rhetoric[0].label;
+                  if (partial.roles && partial.roles.length > 0) updated.function = partial.roles[0].role;
+                  if (partial.tags) updated.tags = partial.tags;
                   if (partial.sentences && partial.sentences.length > 0) {
                     updated.sentences = updated.sentences.map((s, i) => {
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       const incoming = (partial.sentences as any[])[i];
-                      if (incoming) {
-                        return {
-                          ...s,
-                          ...incoming,
-                          id: s.id, // Ensure original ID is preserved
-                        };
-                      }
+                      if (incoming) return { ...s, ...incoming, id: s.id };
                       return s;
                     });
                   }
@@ -406,35 +396,171 @@ const ExampleArticle: React.FC = () => {
               }
             }
           );
-
-          // Mark as complete only if we actually got SENTENCE data
           if (hasSentenceData) {
             setAnalyzedData(prev => prev.map(item => item.id === p.id ? { ...item, status: 'complete' } : item));
           } else {
-            console.warn(`[Stream] Paragraph ${p.id} finished but missing sentence data.`);
             setAnalyzedData(prev => prev.map(item => {
               if (item.id !== p.id) return item;
-              return {
-                ...item,
-                status: 'error',
-                // Fallback: Clear pending state from sentences so they stop spinning
-                sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s)
-              };
+              return { ...item, status: 'error', sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s) };
             }));
           }
         } catch (err) {
-          console.error(`Analysis failed for paragraph ${p.id}`, err);
           setAnalyzedData(prev => prev.map(item => {
             if (item.id !== p.id) return item;
-            return {
-              ...item,
-              status: 'error',
-              sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s)
-            };
+            return { ...item, status: 'error', sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s) };
           }));
         }
       }));
     }
+  };
+
+  const handleAnalyze = async (): Promise<void> => {
+    if (viewMode === 'analyzing') {
+      setViewMode('raw');
+      return;
+    }
+    await runAnalysis();
+  };
+
+  const handleReanalyzeAll = async (): Promise<void> => {
+    if (viewMode !== 'analyzing') {
+      setViewMode('analyzing');
+    }
+    await runAnalysis();
+  };
+
+  const handleReanalyze = async (paragraphId: number): Promise<void> => {
+    const rawIndex = paragraphId - 1;
+    if (rawIndex < 0 || rawIndex >= rawParagraphs.length) return;
+    
+    // Use the raw text to create a fresh skeleton
+    const text = rawParagraphs[rawIndex];
+    const skeleton = preprocessingFromText(text, paragraphId);
+    
+    // Set exactly this paragraph to streaming skeleton state
+    setAnalyzedData(prev => prev.map(item => item.id === paragraphId ? { ...skeleton, status: 'streaming' } : item));
+    
+    const sessionId = `demo-reanalyze-${Date.now()}`;
+    let hasSentenceData = false;
+    
+    try {
+      await streamingMessageService.analyzeParagraph(
+        {
+          doc_id: sessionId,
+          paragraph_id: String(skeleton.id),
+          paragraph_text: skeleton.sentences.map(s => s.text).join(' '),
+          options: {
+            tasks: ['roles', 'rhetoric', 'summary', 'claims', 'tags']
+          }
+        },
+        { doc: { doc_id: sessionId, content_hash: 'demo-hash' } },
+        {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onPartial: (partial: any) => {
+            if (partial.sentences && Array.isArray(partial.sentences) && partial.sentences.length > 0) {
+              hasSentenceData = true;
+            }
+
+            setAnalyzedData(prev => prev.map(item => {
+              if (item.id !== skeleton.id) return item;
+
+              const updated = { ...item };
+              if (partial.rhetoric && partial.rhetoric.length > 0) {
+                updated.structureType = partial.rhetoric[0].label;
+              }
+              if (partial.roles && partial.roles.length > 0) {
+                updated.function = partial.roles[0].role;
+              }
+              if (partial.tags) {
+                updated.tags = partial.tags;
+              }
+              if (partial.sentences && partial.sentences.length > 0) {
+                updated.sentences = updated.sentences.map((s, i) => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const incoming = (partial.sentences as any[])[i];
+                  if (incoming) {
+                    return {
+                      ...s,
+                      ...incoming,
+                      id: s.id, // Ensure original ID is preserved
+                    };
+                  }
+                  return s;
+                });
+              }
+              return updated;
+            }));
+          }
+        }
+      );
+
+      if (hasSentenceData) {
+        setAnalyzedData(prev => prev.map(item => item.id === skeleton.id ? { ...item, status: 'complete' } : item));
+      } else {
+        console.warn(`[Stream] Reanalyze Paragraph ${skeleton.id} finished but missing sentence data.`);
+        setAnalyzedData(prev => prev.map(item => {
+          if (item.id !== skeleton.id) return item;
+          return {
+            ...item,
+            status: 'error',
+            sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s)
+          };
+        }));
+      }
+    } catch (err) {
+      console.error(`Reanalysis failed for paragraph ${skeleton.id}`, err);
+      setAnalyzedData(prev => prev.map(item => {
+        if (item.id !== skeleton.id) return item;
+        return {
+          ...item,
+          status: 'error',
+          sentences: item.sentences.map(s => isPending(s) ? { ...s, function: 'Analysis Failed' } : s)
+        };
+      }));
+    }
+  };
+
+  const [showQuizNotification, setShowQuizNotification] = useState(false);
+  const [hasQuizError, setHasQuizError] = useState(false);
+  const hasRequestedQuiz = React.useRef(false);
+
+  const fetchQuiz = useCallback(async () => {
+    if (hasRequestedQuiz.current || rawParagraphs.length === 0) return;
+    hasRequestedQuiz.current = true;
+    setIsGeneratingQuiz(true);
+    setHasQuizError(false);
+    
+    try {
+      const fullText = rawParagraphs.join('\n\n');
+      const response = await messageService.analyzeQuiz({
+        doc_id: `demo-${Date.now()}`,
+        article_text: fullText
+      });
+      
+      if (response.status === 'ok' && response.data?.questions && response.data.questions.length > 0) {
+        setQuizQuestions(response.data.questions);
+        setShowQuizNotification(true);
+      } else {
+        console.error('Failed to generate quiz:', response.error);
+        setHasQuizError(true);
+      }
+    } catch (err) {
+      console.error('Error generating quiz:', err);
+      setHasQuizError(true);
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
+  }, [rawParagraphs]);
+
+  // Quiz will be fetched manually via button click.
+
+  const handleOpenQuiz = (): void => {
+    setIsQuizWindowOpen(true);
+    if (!hasRequestedQuiz.current || hasQuizError) {
+      if (hasQuizError) hasRequestedQuiz.current = false;
+      fetchQuiz();
+    }
+    setShowQuizNotification(false);
   };
 
   // Determine content to render
@@ -449,7 +575,7 @@ const ExampleArticle: React.FC = () => {
   } else {
     contentNode = (
       <div>
-        {analyzedData.map(p => <ParagraphComponent key={p.id} paragraph={p} />)}
+        {analyzedData.map(p => <ParagraphComponent key={p.id} paragraph={p} onReanalyze={handleReanalyze} />)}
       </div>
     );
   }
@@ -466,6 +592,7 @@ const ExampleArticle: React.FC = () => {
   }, [analyzedData, viewMode]);
 
   return (
+    <>
     <ArticleFramework
       title="Your Article Title Here"
       subtitle="An engaging subtitle that draws readers in"
@@ -486,11 +613,33 @@ const ExampleArticle: React.FC = () => {
       showMeta={true}
       showProgress={true}
       showSidebar={false}
+      isAnalyzing={viewMode === 'analyzing'}
       onShare={handleShare}
       onSave={handleSave}
       onLike={handleLike}
       onAnalyze={handleAnalyze}
+      onReanalyzeAll={handleReanalyzeAll}
     />
+    <FloatingMenu 
+      onQuizMeClick={handleOpenQuiz} 
+      onMasteryClick={() => setIsMasteryWindowOpen(true)}
+      showNotification={showQuizNotification} 
+      isGenerating={isGeneratingQuiz} 
+      hasError={hasQuizError} 
+    />
+    <QuizWindow 
+      isOpen={isQuizWindowOpen} 
+      onClose={() => setIsQuizWindowOpen(false)} 
+      questions={quizQuestions}
+      isLoading={isGeneratingQuiz}
+      onCorrectAnswer={handleCorrectAnswer}
+    />
+    <MasteryWindow
+      isOpen={isMasteryWindowOpen}
+      onClose={() => setIsMasteryWindowOpen(false)}
+      userProgress={userProgress}
+    />
+    </>
   );
 };
 

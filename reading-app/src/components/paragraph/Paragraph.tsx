@@ -13,6 +13,7 @@ import { SentenceBridge as ImportedSentenceBridge } from "../sentence/Bridge";
 
 interface ParagraphComponentProps {
   paragraph: Paragraph;
+  onReanalyze?: (id: number) => void;
 }
 
 /**
@@ -20,7 +21,7 @@ interface ParagraphComponentProps {
  *
  * @param props - Component properties containing the paragraph data.
  */
-export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph }) => {
+export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragraph, onReanalyze }) => {
   // Special rendering for titles
   if (paragraph.kind === 'title') {
     return (
@@ -45,6 +46,23 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
           fontSize: '1rem',
           color: 'var(--color-text-secondary)',
           lineHeight: '1.5'
+        }}>
+          {paragraph.sentences.map(s => s.text).join(' ')}
+        </p>
+      </div>
+    );
+  }
+
+  // Special rendering for short paragraphs that don't warrant analysis
+  if (paragraph.kind === 'short') {
+    return (
+      <div className="paragraph-short-container" style={{ margin: '0.75rem 0', display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+        <p className="paragraph-short" style={{
+          fontSize: '1rem',
+          color: 'var(--color-text-main)',
+          fontStyle: 'italic',
+          lineHeight: '1.6',
+          margin: 0,
         }}>
           {paragraph.sentences.map(s => s.text).join(' ')}
         </p>
@@ -151,8 +169,18 @@ export const ParagraphComponent: React.FC<ParagraphComponentProps> = ({ paragrap
         }}
       />
 
-      <div className="paragraph-content-wrapper" style={{ flex: 1 }}>
+      <div className="paragraph-content-wrapper" style={{ flex: 1, position: 'relative' }}>
         {isClicked && <ParagraphPanel vm={paragraphVm} />}
+        {onReanalyze && isInteractive && (
+          <button 
+            className="paragraph-reanalyze-btn" 
+            onClick={(e) => { e.stopPropagation(); onReanalyze(paragraph.id); }}
+            title="Reanalyze Paragraph"
+            type="button"
+          >
+            🔄
+          </button>
+        )}
 
         <div className="paragraph-content" onClick={handleClick}>
           {paragraph.sentences.map((sentence, index) => {

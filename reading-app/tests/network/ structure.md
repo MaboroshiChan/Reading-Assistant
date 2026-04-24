@@ -36,7 +36,7 @@
 
     1. 读 envelope → 生成 prompt（可用快照）
     2. 命中缓存直接返回
-    3. 调用 **mock** 的 llmService.json 产出 DTO
+    3. 调用 llmService.json 产出 DTO
     4. anchors 填充与返回结构
   * 价值：跑通最关键链路；其他 handler 可复用同样套路。
 * `http/router.ts`（/msg 入口）
@@ -53,9 +53,9 @@
 
 #### 服务端
 
-* `services/llmService.ts`（在 mock 模式下）
+* `services/llmService.ts`
 
-  * 测什么：不连真模型，mock fetch：
+  * 测什么：不连真模型，stub fetch：
 
     1. 能解析 Responses API 文本/JSON（含 `json fenced`）
     2. 错误时抛出
@@ -79,15 +79,15 @@
 ## 覆盖方式建议（怎么测最省力）
 
 * **单测（unit）**：`cacheKey`、`cache`、`anchors`、`messageService`（用 fake NetworkClient）、`networkClient`（mock fetch）。
-* **集成（integration）**：`router + handler + mock llmService`，不监听端口，用 Supertest/内存 server。
+* **集成（integration）**：`router + handler + stubbed llmService`，不监听端口，用 Supertest/内存 server。
 * **合同样本（contract）**：`envelopes.ts` 用 3～4 个 JSON 样本做结构校验（ok/partial/error）。
-* **E2E（可选，最后再做）**：前端 `MessageService` 直接打本地 `/msg`（server 内置 mock LLM）。
+* **E2E（可选，最后再做）**：前端 `MessageService` 直接打本地 `/msg`（server 内置测试替身或真实服务）。
 
 ## 先后顺序（落地路线图）
 
 1. 单测：`cacheKey`、`cache`、`networkClient`
 2. 单测：`messageService`（fake NetworkClient）
-3. 集成：`router + sentence handler`（mock llmService）
+3. 集成：`router + sentence handler`（stubbed llmService）
 4. 合同：`envelopes` 样本校验
 5. 需要时再补其他 handler 与 E2E
 

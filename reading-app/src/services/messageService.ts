@@ -23,6 +23,9 @@ import type {
   AnalyzeSentenceData,
   AnalyzeSentenceStructurePayload,
   AnalyzeSentenceStructureData,
+  AnalyzeQuizPayload,
+  AnalyzeQuizData,
+  ResponseEnvelopeQuiz,
   StandardContext,
   ApiVersion,
   Priority,
@@ -259,6 +262,33 @@ export class MessageService {
 
     console.log("analyzeSentenceStructure.sending", envelope);
     return this.send<ResponseEnvelopeSentenceStructure, unknown, Partial<AnalyzeSentenceStructureData>>(envelope, options);
+  }
+
+  /**
+   * Generates a reading comprehension quiz based on the provided text.
+   *
+   * @param payload - The text to generate a quiz for.
+   * @param ctx - Optional document context.
+   * @param sendOptions - Optional transport/callback options.
+   * @returns Quiz generation response.
+   */
+  async analyzeQuiz(
+    payload: AnalyzeQuizPayload,
+    ctx?: Partial<StandardContext>,
+    sendOptions?: SendOptions<Partial<AnalyzeQuizData>>
+  ): Promise<ResponseEnvelopeQuiz> {
+    const env: RequestEnvelope = {
+      type: 'analyze.quiz.v1',
+      api_version: this.defaults.apiVersion ?? 'v1',
+      request_id: crypto.randomUUID(),
+      locale: this.defaults.locale,
+      priority: this.defaults.defaultPriority ?? 'normal',
+      cache_hint: this.defaults.defaultCacheHint ?? 'prefer',
+      context: buildContext(ctx, this.defaults),
+      payload,
+    } as RequestEnvelope;
+
+    return this.send<ResponseEnvelopeQuiz, Partial<AnalyzeQuizData>>(env, sendOptions);
   }
 
   /** Health check helper that proxies through to the underlying NetworkClient. */

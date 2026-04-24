@@ -2,9 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ParagraphComponent } from './paragraph/Paragraph';
 import type Paragraph from '../model/structure/Paragraph';
 import { preprocessingFromText } from '../model/structure/Paragraph';
-import { streamingMessageService } from '../services/messageService.instance';
+import messageService, { streamingMessageService } from '../services/messageService.instance';
 import './css/ReaderPage.css';
 import { chunkParagraphsByWordCount, isTitle } from '../utils/textUtils';
+import { FloatingMenu } from './FloatingMenu';
+import { QuizWindow } from './quiz/QuizWindow';
+import { MasteryWindow } from './mastery/MasteryWindow';
+import type { QuizQuestion } from '../services/envelopes';
+import { useUserProgress } from '../hooks/useUserProgress';
 
 interface ReaderPageProps {
     articleData: {
@@ -22,6 +27,12 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
     const [rawParagraphs, setRawParagraphs] = useState<string[]>([]);
     // Track if we have restored data to determine button state
     const [hasRestoredData, setHasRestoredData] = useState(false);
+    const [isQuizWindowOpen, setIsQuizWindowOpen] = useState(false);
+    const [isMasteryWindowOpen, setIsMasteryWindowOpen] = useState(false);
+    const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
+    const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+    
+    const { progress: userProgress, handleCorrectAnswer } = useUserProgress();
 
     // Generate a unique key for storage
     const storageKey = React.useMemo(() => {
@@ -68,6 +79,49 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         });
     }, [storageKey]);
 
+    const [showQuizNotification, setShowQuizNotification] = useState(false);
+    const [hasQuizError, setHasQuizError] = useState(false);
+    const hasRequestedQuiz = React.useRef(false);
+
+    const fetchQuiz = useCallback(async () => {
+        if (hasRequestedQuiz.current || rawParagraphs.length === 0) return;
+        hasRequestedQuiz.current = true;
+        setIsGeneratingQuiz(true);
+        setHasQuizError(false);
+        
+        try {
+            const fullText = rawParagraphs.join('\n\n');
+            const response = await messageService.analyzeQuiz({
+                doc_id: storageKey || `reader-${Date.now()}`,
+                article_text: fullText
+            });
+            
+            if (response.status === 'ok' && response.data?.questions && response.data.questions.length > 0) {
+                setQuizQuestions(response.data.questions);
+                setShowQuizNotification(true);
+            } else {
+                console.error('Failed to generate quiz:', response.error);
+                setHasQuizError(true);
+            }
+        } catch (err) {
+            console.error('Error generating quiz:', err);
+            setHasQuizError(true);
+        } finally {
+            setIsGeneratingQuiz(false);
+        }
+    }, [rawParagraphs, storageKey]);
+
+    // Quiz will be fetched manually via button click.
+
+    const handleOpenQuiz = () => {
+        setIsQuizWindowOpen(true);
+        if (!hasRequestedQuiz.current || hasQuizError) {
+            if (hasQuizError) hasRequestedQuiz.current = false;
+            fetchQuiz();
+        }
+        setShowQuizNotification(false);
+    };
+
     const handleAnalyze = async () => {
         // If we are in "Refresh" mode (hasRestoredData or viewMode is analyzing but finished), we clear and restart
         if (hasRestoredData || (viewMode === 'analyzing' && analyzedData.length > 0 && analyzedData.every(p => p.status === 'complete' || p.status === 'error'))) {
@@ -91,7 +145,6 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
         const chunks = chunkParagraphsByWordCount(skeletons, WORD_LIMIT);
 
         for (const chunk of chunks) {
-            console.log('Chunk', chunk);
             await Promise.all(chunk.map(async (p) => {
                 // Skip anything that isn't regular text (titles, citations)
                 if (p.kind !== 'text') return;
@@ -106,7 +159,7 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                             paragraph_id: String(p.id),
                             paragraph_text: p.sentences.map(s => s.text).join(' '),
                             options: {
-                                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'topic_sentence']
+                                tasks: ['roles', 'rhetoric', 'summary', 'claims', 'tags']
                             }
                         },
                         { doc: { doc_id: 'extracted-doc', content_hash: 'extracted-hash' } },
@@ -119,15 +172,14 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
 
                                         // Immutable update of the paragraph
                                         const updated = { ...item };
-                                        if (partial.summary) updated.centralIdea = partial.summary;
                                         if (partial.rhetoric && partial.rhetoric.length > 0) {
                                             updated.structureType = partial.rhetoric[0].label;
                                         }
                                         if (partial.roles && partial.roles.length > 0) {
                                             updated.function = partial.roles[0].role;
                                         }
-                                        if (partial.topic_sentence) {
-                                            updated.topicSentence = partial.topic_sentence;
+                                        if (partial.tags) {
+                                            updated.tags = partial.tags;
                                         }
                                         if (partial.sentences && partial.sentences.length > 0) {
                                             updated.sentences = updated.sentences.map((s, i) => {
@@ -162,7 +214,12 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                 } catch (err) {
                     console.error(`Analysis failed for paragraph ${p.id}`, err);
                     setAnalyzedData(prev => {
-                        const newData = prev.map(item => item.id === p.id ? { ...item, status: 'error' as const, errorMessage: (err as Error).message || String(err) } : item);
+                        const newData = prev.map(item => item.id === p.id ? { 
+                            ...item, 
+                            status: 'error' as const, 
+                            errorMessage: (err as Error).message || String(err),
+                            sentences: item.sentences.map(s => ({ ...s, function: 'Error' })) // Stop the spinner loop
+                        } : item);
                         persistData(newData);
                         return newData;
                     });
@@ -220,6 +277,25 @@ export const ReaderPage: React.FC<ReaderPageProps> = ({ articleData }) => {
                     </div>
                 )}
             </main>
+            <FloatingMenu 
+                onQuizMeClick={handleOpenQuiz} 
+                onMasteryClick={() => setIsMasteryWindowOpen(true)}
+                showNotification={showQuizNotification} 
+                isGenerating={isGeneratingQuiz} 
+                hasError={hasQuizError} 
+            />
+            <QuizWindow 
+                isOpen={isQuizWindowOpen} 
+                onClose={() => setIsQuizWindowOpen(false)} 
+                questions={quizQuestions}
+                isLoading={isGeneratingQuiz}
+                onCorrectAnswer={handleCorrectAnswer}
+            />
+            <MasteryWindow
+                isOpen={isMasteryWindowOpen}
+                onClose={() => setIsMasteryWindowOpen(false)}
+                userProgress={userProgress}
+            />
         </div>
     );
 };

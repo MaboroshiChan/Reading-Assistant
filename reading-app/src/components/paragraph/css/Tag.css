@@ -1,0 +1,36 @@
+.custom-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    margin: 2px 4px 2px 0;
+    border-radius: 12px;
+    font-size: 1.3em;
+    font-weight: 500;
+    cursor: default;
+}
+
+.custom-tag.tag-logic {
+    background-color: #e0f2fe; /* light blue */
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+}
+
+.custom-tag.tag-concept {
+    background-color: #fce7f3; /* light pink */
+    color: #be185d;
+    border: 1px solid #fbcfe8;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .custom-tag.tag-logic {
+        background-color: rgba(3, 105, 161, 0.3);
+        color: #7dd3fc;
+        border-color: rgba(3, 105, 161, 0.5);
+    }
+
+    .custom-tag.tag-concept {
+        background-color: rgba(190, 24, 93, 0.3);
+        color: #f9a8d4;
+        border-color: rgba(190, 24, 93, 0.5);
+    }
+}

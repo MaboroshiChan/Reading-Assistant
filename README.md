@@ -12,7 +12,7 @@ A developer-focused playground for building a “semantic reading IDE”. The ap
   - **Sentence**: Semantic roles, discourse function, and modal markers.
   - **Subsentence**: Micro-role analysis and dependency light tracking.
 - **Unified Message Envelope**: A robust `Envelope v1` spec for Client↔Service communication, supporting streaming (NDJSON/SSE), idempotency, and observability.
-- **Caching + Mock Mode**: Fast iterations with deterministic mock builders or persistent in-memory caching for live LLM calls.
+- **Caching + Live LLM Analysis**: Persistent in-memory caching reduces repeat calls while the server uses the configured Gemini model.
 
 ## Getting Started
 
@@ -27,23 +27,11 @@ A developer-focused playground for building a “semantic reading IDE”. The ap
 npm install
 ```
 
-### Running in Mock Mode (default)
-
-Mock mode uses deterministic data builders and requires no external API calls.
-
-```bash
-export MOCK_LLM=1
-npm run dev
-```
-
-This spins up both the Vite dev server (`reading-app`) and the API server (`reading-app-server`) via `concurrently`.
-
-### Running with Live Gemini LLM
+### Running the App
 
 ```bash
 export GEMINI_API_KEY=your_key_here
 export MODEL_ID=gemini-2.5-flash       # optional
-unset MOCK_LLM                        # ensure live client is used
 npm run dev
 ```
 
@@ -56,7 +44,6 @@ Environment variables (`reading-app-server/services/config.ts`):
 | `PORT`           | `8787`             | API server listen port                       |
 | `MODEL_ID`       | `gemini-2.5-flash` | LLM model identifier (Gemini)                |
 | `GEMINI_API_KEY` | `""`               | Google Gemini API key                        |
-| `MOCK_LLM`       | `NODE_ENV=test`    | When truthy, use mock generators             |
 | `LLM_DEBUG`      | `0`                | When truthy, log full prompts/responses      |
 | `CACHE_TTL_MS`   | `7 days`           | TTL for in-memory response cache             |
 

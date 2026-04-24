@@ -2,9 +2,29 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
+    "moduleResolution": "node",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
-  }
+    "forceConsistentCasingInFileNames": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "outDir": "dist",
+    "rootDir": "..",
+    "sourceMap": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "handlers/**/*.ts",
+    "services/**/*.ts",
+    "http/**/*.ts",
+    "index.ts",
+    "../packages/contracts/src/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "prompt-refiner"
+  ]
 }

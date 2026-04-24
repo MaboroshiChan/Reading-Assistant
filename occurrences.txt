@@ -20,5 +20,4 @@
 /Users/darth_sky/Reading-Assistant/reading-app-server/prompts/v1/subsentence.txt
 /Users/darth_sky/Reading-Assistant/reading-app-server/log/prompts.log
 /Users/darth_sky/Reading-Assistant/reading-app-server/structure
-/Users/darth_sky/Reading-Assistant/reading-app-server/handlers/mock/subsentenceMock.ts
 /Users/darth_sky/Reading-Assistant/reading-app-server/handlers/subsentence.ts

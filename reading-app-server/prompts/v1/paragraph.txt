@@ -37,11 +37,13 @@ are not requested in the task list):
       "entity_links": ["optional-id"]
     }
   ],
-  "topic_sentence": {
-    "is_implicit": boolean,
-    "text": "string",
-    "id": "string"
-  }
+  "tags": [
+    {
+      "name": "string",
+      "type": "logic|concept",
+      "description": "string"
+    }
+  ],
   "confidence": 0.0
 }
 General instructions:
@@ -55,34 +57,29 @@ General instructions:
     - CRITICAL: Do NOT extract predicates for subclauses.
     - Include the full predicate phrase when possible (e.g., `"has been"`, `"will be used"`, `"needs to be defined"`, `"has not been focused"`).
     - Usually there should be one green predicate item per main clause.
-  - Other red key words may include:
-    - clause markers (e.g., `"that"`, `"which"`, `"who"`, `"because"`, `"since"`, `"although"`, `"while"`, `"if"`, `"unless"`, `"whether"`, `"how"`, `"why"`, `"when"`, `"where"`, `"as"`, `"whenever"`)
-    - logical connectors (e.g., `"and"`, `"or"`, `"but"`, `"for"`, `"because"`, `"therefore"`, `"rather"`)
-    - negation markers (e.g., `"not"`, `"nothing"`, `"never"`)
-    - infinitive structures when they function structurally (e.g., `"to run"`, `"to be run"`, `"to attain"`)
-    - discourse anchors (e.g., `"the first"`, `"the second"`, `"the former"`, `"the latter"`, `"after him"`, `"above all"`, `"in fact"`)
-    - essential semantic units when they express a key concept (e.g., `"two distinct meanings"`, `"little precedence"`, `"to a certain extent"`)
-  - Do not extract low-information single prepositions alone (e.g., `"of"`, `"in"`, `"to"`, `"for"`, `"by"`, `"from"`, `"on"`).
-    - Instead, include a full prepositional phrase only when it forms a meaningful semantic unit (e.g., `"in fact"`, `"after him"`, `"to a certain extent"`, `"only with"`, `"in this field"`, `"above all"`).
-  - CRITICAL: DO NOT extract subjects, objects, or modifiers in the key words.
-  - Avoid long descriptive noun phrases, full clauses, and isolated grammatical function words with little semantic value.
-  - Keep semantic phrases intact when selected.
-  - `key_words` items are usually short (1-4 words), but may be slightly longer when needed to preserve a meaningful unit.
+  - Other red key words may include ONLY structural and logical elements:
+    - clause markers (e.g., "that", "which", "who", "because", "since", "although", "while", "if", "unless", "whether", "how", "why", "when", "where", "as", "whenever")
+    - logical connectors (e.g., "and", "or", "but", "however", "therefore", "thus", "despite", "rather")
+    - negation markers (e.g., "not", "nothing", "never")
+    - infinitive structures when they function structurally (e.g., "to run", "to be run", "to attain")
+    - discourse anchors (e.g., "the first", "the second", "the former", "the latter", "in fact", "for example")
+  - ABSOLUTE PROHIBITION: DO NOT extract ANY nouns, noun phrases, subjects, objects, or descriptors as key words (e.g., do NOT extract terms like "bird species", "openness of habitats", "geographical separation"). The LLM strictly fails this often; you must NOT highlight topic vocabulary in red.
+  - Do not extract single prepositions alone (e.g., "of", "in", "to", "for", "by", "from", "on").
+  - DO NOT extract full clauses, prepositional phrases that act as modifiers, or long descriptive phrases.
+  - `key_words` items MUST be extremely short (1-2 words). Do not extract chunks of text.
   - Every sentence must contain at least one `key_words` item.
 - `roles` describe major participant roles (topic, evidence, counterpoint, etc.).
 - `sentences` must contain one object per sentence in the paragraph, preserving order.
 - `rhetoric` captures discourse labels (statement, question, contrast, concession).
 - `claims` are factual or opinionated assertions with polarity and support.
 - `relation` describes logical connection to another sentence (targetSentenceId is 1-based).
-- `topic_sentence` is the main topic of the paragraph.
-  - `is_implicit` is true if the topic sentence is not explicitly stated.
-  - `text` is the topic sentence text. It should be direct copy from the paragraph if it is explicit. Otherwise, it should be inferred from the paragraph.
-  - `id` is the topic sentence id. It is 1-based.
-  - If `topic_sentence` is requested, you MUST provide it.
-  - every paragraph has a topic sentence, either explicit or implicit.
-  - a topic sentence can be a conclusion came after setup.
-  - a topic sentence can be the first sentence.
-  - If no clear topic sentence exists, identify the most important sentence in the paragraph as the topic sentence. 
+- `tags` capture the logic structure and key concepts of the paragraph.
+  - `type` must be either "logic" or "concept".
+  - "logic" tags describe the structural or rhetorical organization of the paragraph (e.g., "Comparison", "Introduction", "Cause and Effect").
+  - "concept" tags describe the main subjects, ideas, or themes discussed in the paragraph (e.g., "Machine Learning", "Economic Policy").
+  - `name` should be a short, concise label for the tag (1-3 words).
+  - `description` should briefly explain why this tag applies to the paragraph (1 sentence).
+  - Please provide 1-2 logic tags and 1-3 concept tags.
 - Confidence scores are floats between 0 and 1.
 - When a section is not requested, omit that key entirely.
 - If unsure about a value, omit the field instead of guessing.
