@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
-    "start": "node dist/reading-app-server/src/main.js"
+    "start": "node dist/reading-app-server/src/main.js",
+    "smoke:knowledge-extraction": "node scripts/knowledge-extraction-smoke.cjs"
   },
   "keywords": [],
   "author": "",
