@@ -13,14 +13,16 @@ import type {
   KnowledgeEvent,
   KnowledgeEvidence,
   KnowledgeIdea,
+  KnowledgePageRef,
   KnowledgePerson,
   KnowledgeRelation,
   KnowledgeTheme,
 } from '../../../../packages/contracts/src';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
-import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
-import { workflowLog } from '../workflow.logger';
 import { resolvePromptPath } from '../../utils/prompt-path';
+import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
+import type { CanonicalChapterRecord } from '../book-ingestion/book-ingestion.types';
+import { workflowLog } from '../workflow.logger';
 import type {
   GetKnowledgeExtractionWorkflowResultResponseDto,
   GetKnowledgeExtractionWorkflowStatusResponseDto,
@@ -35,7 +37,7 @@ import type {
   SubmitKnowledgeExtractionWorkflowInput,
 } from './knowledge-extraction-workflow.types';
 
-const PROMPT_VERSION = 'knowledge_extraction.v2.0';
+const PROMPT_VERSION = 'knowledge_extraction.v2.1';
 const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
 
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
@@ -54,6 +56,25 @@ const RELATION_TYPES = new Set([
 ]);
 const IDEA_KINDS = new Set(['claim', 'belief', 'question', 'principle', 'conflict']);
 
+type KnowledgeNodeType = KnowledgeRelation['from_type'];
+type KnowledgePiece = {
+  pageIndex: number;
+  pageNumber: number;
+  rawText: string;
+  sourceHash: string;
+  pieceIndex: number;
+  totalPieces: number;
+};
+
+type KnowledgeMemoryItem = {
+  local_id: string;
+  type: KnowledgeNodeType;
+  label: string;
+  aliases?: string[];
+};
+
+type KnowledgeIdRemap = Record<KnowledgeNodeType, Map<string, string>>;
+
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
@@ -65,6 +86,9 @@ const asString = (value: unknown): string | undefined =>
 
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const normalizeText = (value: string): string =>
+  value.trim().replace(/\s+/g, ' ').toLowerCase();
 
 let cachedSystemPrompt: string | null = null;
 
@@ -364,12 +388,23 @@ export class KnowledgeExtractionWorkflowService {
       return;
     }
 
+    const pieces = this.buildPieces(chapter);
+    if (pieces.length === 0) {
+      this.knowledgeExtractionWorkflowRepository.failRun(
+        workflowRunId,
+        'KNOWLEDGE_EXTRACTION_EMPTY_CHAPTER_TEXT',
+        'Canonical chapter text is empty; unable to extract knowledge.',
+      );
+      return;
+    }
+
     try {
       const result = await this.generateKnowledgeExtraction({
         bookId: runningRun.bookId,
         chapterId: runningRun.chapterId,
         chapterTitle: chapter.chapterTitle,
         chapterText: chapter.chapterTextMaterialized,
+        pieces,
       });
 
       this.knowledgeExtractionWorkflowRepository.completeRun({
@@ -387,15 +422,81 @@ export class KnowledgeExtractionWorkflowService {
     }
   }
 
+  private buildPieces(chapter: CanonicalChapterRecord): KnowledgePiece[] {
+    const pieces = Array.from(chapter.pages.entries())
+      .sort(([leftIndex], [rightIndex]) => leftIndex - rightIndex)
+      .map(([pageIndex, page]) => ({
+        pageIndex,
+        pageNumber: pageIndex + 1,
+        rawText: page.pageTextMaterialized,
+        sourceHash: page.sourceHash,
+      }))
+      .filter((piece) => piece.rawText.trim().length > 0);
+
+    return pieces.map((piece, index) => ({
+      ...piece,
+      pieceIndex: index,
+      totalPieces: pieces.length,
+    }));
+  }
+
   private async generateKnowledgeExtraction(input: {
     bookId: string;
     chapterId: string;
     chapterTitle?: string;
     chapterText: string;
+    pieces: KnowledgePiece[];
   }): Promise<KnowledgeExtractionWorkflowResultPayload> {
+    const knowledge = this.buildFallbackKnowledge(input);
+
+    for (const piece of input.pieces) {
+      const pieceResult = await this.generateKnowledgeExtractionForPiece({
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        chapterTitle: input.chapterTitle,
+        piece,
+        memoryContext: this.buildMemoryContext(knowledge),
+      });
+      this.mergeKnowledge(knowledge, pieceResult);
+      workflowLog('piece.processed', {
+        workflowKind: 'knowledge_extraction',
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        pageIndex: piece.pageIndex,
+        pageNumber: piece.pageNumber,
+        pieceIndex: piece.pieceIndex,
+        totalPieces: piece.totalPieces,
+        sourceHash: piece.sourceHash,
+        extractedPeopleCount: pieceResult.people.length,
+        extractedIdeaCount: pieceResult.ideas.length,
+        extractedEventCount: pieceResult.events.length,
+        extractedEntityCount: pieceResult.entities.length,
+        extractedThemeCount: pieceResult.themes.length,
+        extractedRelationCount: pieceResult.relations.length,
+        accumulatedPeopleCount: knowledge.people.length,
+        accumulatedIdeaCount: knowledge.ideas.length,
+        accumulatedEventCount: knowledge.events.length,
+        accumulatedEntityCount: knowledge.entities.length,
+        accumulatedThemeCount: knowledge.themes.length,
+        accumulatedRelationCount: knowledge.relations.length,
+      });
+    }
+
+    knowledge.title = input.chapterTitle ?? knowledge.title;
+    knowledge.summary = this.summarize(input.chapterText, 240);
+    return knowledge;
+  }
+
+  private async generateKnowledgeExtractionForPiece(input: {
+    bookId: string;
+    chapterId: string;
+    chapterTitle?: string;
+    piece: KnowledgePiece;
+    memoryContext: string;
+  }): Promise<AnalyzeKnowledgeExtractionData> {
     const [systemPrompt, userPrompt] = await Promise.all([
       this.loadPrompt(),
-      Promise.resolve(this.buildPrompt(input)),
+      Promise.resolve(this.buildPiecePrompt(input)),
     ]);
     const llmClient = createLLMClient({ systemPrompt });
     const response = await llmClient.json(userPrompt);
@@ -407,37 +508,49 @@ export class KnowledgeExtractionWorkflowService {
 
     try {
       const parsed = extractJsonFromText(text);
-      return this.sanitizeKnowledgeExtraction(parsed, input);
+      return this.sanitizeKnowledgeExtraction(parsed, {
+        chapterId: input.chapterId,
+        chapterTitle: input.chapterTitle,
+        chapterText: input.piece.rawText,
+        pageRef: this.createPageRef(input.piece.pageIndex, input.piece.pageNumber),
+      });
     } catch {
-      return this.buildFallbackKnowledge(input);
+      return this.createEmptyKnowledgeExtraction(input.chapterId, input.chapterTitle);
     }
   }
 
-  private buildPrompt(input: {
+  private buildPiecePrompt(input: {
     bookId: string;
     chapterId: string;
     chapterTitle?: string;
-    chapterText: string;
+    piece: KnowledgePiece;
+    memoryContext: string;
   }): string {
     const sections = [
       `Document ID: ${input.bookId}`,
       `Chapter ID: ${input.chapterId}`,
       `Chapter Title: ${input.chapterTitle ?? ''}`,
-      'Chunk ID: ',
-      'Chunk Index: ',
-      'Total Chunks: ',
+      `Chunk ID: page-${input.piece.pageIndex}`,
+      `Chunk Index: ${input.piece.pieceIndex + 1}`,
+      `Total Chunks: ${input.piece.totalPieces}`,
+      `Page Index: ${input.piece.pageIndex}`,
+      `Page Number: ${input.piece.pageNumber}`,
+      `Source Hash: ${input.piece.sourceHash}`,
       `Prompt Version: ${PROMPT_VERSION}`,
       '',
       'Memory context:',
-      '```text',
-      '',
+      '```json',
+      input.memoryContext,
       '```',
       '',
-      'Chapter text:',
+      'Current page text:',
       '```text',
-      input.chapterText,
+      input.piece.rawText,
       '```',
       '',
+      'Only extract knowledge supported by the current page text.',
+      'Reuse local_id values from memory context when the current page clearly refers to the same item.',
+      `Every returned knowledge item must include pageRefs with pageIndex=${input.piece.pageIndex} and pageNumber=${input.piece.pageNumber}.`,
       'Respond with JSON only. Do not wrap the JSON in markdown fences.',
     ];
     return sections.join('\n');
@@ -466,12 +579,29 @@ export class KnowledgeExtractionWorkflowService {
     };
   }
 
+  private createEmptyKnowledgeExtraction(
+    chapterId: string,
+    chapterTitle?: string,
+  ): AnalyzeKnowledgeExtractionData {
+    return {
+      title: chapterTitle ?? `Chapter ${chapterId}`,
+      summary: '',
+      people: [],
+      ideas: [],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [],
+    };
+  }
+
   private sanitizeKnowledgeExtraction(
     raw: unknown,
     input: {
       chapterId: string;
       chapterTitle?: string;
       chapterText: string;
+      pageRef: KnowledgePageRef;
     },
   ): AnalyzeKnowledgeExtractionData {
     const record = isPlainObject(raw) ? raw : {};
@@ -479,12 +609,12 @@ export class KnowledgeExtractionWorkflowService {
     return {
       title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
       summary: asString(record.summary) ?? this.summarize(input.chapterText, 240),
-      people: this.sanitizePeople(record.people) ?? [],
-      ideas: this.sanitizeIdeas(record.ideas) ?? [],
-      events: this.sanitizeEvents(record.events) ?? [],
-      entities: this.sanitizeEntities(record.entities) ?? [],
-      themes: this.sanitizeThemes(record.themes) ?? [],
-      relations: this.sanitizeRelations(record.relations) ?? [],
+      people: this.sanitizePeople(record.people, input.pageRef) ?? [],
+      ideas: this.sanitizeIdeas(record.ideas, input.pageRef) ?? [],
+      events: this.sanitizeEvents(record.events, input.pageRef) ?? [],
+      entities: this.sanitizeEntities(record.entities, input.pageRef) ?? [],
+      themes: this.sanitizeThemes(record.themes, input.pageRef) ?? [],
+      relations: this.sanitizeRelations(record.relations, input.pageRef) ?? [],
     };
   }
 
@@ -506,7 +636,37 @@ export class KnowledgeExtractionWorkflowService {
     return evidence.length ? evidence : undefined;
   }
 
-  private sanitizePeople(value: unknown): KnowledgePerson[] | undefined {
+  private sanitizePageRefs(
+    value: unknown,
+    currentPageRef: KnowledgePageRef,
+  ): KnowledgePageRef[] {
+    const refs = Array.isArray(value)
+      ? value
+        .map((item): KnowledgePageRef | null => {
+          if (!isPlainObject(item)) return null;
+          const pageIndex = asNumber(item.pageIndex);
+          const pageNumber = asNumber(item.pageNumber);
+          if (
+            pageIndex === undefined
+            || !Number.isInteger(pageIndex)
+            || pageIndex < 0
+            || pageNumber === undefined
+            || !Number.isInteger(pageNumber)
+            || pageNumber < 1
+          ) {
+            return null;
+          }
+          return { pageIndex, pageNumber };
+        })
+        .filter((item): item is KnowledgePageRef => item !== null)
+      : [];
+    return this.mergePageRefs(refs, [currentPageRef]) ?? [currentPageRef];
+  }
+
+  private sanitizePeople(
+    value: unknown,
+    currentPageRef: KnowledgePageRef,
+  ): KnowledgePerson[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const people = value
       .map((item, index): KnowledgePerson | null => {
@@ -521,13 +681,17 @@ export class KnowledgeExtractionWorkflowService {
           roles: this.sanitizeStringArray(item.roles),
           traits: this.sanitizeStringArray(item.traits),
           evidence: this.sanitizeEvidence(item.evidence),
+          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
         };
       })
       .filter((item): item is KnowledgePerson => item !== null);
     return people.length ? people : undefined;
   }
 
-  private sanitizeIdeas(value: unknown): KnowledgeIdea[] | undefined {
+  private sanitizeIdeas(
+    value: unknown,
+    currentPageRef: KnowledgePageRef,
+  ): KnowledgeIdea[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const ideas = value
       .map((item, index): KnowledgeIdea | null => {
@@ -541,13 +705,17 @@ export class KnowledgeExtractionWorkflowService {
           description: asString(item.description),
           kind: kind && IDEA_KINDS.has(kind) ? kind as KnowledgeIdea['kind'] : 'claim',
           evidence: this.sanitizeEvidence(item.evidence),
+          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeIdea => item !== null);
     return ideas.length ? ideas : undefined;
   }
 
-  private sanitizeEvents(value: unknown): KnowledgeEvent[] | undefined {
+  private sanitizeEvents(
+    value: unknown,
+    currentPageRef: KnowledgePageRef,
+  ): KnowledgeEvent[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const events = value
       .map((item, index): KnowledgeEvent | null => {
@@ -562,13 +730,17 @@ export class KnowledgeExtractionWorkflowService {
           time_hint: asString(item.time_hint),
           place_hint: asString(item.place_hint),
           evidence: this.sanitizeEvidence(item.evidence),
+          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeEvent => item !== null);
     return events.length ? events : undefined;
   }
 
-  private sanitizeEntities(value: unknown): KnowledgeEntity[] | undefined {
+  private sanitizeEntities(
+    value: unknown,
+    currentPageRef: KnowledgePageRef,
+  ): KnowledgeEntity[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const entities = value
       .map((item, index): KnowledgeEntity | null => {
@@ -582,13 +754,17 @@ export class KnowledgeExtractionWorkflowService {
           type: type as KnowledgeEntity['type'],
           description: asString(item.description),
           evidence: this.sanitizeEvidence(item.evidence),
+          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeEntity => item !== null);
     return entities.length ? entities : undefined;
   }
 
-  private sanitizeThemes(value: unknown): KnowledgeTheme[] | undefined {
+  private sanitizeThemes(
+    value: unknown,
+    currentPageRef: KnowledgePageRef,
+  ): KnowledgeTheme[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const themes = value
       .map((item, index): KnowledgeTheme | null => {
@@ -602,13 +778,17 @@ export class KnowledgeExtractionWorkflowService {
           strength: typeof strength === 'number' ? Math.max(0, Math.min(1, strength)) : undefined,
           description: asString(item.description),
           evidence: this.sanitizeEvidence(item.evidence),
+          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeTheme => item !== null);
     return themes.length ? themes : undefined;
   }
 
-  private sanitizeRelations(value: unknown): KnowledgeRelation[] | undefined {
+  private sanitizeRelations(
+    value: unknown,
+    currentPageRef: KnowledgePageRef,
+  ): KnowledgeRelation[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const relations = value
       .map((item, index): KnowledgeRelation | null => {
@@ -642,10 +822,362 @@ export class KnowledgeExtractionWorkflowService {
           description: asString(item.description),
           confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
           evidence: this.sanitizeEvidence(item.evidence),
+          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeRelation => item !== null);
     return relations.length ? relations : undefined;
+  }
+
+  private buildMemoryContext(knowledge: AnalyzeKnowledgeExtractionData): string {
+    const items: KnowledgeMemoryItem[] = [
+      ...knowledge.people.map((person) => ({
+        local_id: person.local_id,
+        type: 'person' as const,
+        label: person.name,
+        aliases: person.aliases,
+      })),
+      ...knowledge.ideas.map((idea) => ({
+        local_id: idea.local_id,
+        type: 'idea' as const,
+        label: idea.label,
+      })),
+      ...knowledge.events.map((event) => ({
+        local_id: event.local_id,
+        type: 'event' as const,
+        label: event.label,
+      })),
+      ...knowledge.entities.map((entity) => ({
+        local_id: entity.local_id,
+        type: 'entity' as const,
+        label: entity.label,
+      })),
+      ...knowledge.themes.map((theme) => ({
+        local_id: theme.local_id,
+        type: 'theme' as const,
+        label: theme.label,
+      })),
+    ];
+    return items.length > 0 ? JSON.stringify(items, null, 2) : '[]';
+  }
+
+  private mergeKnowledge(
+    target: AnalyzeKnowledgeExtractionData,
+    incoming: AnalyzeKnowledgeExtractionData,
+  ): void {
+    const idRemap = this.createEmptyIdRemap();
+
+    for (const person of incoming.people) {
+      idRemap.person.set(
+        person.local_id,
+        this.mergePerson(target.people, person).local_id,
+      );
+    }
+
+    for (const idea of incoming.ideas) {
+      idRemap.idea.set(
+        idea.local_id,
+        this.mergeIdea(target.ideas, idea).local_id,
+      );
+    }
+
+    for (const entity of incoming.entities) {
+      idRemap.entity.set(
+        entity.local_id,
+        this.mergeEntity(target.entities, entity).local_id,
+      );
+    }
+
+    for (const theme of incoming.themes) {
+      idRemap.theme.set(
+        theme.local_id,
+        this.mergeTheme(target.themes, theme).local_id,
+      );
+    }
+
+    for (const event of incoming.events) {
+      const remappedEvent: KnowledgeEvent = {
+        ...event,
+        participant_local_ids: this.remapStringIds(event.participant_local_ids, idRemap.person),
+      };
+      idRemap.event.set(
+        event.local_id,
+        this.mergeEvent(target.events, remappedEvent).local_id,
+      );
+    }
+
+    for (const relation of incoming.relations) {
+      const remappedRelation: KnowledgeRelation = {
+        ...relation,
+        from_id: this.remapNodeId(relation.from_type, relation.from_id, idRemap),
+        to_id: this.remapNodeId(relation.to_type, relation.to_id, idRemap),
+      };
+      this.mergeRelation(target.relations, remappedRelation);
+    }
+  }
+
+  private createEmptyIdRemap(): KnowledgeIdRemap {
+    return {
+      person: new Map<string, string>(),
+      idea: new Map<string, string>(),
+      event: new Map<string, string>(),
+      entity: new Map<string, string>(),
+      theme: new Map<string, string>(),
+    };
+  }
+
+  private remapNodeId(
+    type: KnowledgeNodeType,
+    localId: string,
+    remap: KnowledgeIdRemap,
+  ): string {
+    return remap[type].get(localId) ?? localId;
+  }
+
+  private remapStringIds(
+    ids: string[] | undefined,
+    remap: Map<string, string>,
+  ): string[] | undefined {
+    if (!ids || ids.length === 0) return undefined;
+    return this.mergeStringArrays(
+      undefined,
+      ids.map((id) => remap.get(id) ?? id),
+    );
+  }
+
+  private mergePerson(collection: KnowledgePerson[], incoming: KnowledgePerson): KnowledgePerson {
+    const existing = collection.find((item) => this.personKey(item.name) === this.personKey(incoming.name));
+    if (!existing) {
+      const created: KnowledgePerson = {
+        ...incoming,
+        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'p'),
+        aliases: this.mergeStringArrays(undefined, incoming.aliases),
+        roles: this.mergeStringArrays(undefined, incoming.roles),
+        traits: this.mergeStringArrays(undefined, incoming.traits),
+        evidence: this.mergeEvidence(undefined, incoming.evidence),
+        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
+      };
+      collection.push(created);
+      return created;
+    }
+
+    existing.aliases = this.mergeStringArrays(existing.aliases, incoming.aliases);
+    existing.roles = this.mergeStringArrays(existing.roles, incoming.roles);
+    existing.traits = this.mergeStringArrays(existing.traits, incoming.traits);
+    existing.description = existing.description ?? incoming.description;
+    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
+    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
+    return existing;
+  }
+
+  private mergeIdea(collection: KnowledgeIdea[], incoming: KnowledgeIdea): KnowledgeIdea {
+    const existing = collection.find((item) => this.labelKey(item.label) === this.labelKey(incoming.label));
+    if (!existing) {
+      const created: KnowledgeIdea = {
+        ...incoming,
+        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'i'),
+        evidence: this.mergeEvidence(undefined, incoming.evidence),
+        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
+      };
+      collection.push(created);
+      return created;
+    }
+
+    existing.description = existing.description ?? incoming.description;
+    existing.kind = existing.kind ?? incoming.kind;
+    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
+    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
+    return existing;
+  }
+
+  private mergeEvent(collection: KnowledgeEvent[], incoming: KnowledgeEvent): KnowledgeEvent {
+    const existing = collection.find((item) => this.labelKey(item.label) === this.labelKey(incoming.label));
+    if (!existing) {
+      const created: KnowledgeEvent = {
+        ...incoming,
+        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'e'),
+        participant_local_ids: this.mergeStringArrays(undefined, incoming.participant_local_ids),
+        evidence: this.mergeEvidence(undefined, incoming.evidence),
+        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
+      };
+      collection.push(created);
+      return created;
+    }
+
+    existing.description = existing.description ?? incoming.description;
+    existing.time_hint = existing.time_hint ?? incoming.time_hint;
+    existing.place_hint = existing.place_hint ?? incoming.place_hint;
+    existing.participant_local_ids = this.mergeStringArrays(
+      existing.participant_local_ids,
+      incoming.participant_local_ids,
+    );
+    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
+    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
+    return existing;
+  }
+
+  private mergeEntity(collection: KnowledgeEntity[], incoming: KnowledgeEntity): KnowledgeEntity {
+    const existing = collection.find((item) => this.labelKey(item.label) === this.labelKey(incoming.label));
+    if (!existing) {
+      const created: KnowledgeEntity = {
+        ...incoming,
+        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'n'),
+        evidence: this.mergeEvidence(undefined, incoming.evidence),
+        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
+      };
+      collection.push(created);
+      return created;
+    }
+
+    existing.description = existing.description ?? incoming.description;
+    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
+    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
+    return existing;
+  }
+
+  private mergeTheme(collection: KnowledgeTheme[], incoming: KnowledgeTheme): KnowledgeTheme {
+    const existing = collection.find((item) => this.labelKey(item.label) === this.labelKey(incoming.label));
+    if (!existing) {
+      const created: KnowledgeTheme = {
+        ...incoming,
+        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 't'),
+        evidence: this.mergeEvidence(undefined, incoming.evidence),
+        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
+      };
+      collection.push(created);
+      return created;
+    }
+
+    existing.description = existing.description ?? incoming.description;
+    existing.strength = this.maxNumber(existing.strength, incoming.strength);
+    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
+    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
+    return existing;
+  }
+
+  private mergeRelation(collection: KnowledgeRelation[], incoming: KnowledgeRelation): KnowledgeRelation {
+    const existing = collection.find(
+      (item) => this.relationKey(item) === this.relationKey(incoming),
+    );
+    if (!existing) {
+      const created: KnowledgeRelation = {
+        ...incoming,
+        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'r'),
+        evidence: this.mergeEvidence(undefined, incoming.evidence),
+        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
+      };
+      collection.push(created);
+      return created;
+    }
+
+    existing.description = existing.description ?? incoming.description;
+    existing.confidence = this.maxNumber(existing.confidence, incoming.confidence);
+    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
+    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
+    return existing;
+  }
+
+  private ensureUniqueLocalId<T extends { local_id: string }>(
+    collection: T[],
+    preferredLocalId: string,
+    prefix: string,
+  ): string {
+    if (!collection.some((item) => item.local_id === preferredLocalId)) {
+      return preferredLocalId;
+    }
+
+    let index = collection.length + 1;
+    let candidate = `${prefix}${index}`;
+    while (collection.some((item) => item.local_id === candidate)) {
+      index += 1;
+      candidate = `${prefix}${index}`;
+    }
+    return candidate;
+  }
+
+  private mergeStringArrays(
+    existing: string[] | undefined,
+    incoming: string[] | undefined,
+  ): string[] | undefined {
+    const values = [...(existing ?? []), ...(incoming ?? [])];
+    if (values.length === 0) return undefined;
+
+    const merged: string[] = [];
+    const seen = new Set<string>();
+    for (const value of values) {
+      const normalized = normalizeText(value);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      merged.push(value.trim());
+    }
+    return merged.length > 0 ? merged : undefined;
+  }
+
+  private mergeEvidence(
+    existing: KnowledgeEvidence[] | undefined,
+    incoming: KnowledgeEvidence[] | undefined,
+  ): KnowledgeEvidence[] | undefined {
+    const values = [...(existing ?? []), ...(incoming ?? [])];
+    if (values.length === 0) return undefined;
+
+    const merged: KnowledgeEvidence[] = [];
+    const seen = new Set<string>();
+    for (const value of values) {
+      const normalized = normalizeText(value.quote);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      merged.push({ quote: value.quote.trim() });
+    }
+    return merged.length > 0 ? merged : undefined;
+  }
+
+  private mergePageRefs(
+    existing: KnowledgePageRef[] | undefined,
+    incoming: KnowledgePageRef[] | undefined,
+  ): KnowledgePageRef[] | undefined {
+    const values = [...(existing ?? []), ...(incoming ?? [])];
+    if (values.length === 0) return undefined;
+
+    const byPageIndex = new Map<number, KnowledgePageRef>();
+    for (const value of values) {
+      if (!Number.isInteger(value.pageIndex) || value.pageIndex < 0) continue;
+      byPageIndex.set(value.pageIndex, {
+        pageIndex: value.pageIndex,
+        pageNumber: value.pageNumber,
+      });
+    }
+
+    const merged = Array.from(byPageIndex.values())
+      .sort((left, right) => left.pageIndex - right.pageIndex);
+    return merged.length > 0 ? merged : undefined;
+  }
+
+  private maxNumber(existing: number | undefined, incoming: number | undefined): number | undefined {
+    if (existing === undefined) return incoming;
+    if (incoming === undefined) return existing;
+    return Math.max(existing, incoming);
+  }
+
+  private personKey(name: string): string {
+    return normalizeText(name);
+  }
+
+  private labelKey(label: string): string {
+    return normalizeText(label);
+  }
+
+  private relationKey(relation: KnowledgeRelation): string {
+    return [
+      normalizeText(relation.from_type),
+      normalizeText(relation.from_id),
+      normalizeText(relation.relation_type),
+      normalizeText(relation.to_type),
+      normalizeText(relation.to_id),
+    ].join('|');
+  }
+
+  private createPageRef(pageIndex: number, pageNumber: number): KnowledgePageRef {
+    return { pageIndex, pageNumber };
   }
 
   private summarize(text: string, maxLength: number): string {

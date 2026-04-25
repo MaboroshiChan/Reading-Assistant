@@ -6,6 +6,7 @@ import type {
   KnowledgeEvent,
   KnowledgeEvidence,
   KnowledgeIdea,
+  KnowledgePageRef,
   KnowledgePerson,
   KnowledgeRelation,
   KnowledgeTheme,
@@ -21,7 +22,7 @@ import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'knowledge-extraction';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'knowledge_extraction.v2.0';
+const PROMPT_VERSION = 'knowledge_extraction.v2.1';
 const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
 
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
@@ -93,6 +94,29 @@ const sanitizeEvidence = (value: unknown): KnowledgeEvidence[] | undefined => {
   return evidence.length ? evidence : undefined;
 };
 
+const sanitizePageRefs = (value: unknown): KnowledgePageRef[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const refs = value
+    .map((item): KnowledgePageRef | null => {
+      if (!isRecord(item)) return null;
+      const pageIndex = asNumber(item.pageIndex);
+      const pageNumber = asNumber(item.pageNumber);
+      if (
+        pageIndex === undefined
+        || !Number.isInteger(pageIndex)
+        || pageIndex < 0
+        || pageNumber === undefined
+        || !Number.isInteger(pageNumber)
+        || pageNumber < 1
+      ) {
+        return null;
+      }
+      return { pageIndex, pageNumber };
+    })
+    .filter((item): item is KnowledgePageRef => item !== null);
+  return refs.length ? refs : undefined;
+};
+
 const sanitizePeople = (value: unknown): KnowledgePerson[] | undefined => {
   if (!Array.isArray(value)) return undefined;
   const people = value
@@ -108,6 +132,7 @@ const sanitizePeople = (value: unknown): KnowledgePerson[] | undefined => {
         roles: sanitizeStringArray(item.roles),
         traits: sanitizeStringArray(item.traits),
         evidence: sanitizeEvidence(item.evidence),
+        pageRefs: sanitizePageRefs(item.pageRefs),
       };
     })
     .filter((item): item is KnowledgePerson => item !== null);
@@ -128,6 +153,7 @@ const sanitizeIdeas = (value: unknown): KnowledgeIdea[] | undefined => {
         description: asString(item.description),
         kind: kind ?? 'claim',
         evidence: sanitizeEvidence(item.evidence),
+        pageRefs: sanitizePageRefs(item.pageRefs),
       };
     })
     .filter((item): item is KnowledgeIdea => item !== null);
@@ -149,6 +175,7 @@ const sanitizeEvents = (value: unknown): KnowledgeEvent[] | undefined => {
         time_hint: asString(item.time_hint),
         place_hint: asString(item.place_hint),
         evidence: sanitizeEvidence(item.evidence),
+        pageRefs: sanitizePageRefs(item.pageRefs),
       };
     })
     .filter((item): item is KnowledgeEvent => item !== null);
@@ -169,6 +196,7 @@ const sanitizeEntities = (value: unknown): KnowledgeEntity[] | undefined => {
         type,
         description: asString(item.description),
         evidence: sanitizeEvidence(item.evidence),
+        pageRefs: sanitizePageRefs(item.pageRefs),
       };
     })
     .filter((item): item is KnowledgeEntity => item !== null);
@@ -189,6 +217,7 @@ const sanitizeThemes = (value: unknown): KnowledgeTheme[] | undefined => {
         strength: typeof strength === 'number' ? Math.max(0, Math.min(1, strength)) : undefined,
         description: asString(item.description),
         evidence: sanitizeEvidence(item.evidence),
+        pageRefs: sanitizePageRefs(item.pageRefs),
       };
     })
     .filter((item): item is KnowledgeTheme => item !== null);
@@ -217,6 +246,7 @@ const sanitizeRelations = (value: unknown): KnowledgeRelation[] | undefined => {
         description: asString(item.description),
         confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
         evidence: sanitizeEvidence(item.evidence),
+        pageRefs: sanitizePageRefs(item.pageRefs),
       };
     })
     .filter((item): item is KnowledgeRelation => item !== null);

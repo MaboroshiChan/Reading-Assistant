@@ -1,18 +1,18 @@
 import { Body, Controller, Inject, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { extractJsonFromText } from '../../services/llmService';
-import { MessageHttpService } from './message-http.service';
+import { MessageService } from './message.service';
 
 @Controller()
 export class MessageController {
   constructor(
-    @Inject(MessageHttpService)
-    private readonly messageHttpService: MessageHttpService,
+    @Inject(MessageService)
+    private readonly messageService: MessageService,
   ) {}
 
   @Post('msg')
   async handleMsg(@Body() rawBody: string | undefined, @Res() res: Response): Promise<void> {
-    const result = await this.messageHttpService.handleMsg(rawBody ?? '');
+    const result = await this.messageService.handleMsg(rawBody ?? '');
 
     if (result.stream) {
       let text = '';
@@ -56,7 +56,7 @@ export class MessageController {
 
   @Post('stream')
   async handleStream(@Body() rawBody: string | undefined, @Res() res: Response): Promise<void> {
-    const result = await this.messageHttpService.handleStream(rawBody ?? '');
+    const result = await this.messageService.handleStream(rawBody ?? '');
 
     if ('status' in result && result.status === 'error') {
       res.setHeader('Content-Type', 'application/json');

@@ -37,17 +37,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleQuiz = void 0;
-const node_path_1 = __importDefault(require("node:path"));
 const promises_1 = __importDefault(require("node:fs/promises"));
 const config_1 = require("../services/config");
 const cache = __importStar(require("../services/cache"));
 const llmService_1 = require("../services/llmService");
+const prompt_path_1 = require("../src/utils/prompt-path");
 const shared_1 = require("./shared");
 const logger_1 = require("./logger");
 const CACHE_PREFIX = 'quiz';
 const CACHE_VERSION = 'v1';
 const PROMPT_VERSION = 'quiz.v1.0';
-const PROMPT_PATH = node_path_1.default.join(__dirname, '..', 'prompts', 'v1', 'quiz.txt');
+const PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('quiz.txt');
 /**
  * Builds a cache key for quiz generation requests.
  */

@@ -109,16 +109,11 @@ async function callLLM(args) {
             }
             if (config_1.config.debugMode) {
                 const u = await usagePromise;
-                console.log(JSON.stringify({
-                    level: 'info',
-                    scope: 'llm-service',
-                    message: 'LLM response received',
-                    model: args.model,
-                    responseAs: args.responseAs,
-                    inputTokens: u.inputTokens,
-                    outputTokens: u.outputTokens,
-                    timestamp: new Date().toISOString(),
-                }));
+                console.log(`[${new Date().toISOString()}][info][llm-service] LLM response received`
+                    + ` model=${args.model}`
+                    + ` responseAs=${args.responseAs}`
+                    + ` inputTokens=${u.inputTokens ?? 0}`
+                    + ` outputTokens=${u.outputTokens ?? 0}`);
             }
             void persistLLMResponse(args, fullText);
         })();

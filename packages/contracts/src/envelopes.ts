@@ -348,6 +348,11 @@ export interface KnowledgeEvidence {
   quote: string;
 }
 
+export interface KnowledgePageRef {
+  pageIndex: number;
+  pageNumber: number;
+}
+
 export interface KnowledgePerson {
   local_id: string;
   name: string;
@@ -356,6 +361,7 @@ export interface KnowledgePerson {
   roles?: string[];
   traits?: string[];
   evidence?: KnowledgeEvidence[];
+  pageRefs?: KnowledgePageRef[];
 }
 
 export interface KnowledgeIdea {
@@ -364,6 +370,7 @@ export interface KnowledgeIdea {
   description?: string;
   kind: 'claim' | 'belief' | 'question' | 'principle' | 'conflict';
   evidence?: KnowledgeEvidence[];
+  pageRefs?: KnowledgePageRef[];
 }
 
 export interface KnowledgeEvent {
@@ -374,6 +381,7 @@ export interface KnowledgeEvent {
   time_hint?: string;
   place_hint?: string;
   evidence?: KnowledgeEvidence[];
+  pageRefs?: KnowledgePageRef[];
 }
 
 export interface KnowledgeEntity {
@@ -382,6 +390,7 @@ export interface KnowledgeEntity {
   type: 'organization' | 'place' | 'time' | 'object' | 'other';
   description?: string;
   evidence?: KnowledgeEvidence[];
+  pageRefs?: KnowledgePageRef[];
 }
 
 export interface KnowledgeTheme {
@@ -390,6 +399,7 @@ export interface KnowledgeTheme {
   strength?: number;
   description?: string;
   evidence?: KnowledgeEvidence[];
+  pageRefs?: KnowledgePageRef[];
 }
 
 export interface KnowledgeRelation {
@@ -412,6 +422,7 @@ export interface KnowledgeRelation {
   description?: string;
   confidence?: number;
   evidence?: KnowledgeEvidence[];
+  pageRefs?: KnowledgePageRef[];
 }
 
 export interface AnalyzeKnowledgeExtractionData {
