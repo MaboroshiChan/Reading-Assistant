@@ -35,7 +35,7 @@ const getEnv = (key: string, defaultValue: string = ""): string => {
 
 export const config: Config = {
     apiBaseUrl: getEnv("API_BASE_URL", "http://localhost:8787"),
-    model: getEnv("MODEL_ID", "gemini-3.0-flash"),
+    model: getEnv("MODEL_ID", "gemma-3-27b-it"),
     timeoutMs: Number(getEnv("TIMEOUT_MS", "50000")),
     cacheMax: Number(getEnv("CACHE_MAX", "100")),
     cacheTtlMs: Number(getEnv("CACHE_TTL_MS", "3600000")),

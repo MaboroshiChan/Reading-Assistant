@@ -624,43 +624,23 @@ export class KnowledgeExtractionWorkflowService {
     return items.length ? items : undefined;
   }
 
-  private sanitizeEvidence(value: unknown): KnowledgeEvidence[] | undefined {
+  private sanitizeEvidence(value: unknown, currentPageRef: KnowledgePageRef): KnowledgeEvidence[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const evidence = value
       .map((item): KnowledgeEvidence | null => {
         if (!isPlainObject(item)) return null;
         const quote = asString(item.quote);
-        return quote ? { quote } : null;
+        if (!quote) return null;
+        let pageIndex = asNumber(item.pageIndex);
+        let pageNumber = asNumber(item.pageNumber);
+        if (pageIndex === undefined || pageNumber === undefined) {
+          pageIndex = currentPageRef.pageIndex;
+          pageNumber = currentPageRef.pageNumber;
+        }
+        return { quote, pageIndex, pageNumber };
       })
       .filter((item): item is KnowledgeEvidence => item !== null);
     return evidence.length ? evidence : undefined;
-  }
-
-  private sanitizePageRefs(
-    value: unknown,
-    currentPageRef: KnowledgePageRef,
-  ): KnowledgePageRef[] {
-    const refs = Array.isArray(value)
-      ? value
-        .map((item): KnowledgePageRef | null => {
-          if (!isPlainObject(item)) return null;
-          const pageIndex = asNumber(item.pageIndex);
-          const pageNumber = asNumber(item.pageNumber);
-          if (
-            pageIndex === undefined
-            || !Number.isInteger(pageIndex)
-            || pageIndex < 0
-            || pageNumber === undefined
-            || !Number.isInteger(pageNumber)
-            || pageNumber < 1
-          ) {
-            return null;
-          }
-          return { pageIndex, pageNumber };
-        })
-        .filter((item): item is KnowledgePageRef => item !== null)
-      : [];
-    return this.mergePageRefs(refs, [currentPageRef]) ?? [currentPageRef];
   }
 
   private sanitizePeople(
@@ -680,8 +660,7 @@ export class KnowledgeExtractionWorkflowService {
           description: asString(item.description),
           roles: this.sanitizeStringArray(item.roles),
           traits: this.sanitizeStringArray(item.traits),
-          evidence: this.sanitizeEvidence(item.evidence),
-          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
         };
       })
       .filter((item): item is KnowledgePerson => item !== null);
@@ -704,8 +683,7 @@ export class KnowledgeExtractionWorkflowService {
           label,
           description: asString(item.description),
           kind: kind && IDEA_KINDS.has(kind) ? kind as KnowledgeIdea['kind'] : 'claim',
-          evidence: this.sanitizeEvidence(item.evidence),
-          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeIdea => item !== null);
@@ -729,8 +707,7 @@ export class KnowledgeExtractionWorkflowService {
           participant_local_ids: this.sanitizeStringArray(item.participant_local_ids),
           time_hint: asString(item.time_hint),
           place_hint: asString(item.place_hint),
-          evidence: this.sanitizeEvidence(item.evidence),
-          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeEvent => item !== null);
@@ -753,8 +730,7 @@ export class KnowledgeExtractionWorkflowService {
           label,
           type: type as KnowledgeEntity['type'],
           description: asString(item.description),
-          evidence: this.sanitizeEvidence(item.evidence),
-          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeEntity => item !== null);
@@ -777,8 +753,7 @@ export class KnowledgeExtractionWorkflowService {
           label,
           strength: typeof strength === 'number' ? Math.max(0, Math.min(1, strength)) : undefined,
           description: asString(item.description),
-          evidence: this.sanitizeEvidence(item.evidence),
-          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeTheme => item !== null);
@@ -821,8 +796,7 @@ export class KnowledgeExtractionWorkflowService {
               : 'related_to',
           description: asString(item.description),
           confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
-          evidence: this.sanitizeEvidence(item.evidence),
-          pageRefs: this.sanitizePageRefs(item.pageRefs, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
         };
       })
       .filter((item): item is KnowledgeRelation => item !== null);
@@ -955,7 +929,6 @@ export class KnowledgeExtractionWorkflowService {
         roles: this.mergeStringArrays(undefined, incoming.roles),
         traits: this.mergeStringArrays(undefined, incoming.traits),
         evidence: this.mergeEvidence(undefined, incoming.evidence),
-        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
       };
       collection.push(created);
       return created;
@@ -966,7 +939,6 @@ export class KnowledgeExtractionWorkflowService {
     existing.traits = this.mergeStringArrays(existing.traits, incoming.traits);
     existing.description = existing.description ?? incoming.description;
     existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
     return existing;
   }
 
@@ -977,7 +949,6 @@ export class KnowledgeExtractionWorkflowService {
         ...incoming,
         local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'i'),
         evidence: this.mergeEvidence(undefined, incoming.evidence),
-        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
       };
       collection.push(created);
       return created;
@@ -986,7 +957,6 @@ export class KnowledgeExtractionWorkflowService {
     existing.description = existing.description ?? incoming.description;
     existing.kind = existing.kind ?? incoming.kind;
     existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
     return existing;
   }
 
@@ -998,7 +968,6 @@ export class KnowledgeExtractionWorkflowService {
         local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'e'),
         participant_local_ids: this.mergeStringArrays(undefined, incoming.participant_local_ids),
         evidence: this.mergeEvidence(undefined, incoming.evidence),
-        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
       };
       collection.push(created);
       return created;
@@ -1012,7 +981,6 @@ export class KnowledgeExtractionWorkflowService {
       incoming.participant_local_ids,
     );
     existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
     return existing;
   }
 
@@ -1023,7 +991,6 @@ export class KnowledgeExtractionWorkflowService {
         ...incoming,
         local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'n'),
         evidence: this.mergeEvidence(undefined, incoming.evidence),
-        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
       };
       collection.push(created);
       return created;
@@ -1031,7 +998,6 @@ export class KnowledgeExtractionWorkflowService {
 
     existing.description = existing.description ?? incoming.description;
     existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
     return existing;
   }
 
@@ -1042,7 +1008,6 @@ export class KnowledgeExtractionWorkflowService {
         ...incoming,
         local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 't'),
         evidence: this.mergeEvidence(undefined, incoming.evidence),
-        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
       };
       collection.push(created);
       return created;
@@ -1051,7 +1016,6 @@ export class KnowledgeExtractionWorkflowService {
     existing.description = existing.description ?? incoming.description;
     existing.strength = this.maxNumber(existing.strength, incoming.strength);
     existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
     return existing;
   }
 
@@ -1064,7 +1028,6 @@ export class KnowledgeExtractionWorkflowService {
         ...incoming,
         local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'r'),
         evidence: this.mergeEvidence(undefined, incoming.evidence),
-        pageRefs: this.mergePageRefs(undefined, incoming.pageRefs),
       };
       collection.push(created);
       return created;
@@ -1073,7 +1036,6 @@ export class KnowledgeExtractionWorkflowService {
     existing.description = existing.description ?? incoming.description;
     existing.confidence = this.maxNumber(existing.confidence, incoming.confidence);
     existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    existing.pageRefs = this.mergePageRefs(existing.pageRefs, incoming.pageRefs);
     return existing;
   }
 
@@ -1124,31 +1086,16 @@ export class KnowledgeExtractionWorkflowService {
     const seen = new Set<string>();
     for (const value of values) {
       const normalized = normalizeText(value.quote);
-      if (!normalized || seen.has(normalized)) continue;
-      seen.add(normalized);
-      merged.push({ quote: value.quote.trim() });
-    }
-    return merged.length > 0 ? merged : undefined;
-  }
-
-  private mergePageRefs(
-    existing: KnowledgePageRef[] | undefined,
-    incoming: KnowledgePageRef[] | undefined,
-  ): KnowledgePageRef[] | undefined {
-    const values = [...(existing ?? []), ...(incoming ?? [])];
-    if (values.length === 0) return undefined;
-
-    const byPageIndex = new Map<number, KnowledgePageRef>();
-    for (const value of values) {
-      if (!Number.isInteger(value.pageIndex) || value.pageIndex < 0) continue;
-      byPageIndex.set(value.pageIndex, {
+      if (!normalized) continue;
+      const key = `${normalized}|${value.pageIndex ?? -1}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push({
+        quote: value.quote.trim(),
         pageIndex: value.pageIndex,
         pageNumber: value.pageNumber,
       });
     }
-
-    const merged = Array.from(byPageIndex.values())
-      .sort((left, right) => left.pageIndex - right.pageIndex);
     return merged.length > 0 ? merged : undefined;
   }
 

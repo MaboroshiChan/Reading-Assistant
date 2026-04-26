@@ -67,8 +67,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
                 aliases: ['Al'],
                 roles: ['leader'],
                 traits: ['brave'],
-                evidence: [{ quote: 'Alice begins the speech' }],
-                pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+                evidence: [{ quote: 'Alice begins the speech', pageIndex: 0, pageNumber: 1 }],
               },
             ],
             ideas: [
@@ -77,8 +76,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
                 label: 'Freedom',
                 description: 'A core ideal',
                 kind: 'claim',
-                evidence: [{ quote: 'about freedom' }],
-                pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+                evidence: [{ quote: 'about freedom', pageIndex: 0, pageNumber: 1 }],
               },
             ],
             events: [
@@ -87,8 +85,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
                 label: 'Speech',
                 description: 'Alice speaks publicly',
                 participant_local_ids: ['p1'],
-                evidence: [{ quote: 'begins the speech' }],
-                pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+                evidence: [{ quote: 'begins the speech', pageIndex: 0, pageNumber: 1 }],
               },
             ],
             entities: [
@@ -96,8 +93,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
                 local_id: 'n1',
                 label: 'City Hall',
                 type: 'place',
-                evidence: [{ quote: 'at City Hall' }],
-                pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+                evidence: [{ quote: 'at City Hall', pageIndex: 0, pageNumber: 1 }],
               },
             ],
             themes: [
@@ -105,8 +101,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
                 local_id: 't1',
                 label: 'Resistance',
                 strength: 0.4,
-                evidence: [{ quote: 'freedom' }],
-                pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+                evidence: [{ quote: 'freedom', pageIndex: 0, pageNumber: 1 }],
               },
             ],
             relations: [
@@ -118,8 +113,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
                 to_type: 'idea',
                 relation_type: 'supports',
                 confidence: 0.4,
-                evidence: [{ quote: 'Alice begins the speech about freedom' }],
-                pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+                evidence: [{ quote: 'Alice begins the speech about freedom', pageIndex: 0, pageNumber: 1 }],
               },
             ],
           };
@@ -135,8 +129,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
               aliases: ['Alice'],
               roles: [' strategist '],
               traits: ['Brave'],
-              evidence: [{ quote: 'Alice continues the speech' }],
-              pageRefs: [{ pageIndex: 2, pageNumber: 3 }],
+              evidence: [{ quote: 'Alice continues the speech', pageIndex: 2, pageNumber: 3 }],
             },
           ],
           ideas: [
@@ -145,8 +138,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
               label: 'freedom',
               description: 'Still central',
               kind: 'claim',
-              evidence: [{ quote: 'about freedom' }],
-              pageRefs: [{ pageIndex: 2, pageNumber: 3 }],
+              evidence: [{ quote: 'about freedom', pageIndex: 2, pageNumber: 3 }],
             },
           ],
           events: [
@@ -155,8 +147,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
               label: 'speech',
               participant_local_ids: ['p9'],
               place_hint: 'City Hall',
-              evidence: [{ quote: 'continues the speech' }],
-              pageRefs: [{ pageIndex: 2, pageNumber: 3 }],
+              evidence: [{ quote: 'continues the speech', pageIndex: 2, pageNumber: 3 }],
             },
           ],
           entities: [
@@ -165,8 +156,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
               label: 'city hall',
               type: 'place',
               description: 'Public building',
-              evidence: [{ quote: 'City Hall' }],
-              pageRefs: [{ pageIndex: 2, pageNumber: 3 }],
+              evidence: [{ quote: 'City Hall', pageIndex: 2, pageNumber: 3 }],
             },
           ],
           themes: [
@@ -174,8 +164,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
               local_id: 't9',
               label: 'resistance',
               strength: 0.8,
-              evidence: [{ quote: 'freedom' }],
-              pageRefs: [{ pageIndex: 2, pageNumber: 3 }],
+              evidence: [{ quote: 'freedom', pageIndex: 2, pageNumber: 3 }],
             },
           ],
           relations: [
@@ -187,8 +176,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
               to_type: 'idea',
               relation_type: 'supports',
               confidence: 0.9,
-              evidence: [{ quote: 'Alice continues the speech about freedom' }],
-              pageRefs: [{ pageIndex: 2, pageNumber: 3 }],
+              evidence: [{ quote: 'Alice continues the speech about freedom', pageIndex: 2, pageNumber: 3 }],
             },
           ],
         };
@@ -213,9 +201,9 @@ describe('KnowledgeExtractionWorkflowService', () => {
 
     const result = service.getWorkflowResult(submit.workflowRunId).result;
     const latest = service.getLatestChapterKnowledgeExtraction('book-1', 'chapter-1').result;
-    const expectedPageRefs = [
-      { pageIndex: 0, pageNumber: 1 },
-      { pageIndex: 2, pageNumber: 3 },
+    const expectedEvidence = [
+      expect.objectContaining({ pageIndex: 0, pageNumber: 1 }),
+      expect.objectContaining({ pageIndex: 2, pageNumber: 3 }),
     ];
 
     expect(result.title).toBe('Chapter One');
@@ -232,29 +220,29 @@ describe('KnowledgeExtractionWorkflowService', () => {
       aliases: ['Al', 'Alice'],
       roles: ['leader', 'strategist'],
       traits: ['brave'],
-      pageRefs: expectedPageRefs,
+      evidence: expectedEvidence,
     });
     expect(result.ideas[0]).toMatchObject({
       local_id: 'i1',
       label: 'Freedom',
-      pageRefs: expectedPageRefs,
+      evidence: expectedEvidence,
     });
     expect(result.events[0]).toMatchObject({
       local_id: 'e1',
       label: 'Speech',
       participant_local_ids: ['p1'],
-      pageRefs: expectedPageRefs,
+      evidence: expectedEvidence,
     });
     expect(result.entities[0]).toMatchObject({
       local_id: 'n1',
       label: 'City Hall',
-      pageRefs: expectedPageRefs,
+      evidence: expectedEvidence,
     });
     expect(result.themes[0]).toMatchObject({
       local_id: 't1',
       label: 'Resistance',
       strength: 0.8,
-      pageRefs: expectedPageRefs,
+      evidence: expectedEvidence,
     });
     expect(result.relations[0]).toMatchObject({
       local_id: 'r1',
@@ -264,9 +252,14 @@ describe('KnowledgeExtractionWorkflowService', () => {
       to_type: 'idea',
       relation_type: 'supports',
       confidence: 0.9,
-      pageRefs: expectedPageRefs,
+      evidence: expectedEvidence,
     });
-    expect(latest.people[0]?.pageRefs).toEqual(expectedPageRefs);
+    expect(latest.people[0]?.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pageIndex: 0, pageNumber: 1 }),
+        expect.objectContaining({ pageIndex: 2, pageNumber: 3 })
+      ])
+    );
   });
 
   test('rejects workflow submission when canonical chapter text is empty', async () => {

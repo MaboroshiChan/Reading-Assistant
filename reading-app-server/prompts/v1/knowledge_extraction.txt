@@ -16,7 +16,7 @@ When the client sends a per-page piece, every returned knowledge item must carry
 - Use `chapter_text` as the primary evidence.
 - Use `memory_context` only to keep identity continuity across chunks.
 - Reuse an existing `local_id` from memory when the current chunk clearly refers to the same item.
-- If `page_index`/`page_number` are provided, every returned knowledge item must include that exact page reference in `pageRefs`.
+- If `page_index`/`page_number` are provided, every returned evidence object must include that exact page reference as `pageIndex` and `pageNumber`.
 - Do not import unsupported facts from `memory_context`.
 - Prefer fewer, more important items over many shallow ones.
 - Keep labels concise and canonical.
@@ -48,8 +48,7 @@ Only extract items that meet at least one of the following:
       "description": "string",
       "roles": ["string"],
       "traits": ["string"],
-      "evidence": [{ "quote": "short supporting quote" }],
-      "pageRefs": [{ "pageIndex": 0, "pageNumber": 1 }]
+      "evidence": [{ "quote": "short supporting quote", "pageIndex": 0, "pageNumber": 1 }]
     }
   ],
   "ideas": [
@@ -58,8 +57,7 @@ Only extract items that meet at least one of the following:
       "label": "string",
       "description": "string",
       "kind": "claim | belief | question | principle | conflict",
-      "evidence": [{ "quote": "short supporting quote" }],
-      "pageRefs": [{ "pageIndex": 0, "pageNumber": 1 }]
+      "evidence": [{ "quote": "short supporting quote", "pageIndex": 0, "pageNumber": 1 }]
     }
   ],
   "events": [
@@ -70,8 +68,7 @@ Only extract items that meet at least one of the following:
       "participant_local_ids": ["p1"],
       "time_hint": "string",
       "place_hint": "string",
-      "evidence": [{ "quote": "short supporting quote" }],
-      "pageRefs": [{ "pageIndex": 0, "pageNumber": 1 }]
+      "evidence": [{ "quote": "short supporting quote", "pageIndex": 0, "pageNumber": 1 }]
     }
   ],
   "entities": [
@@ -80,8 +77,7 @@ Only extract items that meet at least one of the following:
       "label": "string",
       "type": "organization | place | time | object | other",
       "description": "string",
-      "evidence": [{ "quote": "short supporting quote" }],
-      "pageRefs": [{ "pageIndex": 0, "pageNumber": 1 }]
+      "evidence": [{ "quote": "short supporting quote", "pageIndex": 0, "pageNumber": 1 }]
     }
   ],
   "themes": [
@@ -90,8 +86,7 @@ Only extract items that meet at least one of the following:
       "label": "string",
       "strength": 0.0,
       "description": "string",
-      "evidence": [{ "quote": "short supporting quote" }],
-      "pageRefs": [{ "pageIndex": 0, "pageNumber": 1 }]
+      "evidence": [{ "quote": "short supporting quote", "pageIndex": 0, "pageNumber": 1 }]
     }
   ],
   "relations": [
@@ -104,8 +99,7 @@ Only extract items that meet at least one of the following:
       "relation_type": "knows | supports | opposes | extends | causes | participates_in | located_in | happens_at | reflects | related_to",
       "description": "string",
       "confidence": 0.0,
-      "evidence": [{ "quote": "short supporting quote" }],
-      "pageRefs": [{ "pageIndex": 0, "pageNumber": 1 }]
+      "evidence": [{ "quote": "short supporting quote", "pageIndex": 0, "pageNumber": 1 }]
     }
   ]
 }
