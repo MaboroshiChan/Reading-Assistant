@@ -36,6 +36,7 @@ import type {
   KnowledgeExtractionWorkflowRunRecord,
   SubmitKnowledgeExtractionWorkflowInput,
 } from './knowledge-extraction-workflow.types';
+import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
 const PROMPT_VERSION = 'knowledge_extraction.v2.1';
 const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
@@ -96,15 +97,19 @@ let cachedSystemPrompt: string | null = null;
 export class KnowledgeExtractionWorkflowService {
   private readonly bookIngestionRepository: BookIngestionRepository;
   private readonly knowledgeExtractionWorkflowRepository: KnowledgeExtractionWorkflowRepository;
+  private readonly workflowQueueService: WorkflowQueueService;
 
   constructor(
     @Inject(forwardRef(() => BookIngestionRepository))
     bookIngestionRepository: BookIngestionRepository,
     @Inject(KnowledgeExtractionWorkflowRepository)
     knowledgeExtractionWorkflowRepository: KnowledgeExtractionWorkflowRepository,
+    @Inject(WorkflowQueueService)
+    workflowQueueService: WorkflowQueueService,
   ) {
     this.bookIngestionRepository = bookIngestionRepository;
     this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
+    this.workflowQueueService = workflowQueueService;
   }
 
   parseSubmitRequest(rawBody: string | undefined): SubmitKnowledgeExtractionWorkflowRequestDto {
@@ -224,7 +229,7 @@ export class KnowledgeExtractionWorkflowService {
 
     const { run, deduped } = this.knowledgeExtractionWorkflowRepository.createOrReuseRun(input);
     if (!deduped) {
-      void this.executeRun(run.id);
+      this.workflowQueueService.enqueue(() => this.executeRun(run.id));
     }
 
     const canonicalRun = deduped
