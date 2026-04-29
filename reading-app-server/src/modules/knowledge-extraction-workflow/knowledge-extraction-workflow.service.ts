@@ -19,6 +19,7 @@ import type {
   KnowledgeTheme,
 } from '../../../../packages/contracts/src';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
+import { config } from '../../config/runtime-config';
 import { resolvePromptPath } from '../../utils/prompt-path';
 import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
 import type { CanonicalChapterRecord } from '../book-ingestion/book-ingestion.types';
@@ -57,7 +58,6 @@ const RELATION_TYPES = new Set([
 ]);
 const IDEA_KINDS = new Set(['claim', 'belief', 'question', 'principle', 'conflict']);
 
-type KnowledgeNodeType = KnowledgeRelation['from_type'];
 type KnowledgePiece = {
   pageIndex: number;
   pageNumber: number;
@@ -66,15 +66,6 @@ type KnowledgePiece = {
   pieceIndex: number;
   totalPieces: number;
 };
-
-type KnowledgeMemoryItem = {
-  local_id: string;
-  type: KnowledgeNodeType;
-  label: string;
-  aliases?: string[];
-};
-
-type KnowledgeIdRemap = Record<KnowledgeNodeType, Map<string, string>>;
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
@@ -87,9 +78,6 @@ const asString = (value: unknown): string | undefined =>
 
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-
-const normalizeText = (value: string): string =>
-  value.trim().replace(/\s+/g, ' ').toLowerCase();
 
 let cachedSystemPrompt: string | null = null;
 
@@ -226,6 +214,33 @@ export class KnowledgeExtractionWorkflowService {
       expectedSnapshotVersion: request.expectedSnapshotVersion ?? book.snapshotVersion,
       expectedChapterContentHash: request.expectedChapterContentHash ?? chapter.chapterContentHash,
     };
+
+    const reusableRun = this.findReusableCompletedRun(
+      input.bookId,
+      input.chapterId,
+      input.expectedSnapshotVersion,
+      input.expectedChapterContentHash,
+    );
+    if (reusableRun) {
+      workflowLog('run.submitted', {
+        workflowKind: reusableRun.kind,
+        workflowRunId: reusableRun.id,
+        bookId: reusableRun.bookId,
+        chapterId: reusableRun.chapterId,
+        chapterIndex: reusableRun.chapterIndex,
+        workflowVersion: reusableRun.workflowVersion,
+        deduped: true,
+        status: reusableRun.status,
+        reusedFromLatestResult: true,
+      });
+      return this.toSubmitResponse(reusableRun, true);
+    }
+
+    if (config.requireKnowledgeExtractionCache) {
+      throw new ConflictException(
+        'Knowledge extraction cache is required, but no completed cached result matches the canonical chapter state',
+      );
+    }
 
     const { run, deduped } = this.knowledgeExtractionWorkflowRepository.createOrReuseRun(input);
     if (!deduped) {
@@ -407,6 +422,7 @@ export class KnowledgeExtractionWorkflowService {
       const result = await this.generateKnowledgeExtraction({
         bookId: runningRun.bookId,
         chapterId: runningRun.chapterId,
+        chapterIndex: runningRun.chapterIndex,
         chapterTitle: chapter.chapterTitle,
         chapterText: chapter.chapterTextMaterialized,
         pieces,
@@ -448,21 +464,25 @@ export class KnowledgeExtractionWorkflowService {
   private async generateKnowledgeExtraction(input: {
     bookId: string;
     chapterId: string;
+    chapterIndex: number;
     chapterTitle?: string;
     chapterText: string;
     pieces: KnowledgePiece[];
   }): Promise<KnowledgeExtractionWorkflowResultPayload> {
-    const knowledge = this.buildFallbackKnowledge(input);
-
     for (const piece of input.pieces) {
       const pieceResult = await this.generateKnowledgeExtractionForPiece({
         bookId: input.bookId,
         chapterId: input.chapterId,
         chapterTitle: input.chapterTitle,
         piece,
-        memoryContext: this.buildMemoryContext(knowledge),
       });
-      this.mergeKnowledge(knowledge, pieceResult);
+      const chapterCounts = await this.knowledgeExtractionWorkflowRepository.upsertPageExtraction({
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        chapterIndex: input.chapterIndex,
+        chapterTitle: input.chapterTitle,
+        extraction: pieceResult,
+      });
       workflowLog('piece.processed', {
         workflowKind: 'knowledge_extraction',
         bookId: input.bookId,
@@ -478,15 +498,19 @@ export class KnowledgeExtractionWorkflowService {
         extractedEntityCount: pieceResult.entities.length,
         extractedThemeCount: pieceResult.themes.length,
         extractedRelationCount: pieceResult.relations.length,
-        accumulatedPeopleCount: knowledge.people.length,
-        accumulatedIdeaCount: knowledge.ideas.length,
-        accumulatedEventCount: knowledge.events.length,
-        accumulatedEntityCount: knowledge.entities.length,
-        accumulatedThemeCount: knowledge.themes.length,
-        accumulatedRelationCount: knowledge.relations.length,
+        accumulatedPeopleCount: chapterCounts.peopleCount,
+        accumulatedIdeaCount: chapterCounts.ideaCount,
+        accumulatedEventCount: chapterCounts.eventCount,
+        accumulatedEntityCount: chapterCounts.entityCount,
+        accumulatedThemeCount: chapterCounts.themeCount,
+        accumulatedRelationCount: chapterCounts.relationCount,
       });
     }
 
+    const knowledge = await this.knowledgeExtractionWorkflowRepository.buildChapterSnapshot(
+      input.bookId,
+      input.chapterId,
+    );
     knowledge.title = input.chapterTitle ?? knowledge.title;
     knowledge.summary = this.summarize(input.chapterText, 240);
     return knowledge;
@@ -497,7 +521,6 @@ export class KnowledgeExtractionWorkflowService {
     chapterId: string;
     chapterTitle?: string;
     piece: KnowledgePiece;
-    memoryContext: string;
   }): Promise<AnalyzeKnowledgeExtractionData> {
     const [systemPrompt, userPrompt] = await Promise.all([
       this.loadPrompt(),
@@ -529,7 +552,6 @@ export class KnowledgeExtractionWorkflowService {
     chapterId: string;
     chapterTitle?: string;
     piece: KnowledgePiece;
-    memoryContext: string;
   }): string {
     const sections = [
       `Document ID: ${input.bookId}`,
@@ -543,18 +565,13 @@ export class KnowledgeExtractionWorkflowService {
       `Source Hash: ${input.piece.sourceHash}`,
       `Prompt Version: ${PROMPT_VERSION}`,
       '',
-      'Memory context:',
-      '```json',
-      input.memoryContext,
-      '```',
-      '',
       'Current page text:',
       '```text',
       input.piece.rawText,
       '```',
       '',
       'Only extract knowledge supported by the current page text.',
-      'Reuse local_id values from memory context when the current page clearly refers to the same item.',
+      'local_id values only need to be unique within this single page response.',
       `Every returned knowledge item must include pageRefs with pageIndex=${input.piece.pageIndex} and pageNumber=${input.piece.pageNumber}.`,
       'Respond with JSON only. Do not wrap the JSON in markdown fences.',
     ];
@@ -565,23 +582,6 @@ export class KnowledgeExtractionWorkflowService {
     if (cachedSystemPrompt) return cachedSystemPrompt;
     cachedSystemPrompt = (await fs.readFile(PROMPT_PATH, 'utf8')).trim();
     return cachedSystemPrompt;
-  }
-
-  private buildFallbackKnowledge(input: {
-    chapterId: string;
-    chapterTitle?: string;
-    chapterText: string;
-  }): AnalyzeKnowledgeExtractionData {
-    return {
-      title: input.chapterTitle ?? `Chapter ${input.chapterId}`,
-      summary: this.summarize(input.chapterText, 240),
-      people: [],
-      ideas: [],
-      events: [],
-      entities: [],
-      themes: [],
-      relations: [],
-    };
   }
 
   private createEmptyKnowledgeExtraction(
@@ -808,326 +808,6 @@ export class KnowledgeExtractionWorkflowService {
     return relations.length ? relations : undefined;
   }
 
-  private buildMemoryContext(knowledge: AnalyzeKnowledgeExtractionData): string {
-    const items: KnowledgeMemoryItem[] = [
-      ...knowledge.people.map((person) => ({
-        local_id: person.local_id,
-        type: 'person' as const,
-        label: person.name,
-        aliases: person.aliases,
-      })),
-      ...knowledge.ideas.map((idea) => ({
-        local_id: idea.local_id,
-        type: 'idea' as const,
-        label: idea.label,
-      })),
-      ...knowledge.events.map((event) => ({
-        local_id: event.local_id,
-        type: 'event' as const,
-        label: event.label,
-      })),
-      ...knowledge.entities.map((entity) => ({
-        local_id: entity.local_id,
-        type: 'entity' as const,
-        label: entity.label,
-      })),
-      ...knowledge.themes.map((theme) => ({
-        local_id: theme.local_id,
-        type: 'theme' as const,
-        label: theme.label,
-      })),
-    ];
-    return items.length > 0 ? JSON.stringify(items, null, 2) : '[]';
-  }
-
-  private mergeKnowledge(
-    target: AnalyzeKnowledgeExtractionData,
-    incoming: AnalyzeKnowledgeExtractionData,
-  ): void {
-    const idRemap = this.createEmptyIdRemap();
-
-    for (const person of incoming.people) {
-      idRemap.person.set(
-        person.local_id,
-        this.mergePerson(target.people, person).local_id,
-      );
-    }
-
-    for (const idea of incoming.ideas) {
-      idRemap.idea.set(
-        idea.local_id,
-        this.mergeIdea(target.ideas, idea).local_id,
-      );
-    }
-
-    for (const entity of incoming.entities) {
-      idRemap.entity.set(
-        entity.local_id,
-        this.mergeEntity(target.entities, entity).local_id,
-      );
-    }
-
-    for (const theme of incoming.themes) {
-      idRemap.theme.set(
-        theme.local_id,
-        this.mergeTheme(target.themes, theme).local_id,
-      );
-    }
-
-    for (const event of incoming.events) {
-      const remappedEvent: KnowledgeEvent = {
-        ...event,
-        participant_local_ids: this.remapStringIds(event.participant_local_ids, idRemap.person),
-      };
-      idRemap.event.set(
-        event.local_id,
-        this.mergeEvent(target.events, remappedEvent).local_id,
-      );
-    }
-
-    for (const relation of incoming.relations) {
-      const remappedRelation: KnowledgeRelation = {
-        ...relation,
-        from_id: this.remapNodeId(relation.from_type, relation.from_id, idRemap),
-        to_id: this.remapNodeId(relation.to_type, relation.to_id, idRemap),
-      };
-      this.mergeRelation(target.relations, remappedRelation);
-    }
-  }
-
-  private createEmptyIdRemap(): KnowledgeIdRemap {
-    return {
-      person: new Map<string, string>(),
-      idea: new Map<string, string>(),
-      event: new Map<string, string>(),
-      entity: new Map<string, string>(),
-      theme: new Map<string, string>(),
-    };
-  }
-
-  private remapNodeId(
-    type: KnowledgeNodeType,
-    localId: string,
-    remap: KnowledgeIdRemap,
-  ): string {
-    return remap[type].get(localId) ?? localId;
-  }
-
-  private remapStringIds(
-    ids: string[] | undefined,
-    remap: Map<string, string>,
-  ): string[] | undefined {
-    if (!ids || ids.length === 0) return undefined;
-    return this.mergeStringArrays(
-      undefined,
-      ids.map((id) => remap.get(id) ?? id),
-    );
-  }
-
-  private mergePerson(collection: KnowledgePerson[], incoming: KnowledgePerson): KnowledgePerson {
-    const existing = collection.find((item) => this.personKey(item.name) === this.personKey(incoming.name));
-    if (!existing) {
-      const created: KnowledgePerson = {
-        ...incoming,
-        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'p'),
-        aliases: this.mergeStringArrays(undefined, incoming.aliases),
-        roles: this.mergeStringArrays(undefined, incoming.roles),
-        traits: this.mergeStringArrays(undefined, incoming.traits),
-        evidence: this.mergeEvidence(undefined, incoming.evidence),
-      };
-      collection.push(created);
-      return created;
-    }
-
-    existing.aliases = this.mergeStringArrays(existing.aliases, incoming.aliases);
-    existing.roles = this.mergeStringArrays(existing.roles, incoming.roles);
-    existing.traits = this.mergeStringArrays(existing.traits, incoming.traits);
-    existing.description = existing.description ?? incoming.description;
-    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    return existing;
-  }
-
-  private mergeIdea(collection: KnowledgeIdea[], incoming: KnowledgeIdea): KnowledgeIdea {
-    const existing = collection.find((item) => this.labelKey(item.label) === this.labelKey(incoming.label));
-    if (!existing) {
-      const created: KnowledgeIdea = {
-        ...incoming,
-        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'i'),
-        evidence: this.mergeEvidence(undefined, incoming.evidence),
-      };
-      collection.push(created);
-      return created;
-    }
-
-    existing.description = existing.description ?? incoming.description;
-    existing.kind = existing.kind ?? incoming.kind;
-    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    return existing;
-  }
-
-  private mergeEvent(collection: KnowledgeEvent[], incoming: KnowledgeEvent): KnowledgeEvent {
-    const existing = collection.find((item) => this.labelKey(item.label) === this.labelKey(incoming.label));
-    if (!existing) {
-      const created: KnowledgeEvent = {
-        ...incoming,
-        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'e'),
-        participant_local_ids: this.mergeStringArrays(undefined, incoming.participant_local_ids),
-        evidence: this.mergeEvidence(undefined, incoming.evidence),
-      };
-      collection.push(created);
-      return created;
-    }
-
-    existing.description = existing.description ?? incoming.description;
-    existing.time_hint = existing.time_hint ?? incoming.time_hint;
-    existing.place_hint = existing.place_hint ?? incoming.place_hint;
-    existing.participant_local_ids = this.mergeStringArrays(
-      existing.participant_local_ids,
-      incoming.participant_local_ids,
-    );
-    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    return existing;
-  }
-
-  private mergeEntity(collection: KnowledgeEntity[], incoming: KnowledgeEntity): KnowledgeEntity {
-    const existing = collection.find((item) => this.labelKey(item.label) === this.labelKey(incoming.label));
-    if (!existing) {
-      const created: KnowledgeEntity = {
-        ...incoming,
-        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'n'),
-        evidence: this.mergeEvidence(undefined, incoming.evidence),
-      };
-      collection.push(created);
-      return created;
-    }
-
-    existing.description = existing.description ?? incoming.description;
-    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    return existing;
-  }
-
-  private mergeTheme(collection: KnowledgeTheme[], incoming: KnowledgeTheme): KnowledgeTheme {
-    const existing = collection.find((item) => this.labelKey(item.label) === this.labelKey(incoming.label));
-    if (!existing) {
-      const created: KnowledgeTheme = {
-        ...incoming,
-        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 't'),
-        evidence: this.mergeEvidence(undefined, incoming.evidence),
-      };
-      collection.push(created);
-      return created;
-    }
-
-    existing.description = existing.description ?? incoming.description;
-    existing.strength = this.maxNumber(existing.strength, incoming.strength);
-    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    return existing;
-  }
-
-  private mergeRelation(collection: KnowledgeRelation[], incoming: KnowledgeRelation): KnowledgeRelation {
-    const existing = collection.find(
-      (item) => this.relationKey(item) === this.relationKey(incoming),
-    );
-    if (!existing) {
-      const created: KnowledgeRelation = {
-        ...incoming,
-        local_id: this.ensureUniqueLocalId(collection, incoming.local_id, 'r'),
-        evidence: this.mergeEvidence(undefined, incoming.evidence),
-      };
-      collection.push(created);
-      return created;
-    }
-
-    existing.description = existing.description ?? incoming.description;
-    existing.confidence = this.maxNumber(existing.confidence, incoming.confidence);
-    existing.evidence = this.mergeEvidence(existing.evidence, incoming.evidence);
-    return existing;
-  }
-
-  private ensureUniqueLocalId<T extends { local_id: string }>(
-    collection: T[],
-    preferredLocalId: string,
-    prefix: string,
-  ): string {
-    if (!collection.some((item) => item.local_id === preferredLocalId)) {
-      return preferredLocalId;
-    }
-
-    let index = collection.length + 1;
-    let candidate = `${prefix}${index}`;
-    while (collection.some((item) => item.local_id === candidate)) {
-      index += 1;
-      candidate = `${prefix}${index}`;
-    }
-    return candidate;
-  }
-
-  private mergeStringArrays(
-    existing: string[] | undefined,
-    incoming: string[] | undefined,
-  ): string[] | undefined {
-    const values = [...(existing ?? []), ...(incoming ?? [])];
-    if (values.length === 0) return undefined;
-
-    const merged: string[] = [];
-    const seen = new Set<string>();
-    for (const value of values) {
-      const normalized = normalizeText(value);
-      if (!normalized || seen.has(normalized)) continue;
-      seen.add(normalized);
-      merged.push(value.trim());
-    }
-    return merged.length > 0 ? merged : undefined;
-  }
-
-  private mergeEvidence(
-    existing: KnowledgeEvidence[] | undefined,
-    incoming: KnowledgeEvidence[] | undefined,
-  ): KnowledgeEvidence[] | undefined {
-    const values = [...(existing ?? []), ...(incoming ?? [])];
-    if (values.length === 0) return undefined;
-
-    const merged: KnowledgeEvidence[] = [];
-    const seen = new Set<string>();
-    for (const value of values) {
-      const normalized = normalizeText(value.quote);
-      if (!normalized) continue;
-      const key = `${normalized}|${value.pageIndex ?? -1}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push({
-        quote: value.quote.trim(),
-        pageIndex: value.pageIndex,
-        pageNumber: value.pageNumber,
-      });
-    }
-    return merged.length > 0 ? merged : undefined;
-  }
-
-  private maxNumber(existing: number | undefined, incoming: number | undefined): number | undefined {
-    if (existing === undefined) return incoming;
-    if (incoming === undefined) return existing;
-    return Math.max(existing, incoming);
-  }
-
-  private personKey(name: string): string {
-    return normalizeText(name);
-  }
-
-  private labelKey(label: string): string {
-    return normalizeText(label);
-  }
-
-  private relationKey(relation: KnowledgeRelation): string {
-    return [
-      normalizeText(relation.from_type),
-      normalizeText(relation.from_id),
-      normalizeText(relation.relation_type),
-      normalizeText(relation.to_type),
-      normalizeText(relation.to_id),
-    ].join('|');
-  }
-
   private createPageRef(pageIndex: number, pageNumber: number): KnowledgePageRef {
     return { pageIndex, pageNumber };
   }
@@ -1145,6 +825,31 @@ export class KnowledgeExtractionWorkflowService {
     chapterContentHash: string,
   ): string {
     return `knowledge-extraction:${workflowVersion}:${bookId}:${chapterId}:${chapterContentHash}`;
+  }
+
+  private findReusableCompletedRun(
+    bookId: string,
+    chapterId: string,
+    expectedSnapshotVersion?: number,
+    expectedChapterContentHash?: string,
+  ): KnowledgeExtractionWorkflowRunRecord | null {
+    const latestResult = this.knowledgeExtractionWorkflowRepository.getLatestResult(bookId, chapterId);
+    if (!latestResult) return null;
+    if (expectedSnapshotVersion !== undefined && latestResult.snapshotVersion !== expectedSnapshotVersion) {
+      return null;
+    }
+    if (
+      expectedChapterContentHash !== undefined
+      && latestResult.chapterContentHash !== expectedChapterContentHash
+    ) {
+      return null;
+    }
+
+    const run = this.knowledgeExtractionWorkflowRepository.getRun(latestResult.workflowRunId);
+    if (!run || run.status !== 'completed' || !run.output) {
+      return null;
+    }
+    return run;
   }
 
   private toSubmitResponse(

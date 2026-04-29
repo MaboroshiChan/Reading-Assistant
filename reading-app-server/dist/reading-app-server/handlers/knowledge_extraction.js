@@ -46,7 +46,7 @@ const shared_1 = require("./shared");
 const logger_1 = require("./logger");
 const CACHE_PREFIX = 'knowledge-extraction';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'knowledge_extraction.v2.0';
+const PROMPT_VERSION = 'knowledge_extraction.v2.1';
 const PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('knowledge_extraction.txt');
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
 const NODE_TYPES = new Set(['person', 'idea', 'event', 'entity', 'theme']);
@@ -98,7 +98,9 @@ const sanitizeEvidence = (value) => {
         const quote = asString(item.quote);
         if (!quote)
             return null;
-        return { quote };
+        const pageIndex = asNumber(item.pageIndex);
+        const pageNumber = asNumber(item.pageNumber);
+        return { quote, pageIndex, pageNumber };
     })
         .filter((item) => item !== null);
     return evidence.length ? evidence : undefined;

@@ -57,7 +57,8 @@ export class BookIngestionRepository {
   private readonly books = new Map<string, CanonicalBookRecord>();
   private readonly storePath: string;
 
-  constructor(dataDir = process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR) {
+  constructor() {
+    const dataDir = process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR;
     this.storePath = path.join(dataDir, DEFAULT_STORE_FILE);
     this.loadPersistedStore();
   }
@@ -157,6 +158,7 @@ export class BookIngestionRepository {
     const created: CanonicalBookRecord = {
       bookId,
       snapshotVersion: 0,
+      createdAt: timestamp,
       updatedAt: timestamp,
       chapters: new Map<string, CanonicalChapterRecord>(),
     };
@@ -181,6 +183,7 @@ export class BookIngestionRepository {
       pages: new Map<number, CanonicalPageRecord>(),
       chapterTextMaterialized: '',
       chapterContentHash: hashText(''),
+      createdAt: timestamp,
       updatedAt: timestamp,
     };
     book.chapters.set(input.chapterId, created);
@@ -268,13 +271,16 @@ export class BookIngestionRepository {
   }
 
   private deserializeBook(book: SerializedCanonicalBookRecord): CanonicalBookRecord {
+    const fallbackTimestamp = book.updatedAt ?? new Date().toISOString();
     return {
       ...book,
+      createdAt: book.createdAt ?? fallbackTimestamp,
       chapters: new Map(
         Object.entries(book.chapters ?? {}).map(([chapterId, chapter]) => [
           chapterId,
           {
             ...chapter,
+            createdAt: chapter.createdAt ?? chapter.updatedAt ?? fallbackTimestamp,
             pages: new Map(
               Object.entries(chapter.pages ?? {}).map(([pageIndex, page]) => [Number(pageIndex), page]),
             ),

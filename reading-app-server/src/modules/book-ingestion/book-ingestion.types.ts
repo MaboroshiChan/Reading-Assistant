@@ -17,6 +17,7 @@ export interface CanonicalChapterRecord {
   pages: Map<number, CanonicalPageRecord>;
   chapterTextMaterialized: string;
   chapterContentHash: string;
+  createdAt: string;
   updatedAt: string;
 }
 
@@ -25,6 +26,7 @@ export interface CanonicalBookRecord {
   ownerUserId?: string;
   bookMetadata?: Record<string, unknown>;
   snapshotVersion: number;
+  createdAt: string;
   updatedAt: string;
   chapters: Map<string, CanonicalChapterRecord>;
 }

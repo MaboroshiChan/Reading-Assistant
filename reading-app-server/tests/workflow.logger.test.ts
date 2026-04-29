@@ -7,6 +7,7 @@ import { KnowledgeExtractionWorkflowRepository } from '../src/modules/knowledge-
 import { KnowledgeExtractionWorkflowService } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.service';
 import { QuizWorkflowRepository } from '../src/modules/quiz-workflow/quiz-workflow.repository';
 import { QuizWorkflowService } from '../src/modules/quiz-workflow/quiz-workflow.service';
+import { WorkflowQueueService } from '../src/modules/workflow-queue/workflow-queue.service';
 import { flushWorkflowLogs } from '../src/modules/workflow.logger';
 
 describe('workflow logging', () => {
@@ -36,10 +37,12 @@ describe('workflow logging', () => {
       },
     });
 
-    const quizService = new QuizWorkflowService(bookRepository, new QuizWorkflowRepository());
+    const queueService = new WorkflowQueueService();
+    const quizService = new QuizWorkflowService(bookRepository, new QuizWorkflowRepository(), queueService);
     const knowledgeService = new KnowledgeExtractionWorkflowService(
       bookRepository,
       new KnowledgeExtractionWorkflowRepository(),
+      queueService,
     );
 
     vi.spyOn(quizService as never, 'generateQuiz').mockResolvedValue({

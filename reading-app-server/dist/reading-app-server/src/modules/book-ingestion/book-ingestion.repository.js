@@ -41,7 +41,8 @@ const sortParagraphEntries = (pageParagraphs) => {
 let BookIngestionRepository = class BookIngestionRepository {
     books = new Map();
     storePath;
-    constructor(dataDir = process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR) {
+    constructor() {
+        const dataDir = process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR;
         this.storePath = node_path_1.default.join(dataDir, DEFAULT_STORE_FILE);
         this.loadPersistedStore();
     }
@@ -126,6 +127,7 @@ let BookIngestionRepository = class BookIngestionRepository {
         const created = {
             bookId,
             snapshotVersion: 0,
+            createdAt: timestamp,
             updatedAt: timestamp,
             chapters: new Map(),
         };
@@ -145,6 +147,7 @@ let BookIngestionRepository = class BookIngestionRepository {
             pages: new Map(),
             chapterTextMaterialized: '',
             chapterContentHash: hashText(''),
+            createdAt: timestamp,
             updatedAt: timestamp,
         };
         book.chapters.set(input.chapterId, created);
@@ -220,12 +223,15 @@ let BookIngestionRepository = class BookIngestionRepository {
         };
     }
     deserializeBook(book) {
+        const fallbackTimestamp = book.updatedAt ?? new Date().toISOString();
         return {
             ...book,
+            createdAt: book.createdAt ?? fallbackTimestamp,
             chapters: new Map(Object.entries(book.chapters ?? {}).map(([chapterId, chapter]) => [
                 chapterId,
                 {
                     ...chapter,
+                    createdAt: chapter.createdAt ?? chapter.updatedAt ?? fallbackTimestamp,
                     pages: new Map(Object.entries(chapter.pages ?? {}).map(([pageIndex, page]) => [Number(pageIndex), page])),
                 },
             ])),
@@ -235,6 +241,6 @@ let BookIngestionRepository = class BookIngestionRepository {
 exports.BookIngestionRepository = BookIngestionRepository;
 exports.BookIngestionRepository = BookIngestionRepository = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [Object])
+    __metadata("design:paramtypes", [])
 ], BookIngestionRepository);
 //# sourceMappingURL=book-ingestion.repository.js.map

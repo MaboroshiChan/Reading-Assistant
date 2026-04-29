@@ -7,6 +7,9 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import type {
+  GetBookModelResponseDto,
+} from './book-model.dto';
+import type {
   GetChapterResponseDto,
   GetPageResponseDto,
   UpsertBookPageFragmentParamsDto,
@@ -16,6 +19,7 @@ import type {
 import { bookIngestionLog } from './book-ingestion.logger';
 import { BookIngestionRepository } from './book-ingestion.repository';
 import { config } from '../../config/runtime-config';
+import { KnowledgeExtractionWorkflowRepository } from '../knowledge-extraction-workflow/knowledge-extraction-workflow.repository';
 import { KnowledgeExtractionWorkflowService } from '../knowledge-extraction-workflow/knowledge-extraction-workflow.service';
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -35,15 +39,20 @@ const coerceNonNegativeInteger = (value: unknown, fieldName: string): number => 
 export class BookIngestionService {
   private readonly repository: BookIngestionRepository;
   private readonly knowledgeExtractionWorkflowService?: KnowledgeExtractionWorkflowService;
+  private readonly knowledgeExtractionWorkflowRepository?: KnowledgeExtractionWorkflowRepository;
 
   constructor(
     @Inject(BookIngestionRepository) repository: BookIngestionRepository,
     @Optional()
     @Inject(forwardRef(() => KnowledgeExtractionWorkflowService))
     knowledgeExtractionWorkflowService?: KnowledgeExtractionWorkflowService,
+    @Optional()
+    @Inject(forwardRef(() => KnowledgeExtractionWorkflowRepository))
+    knowledgeExtractionWorkflowRepository?: KnowledgeExtractionWorkflowRepository,
   ) {
     this.repository = repository;
     this.knowledgeExtractionWorkflowService = knowledgeExtractionWorkflowService;
+    this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
   }
 
   parseUpsertRequest(
@@ -326,6 +335,181 @@ export class BookIngestionService {
       paragraphHashes: { ...page.paragraphHashes },
       snapshotVersion: book.snapshotVersion,
       updatedAt: page.updatedAt,
+    };
+  }
+
+  async getBookModel(bookId: string): Promise<GetBookModelResponseDto> {
+    const book = this.repository.getBook(bookId);
+    if (!book) {
+      bookIngestionLog('book_model.read_miss', { bookId });
+      throw new NotFoundException('Book not found');
+    }
+
+    const chapters = Array.from(book.chapters.values())
+      .sort((left, right) => {
+        const chapterDelta = left.chapterIndex - right.chapterIndex;
+        if (chapterDelta !== 0) return chapterDelta;
+        return left.chapterId.localeCompare(right.chapterId);
+      });
+
+    const chapterSnapshots = await Promise.all(chapters.map(async (chapter) => {
+      const snapshot = this.knowledgeExtractionWorkflowRepository
+        ? await this.knowledgeExtractionWorkflowRepository.buildChapterSnapshot(bookId, chapter.chapterId)
+        : {
+          title: chapter.chapterTitle ?? `Chapter ${chapter.chapterIndex}`,
+          summary: '',
+          people: [],
+          ideas: [],
+          events: [],
+          entities: [],
+          themes: [],
+          relations: [],
+        };
+
+      return {
+        chapterId: chapter.chapterId,
+        chapterIndex: chapter.chapterIndex,
+        snapshotVersion: book.snapshotVersion,
+        chapterContentHash: chapter.chapterContentHash,
+        title: chapter.chapterTitle ?? snapshot.title,
+        summary: snapshot.summary || undefined,
+        people: snapshot.people.map((person) => ({
+          localId: person.local_id,
+          name: person.name,
+          aliases: person.aliases ?? [],
+          description: person.description,
+          roles: person.roles ?? [],
+          traits: person.traits ?? [],
+          evidence: (person.evidence ?? []).map((evidence) => ({
+            chapterIndex: chapter.chapterIndex,
+            chapterId: chapter.chapterId,
+            pageIndex: evidence.pageIndex,
+            pageNumber: evidence.pageNumber,
+            quote: evidence.quote,
+          })),
+        })),
+        ideas: snapshot.ideas.map((idea) => ({
+          localId: idea.local_id,
+          label: idea.label,
+          description: idea.description,
+          kind: idea.kind,
+          evidence: (idea.evidence ?? []).map((evidence) => ({
+            chapterIndex: chapter.chapterIndex,
+            chapterId: chapter.chapterId,
+            pageIndex: evidence.pageIndex,
+            pageNumber: evidence.pageNumber,
+            quote: evidence.quote,
+          })),
+        })),
+        events: snapshot.events.map((event) => ({
+          localId: event.local_id,
+          label: event.label,
+          description: event.description,
+          participantLocalIds: event.participant_local_ids ?? [],
+          timeHint: event.time_hint,
+          placeHint: event.place_hint,
+          evidence: (event.evidence ?? []).map((evidence) => ({
+            chapterIndex: chapter.chapterIndex,
+            chapterId: chapter.chapterId,
+            pageIndex: evidence.pageIndex,
+            pageNumber: evidence.pageNumber,
+            quote: evidence.quote,
+          })),
+        })),
+        entities: snapshot.entities.map((entity) => ({
+          localId: entity.local_id,
+          label: entity.label,
+          type: entity.type,
+          description: entity.description,
+          evidence: (entity.evidence ?? []).map((evidence) => ({
+            chapterIndex: chapter.chapterIndex,
+            chapterId: chapter.chapterId,
+            pageIndex: evidence.pageIndex,
+            pageNumber: evidence.pageNumber,
+            quote: evidence.quote,
+          })),
+        })),
+        themes: snapshot.themes.map((theme) => ({
+          localId: theme.local_id,
+          label: theme.label,
+          strength: theme.strength,
+          description: theme.description,
+          evidence: (theme.evidence ?? []).map((evidence) => ({
+            chapterIndex: chapter.chapterIndex,
+            chapterId: chapter.chapterId,
+            pageIndex: evidence.pageIndex,
+            pageNumber: evidence.pageNumber,
+            quote: evidence.quote,
+          })),
+        })),
+        relations: snapshot.relations.map((relation) => ({
+          localId: relation.local_id,
+          fromId: relation.from_id,
+          fromType: relation.from_type,
+          toId: relation.to_id,
+          toType: relation.to_type,
+          relationType: relation.relation_type,
+          description: relation.description,
+          confidence: relation.confidence,
+          evidence: (relation.evidence ?? []).map((evidence) => ({
+            chapterIndex: chapter.chapterIndex,
+            chapterId: chapter.chapterId,
+            pageIndex: evidence.pageIndex,
+            pageNumber: evidence.pageNumber,
+            quote: evidence.quote,
+          })),
+        })),
+        createdAt: chapter.createdAt,
+      };
+    }));
+
+    const keyInformation = this.knowledgeExtractionWorkflowRepository?.buildBookKeyInformation(bookId) ?? {
+      people: [],
+      ideas: [],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [],
+      arcs: [],
+      ideaFlows: [],
+      links: [],
+    };
+
+    const metadata = book.bookMetadata ?? {};
+    const title = typeof metadata.title === 'string' && metadata.title.trim()
+      ? metadata.title.trim()
+      : undefined;
+    const author = typeof metadata.author === 'string' && metadata.author.trim()
+      ? metadata.author.trim()
+      : undefined;
+    const language = typeof metadata.language === 'string' && metadata.language.trim()
+      ? metadata.language.trim()
+      : undefined;
+
+    bookIngestionLog('book_model.read_hit', {
+      bookId,
+      snapshotVersion: book.snapshotVersion,
+      chapterCount: chapterSnapshots.length,
+      globalPeopleCount: keyInformation.people.length,
+      globalIdeaCount: keyInformation.ideas.length,
+      globalEventCount: keyInformation.events.length,
+      globalEntityCount: keyInformation.entities.length,
+      globalThemeCount: keyInformation.themes.length,
+      globalRelationCount: keyInformation.relations.length,
+    });
+
+    return {
+      bookId,
+      meta: {
+        title,
+        author,
+        language,
+        totalChapters: chapterSnapshots.length,
+        createdAt: book.createdAt,
+        updatedAt: book.updatedAt,
+      },
+      chapters: chapterSnapshots,
+      keyInformation,
     };
   }
 

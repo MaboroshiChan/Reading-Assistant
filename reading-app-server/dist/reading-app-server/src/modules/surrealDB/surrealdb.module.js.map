@@ -1,0 +1,1 @@
+{"version":3,"file":"surrealdb.module.js","sourceRoot":"","sources":["../../../../../src/modules/surrealDB/surrealdb.module.ts"],"names":[],"mappings":";;;;;;;;;AAAA,2CAA8C;AAC9C,2DAAqD;AAQ9C,IAAM,aAAa,GAAnB,MAAM,aAAa;CAAG,CAAA;AAAhB,sCAAa;wBAAb,aAAa;IANzB,IAAA,eAAM,GAAE;IACR,IAAA,eAAM,EAAC;QACJ,SAAS,EAAC,CAAC,kCAAc,CAAC;QAC1B,OAAO,EAAE,CAAC,kCAAc,CAAC;KAC5B,CAAC;GAEW,aAAa,CAAG"}

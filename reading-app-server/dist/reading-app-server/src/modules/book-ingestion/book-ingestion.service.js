@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const book_ingestion_logger_1 = require("./book-ingestion.logger");
 const book_ingestion_repository_1 = require("./book-ingestion.repository");
 const runtime_config_1 = require("../../config/runtime-config");
+const knowledge_extraction_workflow_repository_1 = require("../knowledge-extraction-workflow/knowledge-extraction-workflow.repository");
 const knowledge_extraction_workflow_service_1 = require("../knowledge-extraction-workflow/knowledge-extraction-workflow.service");
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -29,9 +30,11 @@ const coerceNonNegativeInteger = (value, fieldName) => {
 let BookIngestionService = class BookIngestionService {
     repository;
     knowledgeExtractionWorkflowService;
-    constructor(repository, knowledgeExtractionWorkflowService) {
+    knowledgeExtractionWorkflowRepository;
+    constructor(repository, knowledgeExtractionWorkflowService, knowledgeExtractionWorkflowRepository) {
         this.repository = repository;
         this.knowledgeExtractionWorkflowService = knowledgeExtractionWorkflowService;
+        this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
     }
     parseUpsertRequest(rawBody, params) {
         if (!rawBody || rawBody.trim() === '') {
@@ -280,6 +283,174 @@ let BookIngestionService = class BookIngestionService {
             updatedAt: page.updatedAt,
         };
     }
+    async getBookModel(bookId) {
+        const book = this.repository.getBook(bookId);
+        if (!book) {
+            (0, book_ingestion_logger_1.bookIngestionLog)('book_model.read_miss', { bookId });
+            throw new common_1.NotFoundException('Book not found');
+        }
+        const chapters = Array.from(book.chapters.values())
+            .sort((left, right) => {
+            const chapterDelta = left.chapterIndex - right.chapterIndex;
+            if (chapterDelta !== 0)
+                return chapterDelta;
+            return left.chapterId.localeCompare(right.chapterId);
+        });
+        const chapterSnapshots = await Promise.all(chapters.map(async (chapter) => {
+            const snapshot = this.knowledgeExtractionWorkflowRepository
+                ? await this.knowledgeExtractionWorkflowRepository.buildChapterSnapshot(bookId, chapter.chapterId)
+                : {
+                    title: chapter.chapterTitle ?? `Chapter ${chapter.chapterIndex}`,
+                    summary: '',
+                    people: [],
+                    ideas: [],
+                    events: [],
+                    entities: [],
+                    themes: [],
+                    relations: [],
+                };
+            return {
+                chapterId: chapter.chapterId,
+                chapterIndex: chapter.chapterIndex,
+                snapshotVersion: book.snapshotVersion,
+                chapterContentHash: chapter.chapterContentHash,
+                title: chapter.chapterTitle ?? snapshot.title,
+                summary: snapshot.summary || undefined,
+                people: snapshot.people.map((person) => ({
+                    localId: person.local_id,
+                    name: person.name,
+                    aliases: person.aliases ?? [],
+                    description: person.description,
+                    roles: person.roles ?? [],
+                    traits: person.traits ?? [],
+                    evidence: (person.evidence ?? []).map((evidence) => ({
+                        chapterIndex: chapter.chapterIndex,
+                        chapterId: chapter.chapterId,
+                        pageIndex: evidence.pageIndex,
+                        pageNumber: evidence.pageNumber,
+                        quote: evidence.quote,
+                    })),
+                })),
+                ideas: snapshot.ideas.map((idea) => ({
+                    localId: idea.local_id,
+                    label: idea.label,
+                    description: idea.description,
+                    kind: idea.kind,
+                    evidence: (idea.evidence ?? []).map((evidence) => ({
+                        chapterIndex: chapter.chapterIndex,
+                        chapterId: chapter.chapterId,
+                        pageIndex: evidence.pageIndex,
+                        pageNumber: evidence.pageNumber,
+                        quote: evidence.quote,
+                    })),
+                })),
+                events: snapshot.events.map((event) => ({
+                    localId: event.local_id,
+                    label: event.label,
+                    description: event.description,
+                    participantLocalIds: event.participant_local_ids ?? [],
+                    timeHint: event.time_hint,
+                    placeHint: event.place_hint,
+                    evidence: (event.evidence ?? []).map((evidence) => ({
+                        chapterIndex: chapter.chapterIndex,
+                        chapterId: chapter.chapterId,
+                        pageIndex: evidence.pageIndex,
+                        pageNumber: evidence.pageNumber,
+                        quote: evidence.quote,
+                    })),
+                })),
+                entities: snapshot.entities.map((entity) => ({
+                    localId: entity.local_id,
+                    label: entity.label,
+                    type: entity.type,
+                    description: entity.description,
+                    evidence: (entity.evidence ?? []).map((evidence) => ({
+                        chapterIndex: chapter.chapterIndex,
+                        chapterId: chapter.chapterId,
+                        pageIndex: evidence.pageIndex,
+                        pageNumber: evidence.pageNumber,
+                        quote: evidence.quote,
+                    })),
+                })),
+                themes: snapshot.themes.map((theme) => ({
+                    localId: theme.local_id,
+                    label: theme.label,
+                    strength: theme.strength,
+                    description: theme.description,
+                    evidence: (theme.evidence ?? []).map((evidence) => ({
+                        chapterIndex: chapter.chapterIndex,
+                        chapterId: chapter.chapterId,
+                        pageIndex: evidence.pageIndex,
+                        pageNumber: evidence.pageNumber,
+                        quote: evidence.quote,
+                    })),
+                })),
+                relations: snapshot.relations.map((relation) => ({
+                    localId: relation.local_id,
+                    fromId: relation.from_id,
+                    fromType: relation.from_type,
+                    toId: relation.to_id,
+                    toType: relation.to_type,
+                    relationType: relation.relation_type,
+                    description: relation.description,
+                    confidence: relation.confidence,
+                    evidence: (relation.evidence ?? []).map((evidence) => ({
+                        chapterIndex: chapter.chapterIndex,
+                        chapterId: chapter.chapterId,
+                        pageIndex: evidence.pageIndex,
+                        pageNumber: evidence.pageNumber,
+                        quote: evidence.quote,
+                    })),
+                })),
+                createdAt: chapter.createdAt,
+            };
+        }));
+        const keyInformation = this.knowledgeExtractionWorkflowRepository?.buildBookKeyInformation(bookId) ?? {
+            people: [],
+            ideas: [],
+            events: [],
+            entities: [],
+            themes: [],
+            relations: [],
+            arcs: [],
+            ideaFlows: [],
+            links: [],
+        };
+        const metadata = book.bookMetadata ?? {};
+        const title = typeof metadata.title === 'string' && metadata.title.trim()
+            ? metadata.title.trim()
+            : undefined;
+        const author = typeof metadata.author === 'string' && metadata.author.trim()
+            ? metadata.author.trim()
+            : undefined;
+        const language = typeof metadata.language === 'string' && metadata.language.trim()
+            ? metadata.language.trim()
+            : undefined;
+        (0, book_ingestion_logger_1.bookIngestionLog)('book_model.read_hit', {
+            bookId,
+            snapshotVersion: book.snapshotVersion,
+            chapterCount: chapterSnapshots.length,
+            globalPeopleCount: keyInformation.people.length,
+            globalIdeaCount: keyInformation.ideas.length,
+            globalEventCount: keyInformation.events.length,
+            globalEntityCount: keyInformation.entities.length,
+            globalThemeCount: keyInformation.themes.length,
+            globalRelationCount: keyInformation.relations.length,
+        });
+        return {
+            bookId,
+            meta: {
+                title,
+                author,
+                language,
+                totalChapters: chapterSnapshots.length,
+                createdAt: book.createdAt,
+                updatedAt: book.updatedAt,
+            },
+            chapters: chapterSnapshots,
+            keyInformation,
+        };
+    }
     parsePageIndex(rawPageIndex) {
         const parsed = Number(rawPageIndex);
         if (!Number.isInteger(parsed) || parsed < 0) {
@@ -310,7 +481,10 @@ exports.BookIngestionService = BookIngestionService = __decorate([
     __param(0, (0, common_1.Inject)(book_ingestion_repository_1.BookIngestionRepository)),
     __param(1, (0, common_1.Optional)()),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => knowledge_extraction_workflow_service_1.KnowledgeExtractionWorkflowService))),
+    __param(2, (0, common_1.Optional)()),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository))),
     __metadata("design:paramtypes", [book_ingestion_repository_1.BookIngestionRepository,
-        knowledge_extraction_workflow_service_1.KnowledgeExtractionWorkflowService])
+        knowledge_extraction_workflow_service_1.KnowledgeExtractionWorkflowService,
+        knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository])
 ], BookIngestionService);
 //# sourceMappingURL=book-ingestion.service.js.map

@@ -8,7 +8,7 @@
  *  - Decoupled from client envelopes; handlers decide prompts and DTO types.
  *
  * Notes
- *  - This implementation targets an OpenAI-compatible "Responses" API.
+ *  - This implementation currently targets the Google Gemini SDK.
  *  - If you use a different provider, only edit `callLLM()` and the text extraction helpers.
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {

@@ -23,6 +23,7 @@ const workflow_logger_1 = require("../workflow.logger");
 const prompt_path_1 = require("../../utils/prompt-path");
 const quiz_workflow_repository_1 = require("./quiz-workflow.repository");
 const llmService_1 = require("../../../services/llmService");
+const workflow_queue_service_1 = require("../workflow-queue/workflow-queue.service");
 const PROMPT_VERSION = 'quiz.v1.0';
 const PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('quiz.txt');
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
@@ -33,9 +34,11 @@ let cachedQuizSystemPrompt = null;
 let QuizWorkflowService = class QuizWorkflowService {
     bookIngestionRepository;
     quizWorkflowRepository;
-    constructor(bookIngestionRepository, quizWorkflowRepository) {
+    workflowQueueService;
+    constructor(bookIngestionRepository, quizWorkflowRepository, workflowQueueService) {
         this.bookIngestionRepository = bookIngestionRepository;
         this.quizWorkflowRepository = quizWorkflowRepository;
+        this.workflowQueueService = workflowQueueService;
     }
     parseSubmitRequest(rawBody) {
         if (!rawBody || rawBody.trim() === '') {
@@ -126,7 +129,7 @@ let QuizWorkflowService = class QuizWorkflowService {
         };
         const { run, deduped } = this.quizWorkflowRepository.createOrReuseRun(input);
         if (!deduped) {
-            void this.executeRun(run.id);
+            this.workflowQueueService.enqueue(() => this.executeRun(run.id));
         }
         const canonicalRun = deduped ? this.quizWorkflowRepository.getRun(run.id) ?? run : run;
         (0, workflow_logger_1.workflowLog)('run.submitted', {
@@ -429,7 +432,9 @@ exports.QuizWorkflowService = QuizWorkflowService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)(book_ingestion_repository_1.BookIngestionRepository)),
     __param(1, (0, common_1.Inject)(quiz_workflow_repository_1.QuizWorkflowRepository)),
+    __param(2, (0, common_1.Inject)(workflow_queue_service_1.WorkflowQueueService)),
     __metadata("design:paramtypes", [book_ingestion_repository_1.BookIngestionRepository,
-        quiz_workflow_repository_1.QuizWorkflowRepository])
+        quiz_workflow_repository_1.QuizWorkflowRepository,
+        workflow_queue_service_1.WorkflowQueueService])
 ], QuizWorkflowService);
 //# sourceMappingURL=quiz-workflow.service.js.map

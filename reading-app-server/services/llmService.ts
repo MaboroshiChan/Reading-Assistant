@@ -7,7 +7,7 @@
  *  - Decoupled from client envelopes; handlers decide prompts and DTO types.
  *
  * Notes
- *  - This implementation targets an OpenAI-compatible "Responses" API.
+ *  - This implementation currently targets the Google Gemini SDK.
  *  - If you use a different provider, only edit `callLLM()` and the text extraction helpers.
  */
 
@@ -53,6 +53,11 @@ export interface LLMClientFactoryOptions {
 }
 
 export interface LLMClient {
+  complete(userPrompt: string, opts?: LLMOptions): Promise<CompleteResult>;
+  json(userPrompt: string, opts?: LLMOptions): Promise<CallReturn<string>>;
+}
+
+export interface LLMChatClient {
   complete(userPrompt: string, opts?: LLMOptions): Promise<CompleteResult>;
   json(userPrompt: string, opts?: LLMOptions): Promise<CallReturn<string>>;
 }
@@ -106,8 +111,105 @@ export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMCli
   };
 }
 
+/**
+ * Creates a reusable stateful LLM chat client bound to a stable system prompt.
+ * It uses the SDK's startChat method to preserve conversation history.
+ */
+export function createLLMChatClient(factoryOptions: LLMClientFactoryOptions): LLMChatClient {
+  const systemPrompt = factoryOptions.systemPrompt.trim();
+  if (!systemPrompt) {
+    throw new Error('LLM client factory requires a non-empty system prompt');
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing GEMINI_API_KEY environment variable');
+  }
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const defaultModel = factoryOptions.model ?? config.model;
+
+  // We maintain two separate chat sessions: one for JSON and one for text,
+  // since responseMimeType is tied to the model/session in the SDK.
+  const jsonModel = genAI.getGenerativeModel({
+    model: defaultModel,
+    systemInstruction: systemPrompt,
+    generationConfig: {
+      maxOutputTokens: factoryOptions.maxOutputTokens,
+      temperature: factoryOptions.temperature ?? config.temperature,
+      responseMimeType: 'application/json',
+    },
+  });
+  const jsonChat = jsonModel.startChat();
+
+  const textModel = genAI.getGenerativeModel({
+    model: defaultModel,
+    systemInstruction: systemPrompt,
+    generationConfig: {
+      maxOutputTokens: factoryOptions.maxOutputTokens,
+      temperature: factoryOptions.temperature ?? config.temperature,
+      responseMimeType: 'text/plain',
+    },
+  });
+  const textChat = textModel.startChat();
+
+  return {
+    async complete(userPrompt: string, opts: LLMOptions = {}): Promise<CompleteResult> {
+      const modelId = opts.model ?? defaultModel;
+      if (config.debugMode) {
+        console.log(`[llm-debug] Chat complete (text) model=${modelId} userPrompt=${userPrompt.substring(0, 50)}...`);
+      }
+      const result = await textChat.sendMessageStream(userPrompt);
+      const usagePromise = result.response.then(res => ({
+        inputTokens: res.usageMetadata?.promptTokenCount || 0,
+        outputTokens: res.usageMetadata?.candidatesTokenCount || 0,
+        modelId,
+      }));
+
+      let text = '';
+      for await (const chunk of result.stream) {
+        text += chunk.text();
+      }
+      return { text, usage: await usagePromise };
+    },
+
+    async json(userPrompt: string, opts: LLMOptions = {}): Promise<CallReturn<string>> {
+      const modelId = opts.model ?? defaultModel;
+      if (config.debugMode) {
+        console.log(`[llm-debug] Chat json model=${modelId} userPrompt=${userPrompt.substring(0, 50)}...`);
+      }
+      const result = await jsonChat.sendMessageStream(userPrompt);
+      const usagePromise = result.response.then(res => ({
+        inputTokens: res.usageMetadata?.promptTokenCount || 0,
+        outputTokens: res.usageMetadata?.candidatesTokenCount || 0,
+        modelId,
+      }));
+
+      const dataStream = (async function* () {
+        let fullText = '';
+        for await (const chunk of result.stream) {
+          const text = chunk.text();
+          fullText += text;
+          yield text;
+        }
+        if (config.debugMode) {
+          const u = await usagePromise;
+          console.log(
+            `[${new Date().toISOString()}][info][llm-service] LLM chat response received`
+            + ` model=${modelId}`
+            + ` responseAs=json`
+            + ` inputTokens=${u.inputTokens ?? 0}`
+            + ` outputTokens=${u.outputTokens ?? 0}`,
+          );
+        }
+      })();
+
+      return { data: dataStream, usage: usagePromise };
+    },
+  };
+}
+
 // -----------------------------
-// Internal plumbing (OpenAI-compatible Responses API)
+// Internal plumbing (Gemini streaming API)
 // -----------------------------
 
 interface CallArgs {
@@ -125,6 +227,19 @@ const LOG_DIR = path.join(__dirname, '..', 'log');
 const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
 const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
 
+function supportsDeveloperInstruction(model: string): boolean {
+  return !/^gemma-/i.test(model.trim());
+}
+
+function buildInlineSystemPrompt(args: CallArgs): string {
+  return [
+    '[System Instructions]',
+    args.systemPrompt,
+    '',
+    '[User Prompt]',
+    args.userPrompt,
+  ].join('\n');
+}
 
 /**
  * Calls the configured LLM implementation.
@@ -147,9 +262,11 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
     }
     const genAI = new GoogleGenerativeAI(apiKey);
     console.log(`LLM model is ${args.model}`);
+    const useDeveloperInstruction = supportsDeveloperInstruction(args.model);
+    const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
     const model = genAI.getGenerativeModel({
       model: args.model,
-      systemInstruction: args.systemPrompt,
+      systemInstruction: useDeveloperInstruction ? args.systemPrompt : undefined,
       generationConfig: {
         maxOutputTokens: args.maxOutputTokens,
         temperature: args.temperature,
@@ -157,7 +274,7 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
       },
     });
 
-    const result: GenerateContentStreamResult = await model.generateContentStream(args.userPrompt);
+    const result: GenerateContentStreamResult = await model.generateContentStream(requestPrompt);
 
     const usagePromise = result.response.then(res => ({
       inputTokens: res.usageMetadata?.promptTokenCount || 0,
@@ -178,6 +295,7 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
         console.log(
           `[${new Date().toISOString()}][info][llm-service] LLM response received`
           + ` model=${args.model}`
+          + ` inlineSystemPrompt=${useDeveloperInstruction ? '0' : '1'}`
           + ` responseAs=${args.responseAs}`
           + ` inputTokens=${u.inputTokens ?? 0}`
           + ` outputTokens=${u.outputTokens ?? 0}`,
@@ -310,4 +428,3 @@ function formatDebugPrompt(args: CallArgs): string {
     args.userPrompt,
   ].join('\n');
 }
-

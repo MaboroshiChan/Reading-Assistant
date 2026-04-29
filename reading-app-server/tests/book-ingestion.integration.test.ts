@@ -169,6 +169,35 @@ describe('book ingestion integration', () => {
       '3': 'third paragraph added',
     });
 
+    const modelResponse = await fetch(`${baseUrl}/v1/books/book-1/model`);
+    const modelJson = await modelResponse.json();
+    expect(modelResponse.status).toBe(200);
+    expect(modelJson).toMatchObject({
+      bookId: 'book-1',
+      meta: {
+        title: 'Example Book',
+        totalChapters: 1,
+      },
+      chapters: [
+        expect.objectContaining({
+          chapterId: 'ch-1',
+          chapterIndex: 3,
+          title: 'Chapter Three',
+        }),
+      ],
+      keyInformation: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+        arcs: [],
+        ideaFlows: [],
+        links: [],
+      },
+    });
+
     const pingResponse = await fetch(`${baseUrl}/ping`);
     expect(pingResponse.status).toBe(200);
     expect(await pingResponse.json()).toMatchObject({ status: 'ok' });

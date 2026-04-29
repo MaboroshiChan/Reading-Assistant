@@ -5,14 +5,14 @@ A developer-focused playground for building a “semantic reading IDE”. The ap
 ## Key Features
 
 - **React front-end (`reading-app`)**: Renders source documents with layered highlights, hover cards, and semantic summaries.
-- **Gemini-backed analysis server (`reading-app-server`)**: Turns envelopes into structured JSON using prompt templates (`prompts/v1/*`).
+- **Google Generative AI-backed analysis server (`reading-app-server`)**: Turns envelopes into structured JSON using prompt templates (`prompts/v1/*`).
 - **Hierarchical Analysis (v1)**:
   - **Skeleton**: Document-level structure, headings, and paragraph boundaries.
   - **Paragraph**: Rhetoric, roles, and core claims.
   - **Sentence**: Semantic roles, discourse function, and modal markers.
   - **Subsentence**: Micro-role analysis and dependency light tracking.
 - **Unified Message Envelope**: A robust `Envelope v1` spec for Client↔Service communication, supporting streaming (NDJSON/SSE), idempotency, and observability.
-- **Caching + Live LLM Analysis**: Persistent in-memory caching reduces repeat calls while the server uses the configured Gemini model.
+- **Caching + Live LLM Analysis**: Persistent in-memory caching reduces repeat calls while the server uses the configured model.
 
 ## Getting Started
 
@@ -31,18 +31,18 @@ npm install
 
 ```bash
 export GEMINI_API_KEY=your_key_here
-export MODEL_ID=gemini-2.5-flash       # optional
+export MODEL_ID=gemma-3-27b-it         # optional
 npm run dev
 ```
 
 ## Configuration
 
-Environment variables (`reading-app-server/services/config.ts`):
+Environment variables (`reading-app-server/src/config/runtime-config.ts`):
 
 | Variable         | Default            | Description                                  |
 | ---------------- | ------------------ | -------------------------------------------- |
 | `PORT`           | `8787`             | API server listen port                       |
-| `MODEL_ID`       | `gemini-2.5-flash` | LLM model identifier (Gemini)                |
+| `MODEL_ID`       | `gemma-3-27b-it`   | LLM model identifier                         |
 | `GEMINI_API_KEY` | `""`               | Google Gemini API key                        |
 | `LLM_DEBUG`      | `0`                | When truthy, log full prompts/responses      |
 | `CACHE_TTL_MS`   | `7 days`           | TTL for in-memory response cache             |

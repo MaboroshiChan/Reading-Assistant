@@ -1,3 +1,4 @@
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -5,12 +6,17 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { BookIngestionRepository } from '../src/modules/book-ingestion/book-ingestion.repository';
 
 describe('BookIngestionRepository', () => {
+  const createRepository = (): BookIngestionRepository => {
+    process.env.BOOK_INGESTION_DATA_DIR = fsSync.mkdtempSync(path.join(os.tmpdir(), 'book-ingestion-store-'));
+    return new BookIngestionRepository();
+  };
+
   afterEach(async () => {
     delete process.env.BOOK_INGESTION_DATA_DIR;
   });
 
   test('creates canonical book/chapter/page state and materializes sorted page text', () => {
-    const repository = new BookIngestionRepository();
+    const repository = createRepository();
 
     const result = repository.upsertPageFragment({
       bookId: 'book-1',
@@ -49,7 +55,7 @@ describe('BookIngestionRepository', () => {
   });
 
   test('dedupes repeated uploads with the same source hash without incrementing snapshotVersion', () => {
-    const repository = new BookIngestionRepository();
+    const repository = createRepository();
 
     const first = repository.upsertPageFragment({
       bookId: 'book-1',
@@ -80,7 +86,7 @@ describe('BookIngestionRepository', () => {
   });
 
   test('re-materializes chapter text when a later page is inserted or an existing page changes hash', () => {
-    const repository = new BookIngestionRepository();
+    const repository = createRepository();
 
     repository.upsertPageFragment({
       bookId: 'book-1',

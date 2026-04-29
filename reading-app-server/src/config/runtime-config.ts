@@ -13,6 +13,12 @@ export interface Config {
   thinking: boolean;
   temperature: number;
   autoSubmitKnowledgeExtractionWorkflow: boolean;
+  requireKnowledgeExtractionCache: boolean;
+  surrealUrl: string;
+  surrealNamespace: string;
+  surrealDatabase: string;
+  surrealUser: string;
+  surrealPass: string;
 }
 
 const loadEnvFiles = (): void => {
@@ -35,15 +41,20 @@ loadEnvFiles();
 
 export const createAppConfig = (): Config => ({
   port: Number(process.env.PORT ?? 8787),
-  model: process.env.MODEL_ID ?? 'gemma-3-27b-it',
+  model: process.env.MODEL_ID ?? 'gemini-2.5-flash',
   timeoutMs: 50_000,
   cacheMax: 500,
   cacheTtlMs: 7 * 24 * 3600_000,
   debugMode: process.env.LLM_DEBUG === '1' || process.env.DEBUG_LLM === '1',
   thinking: false,
   temperature: 0.1,
-  autoSubmitKnowledgeExtractionWorkflow:
-    process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === '1',
+  autoSubmitKnowledgeExtractionWorkflow: process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === '1',
+  requireKnowledgeExtractionCache: process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE === '1',
+  surrealUrl: process.env.SURREAL_URL ?? '',
+  surrealNamespace: process.env.SURREAL_NS ?? '',
+  surrealDatabase: process.env.SURREAL_DB ?? '',
+  surrealUser: process.env.SURREAL_USER ?? '',
+  surrealPass: process.env.SURREAL_PASS ?? '',
 });
 
 export const appConfig = registerAs('app', createAppConfig);
