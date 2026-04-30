@@ -25,6 +25,7 @@ import type {
 } from './quiz-workflow.types';
 import { config } from '../../config/runtime-config';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
+import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
 const PROMPT_VERSION = 'quiz.v1.0';
 const PROMPT_PATH = resolvePromptPath('quiz.txt');
@@ -47,13 +48,16 @@ let cachedQuizSystemPrompt: string | null = null;
 export class QuizWorkflowService {
   private readonly bookIngestionRepository: BookIngestionRepository;
   private readonly quizWorkflowRepository: QuizWorkflowRepository;
+  private readonly workflowQueueService: WorkflowQueueService;
 
   constructor(
     @Inject(BookIngestionRepository) bookIngestionRepository: BookIngestionRepository,
     @Inject(QuizWorkflowRepository) quizWorkflowRepository: QuizWorkflowRepository,
+    @Inject(WorkflowQueueService) workflowQueueService: WorkflowQueueService,
   ) {
     this.bookIngestionRepository = bookIngestionRepository;
     this.quizWorkflowRepository = quizWorkflowRepository;
+    this.workflowQueueService = workflowQueueService;
   }
 
   parseSubmitRequest(rawBody: string | undefined): SubmitQuizWorkflowRequestDto {
@@ -169,7 +173,7 @@ export class QuizWorkflowService {
 
     const { run, deduped } = this.quizWorkflowRepository.createOrReuseRun(input);
     if (!deduped) {
-      void this.executeRun(run.id);
+      this.workflowQueueService.enqueue(() => this.executeRun(run.id));
     }
 
     const canonicalRun = deduped ? this.quizWorkflowRepository.getRun(run.id) ?? run : run;

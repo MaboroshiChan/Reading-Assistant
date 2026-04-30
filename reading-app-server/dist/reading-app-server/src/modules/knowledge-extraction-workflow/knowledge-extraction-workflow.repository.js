@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.KnowledgeExtractionWorkflowRepository = void 0;
 const common_1 = require("@nestjs/common");
 const node_crypto_1 = require("node:crypto");
+const workflow_logger_1 = require("../workflow.logger");
 const chapterKey = (bookId, chapterId) => `${bookId}::${chapterId}`;
 let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRepository {
     runs = new Map();
@@ -19,6 +20,17 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         if (existingRunId) {
             const existingRun = this.runs.get(existingRunId);
             if (existingRun) {
+                (0, workflow_logger_1.workflowLog)('run.deduped', {
+                    workflowKind: existingRun.kind,
+                    workflowRunId: existingRun.id,
+                    dedupedWorkflowRunId: existingRun.id,
+                    bookId: existingRun.bookId,
+                    chapterId: existingRun.chapterId,
+                    chapterIndex: existingRun.chapterIndex,
+                    workflowVersion: existingRun.workflowVersion,
+                    idempotencyKey: existingRun.idempotencyKey,
+                    status: existingRun.status,
+                });
                 return {
                     run: { ...existingRun, deduped: true },
                     deduped: true,
@@ -47,6 +59,16 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         };
         this.runs.set(run.id, run);
         this.runIdsByIdempotencyKey.set(input.idempotencyKey, run.id);
+        (0, workflow_logger_1.workflowLog)('run.queued', {
+            workflowKind: run.kind,
+            workflowRunId: run.id,
+            bookId: run.bookId,
+            chapterId: run.chapterId,
+            chapterIndex: run.chapterIndex,
+            workflowVersion: run.workflowVersion,
+            idempotencyKey: run.idempotencyKey,
+            requestedByUserId: run.requestedByUserId,
+        });
         return { run, deduped: false };
     }
     getRun(workflowRunId) {
@@ -65,6 +87,15 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             deduped: false,
         };
         this.runs.set(workflowRunId, updated);
+        (0, workflow_logger_1.workflowLog)('run.running', {
+            workflowKind: updated.kind,
+            workflowRunId: updated.id,
+            bookId: updated.bookId,
+            chapterId: updated.chapterId,
+            chapterIndex: updated.chapterIndex,
+            workflowVersion: updated.workflowVersion,
+            startedAt: updated.startedAt,
+        });
         return updated;
     }
     completeRun(args) {
@@ -100,6 +131,23 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             updatedAt: timestamp,
         };
         this.latestResultsByChapter.set(chapterKey(updated.bookId, updated.chapterId), storedResult);
+        (0, workflow_logger_1.workflowLog)('run.completed', {
+            workflowKind: updated.kind,
+            workflowRunId: updated.id,
+            bookId: updated.bookId,
+            chapterId: updated.chapterId,
+            chapterIndex: updated.chapterIndex,
+            workflowVersion: updated.workflowVersion,
+            snapshotVersion: updated.snapshotVersion,
+            chapterContentHash: updated.chapterContentHash,
+            peopleCount: args.result.people?.length ?? 0,
+            ideaCount: args.result.ideas?.length ?? 0,
+            eventCount: args.result.events?.length ?? 0,
+            entityCount: args.result.entities?.length ?? 0,
+            themeCount: args.result.themes?.length ?? 0,
+            relationCount: args.result.relations?.length ?? 0,
+            completedAt: updated.completedAt,
+        });
         return updated;
     }
     failRun(workflowRunId, code, message) {
@@ -125,6 +173,17 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             deduped: false,
         };
         this.runs.set(workflowRunId, updated);
+        (0, workflow_logger_1.workflowLog)(`run.${status}`, {
+            workflowKind: updated.kind,
+            workflowRunId: updated.id,
+            bookId: updated.bookId,
+            chapterId: updated.chapterId,
+            chapterIndex: updated.chapterIndex,
+            workflowVersion: updated.workflowVersion,
+            errorCode: code,
+            errorMessage: message,
+            completedAt: updated.completedAt,
+        });
         return updated;
     }
 };

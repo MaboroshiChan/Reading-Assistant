@@ -2,8 +2,30 @@ type LogMeta = Record<string, unknown>;
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
+const stringifyMetaValue = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (
+    typeof value === 'number'
+    || typeof value === 'boolean'
+    || value === null
+    || value === undefined
+  ) {
+    return String(value);
+  }
+
+  return JSON.stringify(value);
+};
+
+const formatMeta = (meta: LogMeta): string => {
+  const parts = Object.entries(meta)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${stringifyMetaValue(value)}`);
+
+  return parts.length > 0 ? ` ${parts.join(' ')}` : '';
+};
+
 /**
- * Formats and outputs a log entry in JSON format to the console.
+ * Formats and outputs a readable log entry to the console.
  *
  * @param scope - The area or feature responsible for the log.
  * @param message - The main log message.
@@ -16,12 +38,8 @@ export const handlerLog = (
   meta: LogMeta = {},
   level: LogLevel = 'info',
 ): void => {
-  const payload = {
-    level,
-    scope,
-    message,
-    ...meta,
-    timestamp: new Date().toISOString(),
-  };
-  console.log(JSON.stringify(payload));
+  const timestamp = new Date().toISOString();
+  console.log(
+    `[${timestamp}][${level}][${scope}] ${message}${formatMeta(meta)}`,
+  );
 };

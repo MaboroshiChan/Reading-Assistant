@@ -6,6 +6,7 @@ import type {
   KnowledgeEvent,
   KnowledgeEvidence,
   KnowledgeIdea,
+  KnowledgePageRef,
   KnowledgePerson,
   KnowledgeRelation,
   KnowledgeTheme,
@@ -21,7 +22,7 @@ import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'knowledge-extraction';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'knowledge_extraction.v2.0';
+const PROMPT_VERSION = 'knowledge_extraction.v2.1';
 const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
 
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
@@ -87,7 +88,9 @@ const sanitizeEvidence = (value: unknown): KnowledgeEvidence[] | undefined => {
       if (!isRecord(item)) return null;
       const quote = asString(item.quote);
       if (!quote) return null;
-      return { quote };
+      const pageIndex = asNumber(item.pageIndex);
+      const pageNumber = asNumber(item.pageNumber);
+      return { quote, pageIndex, pageNumber };
     })
     .filter((item): item is KnowledgeEvidence => item !== null);
   return evidence.length ? evidence : undefined;

@@ -15,14 +15,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MessageController = void 0;
 const common_1 = require("@nestjs/common");
 const llmService_1 = require("../../services/llmService");
-const message_http_service_1 = require("./message-http.service");
+const message_service_1 = require("./message.service");
 let MessageController = class MessageController {
-    messageHttpService;
-    constructor(messageHttpService) {
-        this.messageHttpService = messageHttpService;
+    messageService;
+    constructor(messageService) {
+        this.messageService = messageService;
     }
     async handleMsg(rawBody, res) {
-        const result = await this.messageHttpService.handleMsg(rawBody ?? '');
+        const result = await this.messageService.handleMsg(rawBody ?? '');
         if (result.stream) {
             let text = '';
             for await (const chunk of result.stream) {
@@ -60,7 +60,7 @@ let MessageController = class MessageController {
         res.status(statusCode).send(JSON.stringify(result));
     }
     async handleStream(rawBody, res) {
-        const result = await this.messageHttpService.handleStream(rawBody ?? '');
+        const result = await this.messageService.handleStream(rawBody ?? '');
         if ('status' in result && result.status === 'error') {
             res.setHeader('Content-Type', 'application/json');
             res.status(result.error?.http ?? 500).send(JSON.stringify(result));
@@ -95,7 +95,7 @@ __decorate([
 ], MessageController.prototype, "handleStream", null);
 exports.MessageController = MessageController = __decorate([
     (0, common_1.Controller)(),
-    __param(0, (0, common_1.Inject)(message_http_service_1.MessageHttpService)),
-    __metadata("design:paramtypes", [message_http_service_1.MessageHttpService])
+    __param(0, (0, common_1.Inject)(message_service_1.MessageService)),
+    __metadata("design:paramtypes", [message_service_1.MessageService])
 ], MessageController);
 //# sourceMappingURL=message.controller.js.map

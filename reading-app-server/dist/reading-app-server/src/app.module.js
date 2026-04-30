@@ -12,7 +12,7 @@ const config_1 = require("@nestjs/config");
 const health_controller_1 = require("./health.controller");
 const runtime_config_1 = require("./config/runtime-config");
 const message_controller_1 = require("./message/message.controller");
-const message_http_service_1 = require("./message/message-http.service");
+const message_service_1 = require("./message/message.service");
 const book_ingestion_module_1 = require("./modules/book-ingestion/book-ingestion.module");
 const knowledge_extraction_workflow_module_1 = require("./modules/knowledge-extraction-workflow/knowledge-extraction-workflow.module");
 const quiz_workflow_module_1 = require("./modules/quiz-workflow/quiz-workflow.module");
@@ -32,7 +32,7 @@ exports.AppModule = AppModule = __decorate([
             quiz_workflow_module_1.QuizWorkflowModule,
         ],
         controllers: [health_controller_1.HealthController, message_controller_1.MessageController],
-        providers: [message_http_service_1.MessageHttpService],
+        providers: [message_service_1.MessageService],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

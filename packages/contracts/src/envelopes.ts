@@ -346,6 +346,13 @@ export interface AnalyzeKnowledgeExtractionPayload {
 
 export interface KnowledgeEvidence {
   quote: string;
+  pageIndex?: number;
+  pageNumber?: number;
+}
+
+export interface KnowledgePageRef {
+  pageIndex: number;
+  pageNumber: number;
 }
 
 export interface KnowledgePerson {

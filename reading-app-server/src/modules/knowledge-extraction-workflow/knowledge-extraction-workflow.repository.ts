@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { workflowLog } from '../workflow.logger';
@@ -10,11 +12,26 @@ import type {
 
 const chapterKey = (bookId: string, chapterId: string): string => `${bookId}::${chapterId}`;
 
+const DEFAULT_DATA_DIR = path.join(__dirname, '..', '..', '..', 'data', 'knowledge-extraction');
+const DEFAULT_STORE_FILE = 'store.json';
+
+interface SerializedKnowledgeExtractionStore {
+  runs: Record<string, KnowledgeExtractionWorkflowRunRecord>;
+  runIdsByIdempotencyKey: Record<string, string>;
+  latestResultsByChapter: Record<string, KnowledgeExtractionWorkflowStoredResult>;
+}
+
 @Injectable()
 export class KnowledgeExtractionWorkflowRepository {
   private readonly runs = new Map<string, KnowledgeExtractionWorkflowRunRecord>();
   private readonly runIdsByIdempotencyKey = new Map<string, string>();
   private readonly latestResultsByChapter = new Map<string, KnowledgeExtractionWorkflowStoredResult>();
+  private readonly storePath: string;
+
+  constructor(dataDir = process.env.KNOWLEDGE_EXTRACTION_DATA_DIR ?? DEFAULT_DATA_DIR) {
+    this.storePath = path.join(dataDir, DEFAULT_STORE_FILE);
+    this.loadPersistedStore();
+  }
 
   createOrReuseRun(input: SubmitKnowledgeExtractionWorkflowInput): {
     run: KnowledgeExtractionWorkflowRunRecord;
@@ -65,6 +82,7 @@ export class KnowledgeExtractionWorkflowRepository {
 
     this.runs.set(run.id, run);
     this.runIdsByIdempotencyKey.set(input.idempotencyKey, run.id);
+    this.persistStore();
     workflowLog('run.queued', {
       workflowKind: run.kind,
       workflowRunId: run.id,
@@ -96,6 +114,7 @@ export class KnowledgeExtractionWorkflowRepository {
       deduped: false,
     };
     this.runs.set(workflowRunId, updated);
+    this.persistStore();
     workflowLog('run.running', {
       workflowKind: updated.kind,
       workflowRunId: updated.id,
@@ -147,6 +166,7 @@ export class KnowledgeExtractionWorkflowRepository {
       updatedAt: timestamp,
     };
     this.latestResultsByChapter.set(chapterKey(updated.bookId, updated.chapterId), storedResult);
+    this.persistStore();
     workflowLog('run.completed', {
       workflowKind: updated.kind,
       workflowRunId: updated.id,
@@ -210,6 +230,50 @@ export class KnowledgeExtractionWorkflowRepository {
       errorMessage: message,
       completedAt: updated.completedAt,
     });
-    return updated;
+    const updatedRecord = updated;
+    this.persistStore();
+    return updatedRecord;
+  }
+
+  private loadPersistedStore(): void {
+    try {
+      if (!fs.existsSync(this.storePath)) {
+        return;
+      }
+
+      const raw = fs.readFileSync(this.storePath, 'utf8');
+      if (!raw.trim()) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as SerializedKnowledgeExtractionStore;
+      for (const [id, run] of Object.entries(parsed.runs ?? {})) {
+        this.runs.set(id, run);
+      }
+      for (const [key, runId] of Object.entries(parsed.runIdsByIdempotencyKey ?? {})) {
+        this.runIdsByIdempotencyKey.set(key, runId);
+      }
+      for (const [key, result] of Object.entries(parsed.latestResultsByChapter ?? {})) {
+        this.latestResultsByChapter.set(key, result);
+      }
+    } catch (error) {
+      console.warn('[knowledge-extraction] failed to load persisted store', error);
+    }
+  }
+
+  private persistStore(): void {
+    try {
+      fs.mkdirSync(path.dirname(this.storePath), { recursive: true });
+      const payload: SerializedKnowledgeExtractionStore = {
+        runs: Object.fromEntries(this.runs.entries()),
+        runIdsByIdempotencyKey: Object.fromEntries(this.runIdsByIdempotencyKey.entries()),
+        latestResultsByChapter: Object.fromEntries(this.latestResultsByChapter.entries()),
+      };
+      const tempPath = `${this.storePath}.tmp`;
+      fs.writeFileSync(tempPath, JSON.stringify(payload, null, 2), 'utf8');
+      fs.renameSync(tempPath, this.storePath);
+    } catch (error) {
+      console.warn('[knowledge-extraction] failed to persist store', error);
+    }
   }
 }

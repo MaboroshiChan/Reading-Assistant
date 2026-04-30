@@ -3,10 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './health.controller';
 import { appConfig } from './config/runtime-config';
 import { MessageController } from './message/message.controller';
-import { MessageHttpService } from './message/message-http.service';
+import { MessageService } from './message/message.service';
 import { BookIngestionModule } from './modules/book-ingestion/book-ingestion.module';
 import { KnowledgeExtractionWorkflowModule } from './modules/knowledge-extraction-workflow/knowledge-extraction-workflow.module';
 import { QuizWorkflowModule } from './modules/quiz-workflow/quiz-workflow.module';
+import { WorkflowQueueModule } from './modules/workflow-queue/workflow-queue.module';
 
 @Module({
   imports: [
@@ -16,10 +17,11 @@ import { QuizWorkflowModule } from './modules/quiz-workflow/quiz-workflow.module
       load: [appConfig],
     }),
     BookIngestionModule,
+    WorkflowQueueModule,
     KnowledgeExtractionWorkflowModule,
     QuizWorkflowModule,
   ],
   controllers: [HealthController, MessageController],
-  providers: [MessageHttpService],
+  providers: [MessageService],
 })
 export class AppModule {}

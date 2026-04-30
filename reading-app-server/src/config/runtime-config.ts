@@ -35,7 +35,7 @@ loadEnvFiles();
 
 export const createAppConfig = (): Config => ({
   port: Number(process.env.PORT ?? 8787),
-  model: process.env.MODEL_ID ?? 'gemini-2.5-flash',
+  model: process.env.MODEL_ID ?? 'gemma-3-27b-it',
   timeoutMs: 50_000,
   cacheMax: 500,
   cacheTtlMs: 7 * 24 * 3600_000,
