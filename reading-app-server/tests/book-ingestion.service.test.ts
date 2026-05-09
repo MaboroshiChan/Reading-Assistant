@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { BookIngestionRepository } from '../src/modules/book-ingestion/book-ingestion.repository';
 import { BookIngestionService } from '../src/modules/book-ingestion/book-ingestion.service';
 import { KnowledgeExtractionWorkflowRepository } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.repository';
+import type { KnowledgeExtractionWorkflowService } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.service';
 
 describe('BookIngestionService', () => {
   const createRepository = (): BookIngestionRepository => {
@@ -35,6 +36,7 @@ describe('BookIngestionService', () => {
         bookMetadata: {
           language: 'en',
         },
+        bookIngestionCompleted: true,
       }),
       {
         bookId: 'book-1',
@@ -57,6 +59,7 @@ describe('BookIngestionService', () => {
       bookMetadata: {
         language: 'en',
       },
+      bookIngestionCompleted: true,
     });
   });
 
@@ -104,6 +107,22 @@ describe('BookIngestionService', () => {
       chapterId: 'chapter-1',
       pageIndex: 0,
     })).toThrowError(/pageParagraphs\.0 must be a non-empty string/);
+
+    expect(() => service.parseUpsertRequest(JSON.stringify({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      pageIndex: 0,
+      sourceHash: 'hash-1',
+      pageParagraphs: {
+        '0': 'paragraph',
+      },
+      bookIngestionCompleted: 'yes',
+    }), {
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      pageIndex: 0,
+    })).toThrowError(/bookIngestionCompleted must be a boolean/);
   });
 
   test('returns chapter and page views from canonical state after upsert', () => {
@@ -288,5 +307,73 @@ describe('BookIngestionService', () => {
         }),
       ]),
     );
+  });
+
+  test('only auto-submits knowledge extraction after book ingestion is marked complete', async () => {
+    const repository = createRepository();
+    const submissions: Array<{ bookId: string; chapterId: string; snapshotVersion: number | undefined }> = [];
+    const workflowService = {
+      submitKnowledgeExtractionWorkflow(request: {
+        bookId: string;
+        chapterId: string;
+        expectedSnapshotVersion?: number;
+      }) {
+        submissions.push({
+          bookId: request.bookId,
+          chapterId: request.chapterId,
+          snapshotVersion: request.expectedSnapshotVersion,
+        });
+        return {
+          workflowRunId: `run-${request.chapterId}`,
+          deduped: false,
+          status: 'queued',
+        };
+      },
+    } as unknown as KnowledgeExtractionWorkflowService;
+    const service = new BookIngestionService(repository, workflowService);
+
+    service.upsertPageFragment({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: { '0': 'chapter one' },
+    });
+    service.upsertPageFragment({
+      bookId: 'book-1',
+      chapterId: 'chapter-2',
+      chapterIndex: 2,
+      pageIndex: 0,
+      sourceHash: 'hash-page-1',
+      pageParagraphs: { '0': 'chapter two' },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(submissions).toHaveLength(0);
+
+    service.upsertPageFragment({
+      bookId: 'book-1',
+      chapterId: 'chapter-2',
+      chapterIndex: 2,
+      pageIndex: 1,
+      sourceHash: 'hash-page-2',
+      pageParagraphs: { '0': 'chapter two final page' },
+      bookIngestionCompleted: true,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(submissions).toEqual([
+      {
+        bookId: 'book-1',
+        chapterId: 'chapter-1',
+        snapshotVersion: 3,
+      },
+      {
+        bookId: 'book-1',
+        chapterId: 'chapter-2',
+        snapshotVersion: 3,
+      },
+    ]);
   });
 });

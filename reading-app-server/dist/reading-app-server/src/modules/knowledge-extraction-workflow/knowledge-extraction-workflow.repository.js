@@ -26,6 +26,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     runs = new Map();
     runIdsByIdempotencyKey = new Map();
     latestResultsByChapter = new Map();
+    pageExtractionsByCacheKey = new Map();
     books = new Map();
     chapters = new Map();
     chaptersByKey = new Map();
@@ -54,21 +55,26 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         if (existingRunId) {
             const existingRun = this.runs.get(existingRunId);
             if (existingRun) {
-                (0, workflow_logger_1.workflowLog)('run.deduped', {
-                    workflowKind: existingRun.kind,
-                    workflowRunId: existingRun.id,
-                    dedupedWorkflowRunId: existingRun.id,
-                    bookId: existingRun.bookId,
-                    chapterId: existingRun.chapterId,
-                    chapterIndex: existingRun.chapterIndex,
-                    workflowVersion: existingRun.workflowVersion,
-                    idempotencyKey: existingRun.idempotencyKey,
-                    status: existingRun.status,
-                });
-                return {
-                    run: { ...existingRun, deduped: true },
-                    deduped: true,
-                };
+                if (existingRun.status === 'failed' || existingRun.status === 'stale') {
+                    this.runIdsByIdempotencyKey.delete(input.idempotencyKey);
+                }
+                else {
+                    (0, workflow_logger_1.workflowLog)('run.deduped', {
+                        workflowKind: existingRun.kind,
+                        workflowRunId: existingRun.id,
+                        dedupedWorkflowRunId: existingRun.id,
+                        bookId: existingRun.bookId,
+                        chapterId: existingRun.chapterId,
+                        chapterIndex: existingRun.chapterIndex,
+                        workflowVersion: existingRun.workflowVersion,
+                        idempotencyKey: existingRun.idempotencyKey,
+                        status: existingRun.status,
+                    });
+                    return {
+                        run: { ...existingRun, deduped: true },
+                        deduped: true,
+                    };
+                }
             }
         }
         const timestamp = new Date().toISOString();
@@ -205,6 +211,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         const statements = [
             'DEFINE TABLE IF NOT EXISTS workflow_run SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS chapter_knowledge_snapshot SCHEMALESS;',
+            'DEFINE TABLE IF NOT EXISTS page_knowledge_extraction_cache SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS book SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS chapter SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS person SCHEMALESS;',
@@ -219,10 +226,19 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         await this.surrealService.query(statements);
     }
     async upsertPageExtraction(input) {
+        return this.writePageExtraction(input, false);
+    }
+    async replaceChapterExtraction(input) {
+        return this.writePageExtraction(input, true);
+    }
+    async writePageExtraction(input, replaceChapter) {
         const persistBatch = new Map();
         const bookRecord = this.upsertBook(input.bookId, persistBatch);
         const chapterRecord = this.upsertChapter(input, persistBatch);
         this.upsertPartOf(bookRecord, chapterRecord, persistBatch);
+        if (replaceChapter) {
+            await this.clearChapterKnowledge(chapterRecord.recordId);
+        }
         const remap = this.createEmptyIdRemap();
         for (const person of input.extraction.people) {
             const personRecord = this.upsertPerson(person, persistBatch);
@@ -264,6 +280,30 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         }
         await this.persistBatch(persistBatch);
         return this.countChapter(chapterRecord.recordId);
+    }
+    getCachedPageExtraction(bookId, chapterId, pageIndex, sourceHash, chapterContentHash, promptVersion) {
+        const cacheKey = this.makePageExtractionCacheKey(bookId, chapterId, pageIndex, sourceHash, chapterContentHash, promptVersion);
+        return this.pageExtractionsByCacheKey.get(cacheKey)?.extraction ?? null;
+    }
+    setCachedPageExtraction(args) {
+        const cacheKey = this.makePageExtractionCacheKey(args.bookId, args.chapterId, args.pageIndex, args.sourceHash, args.chapterContentHash, args.promptVersion);
+        const now = new Date().toISOString();
+        const existing = this.pageExtractionsByCacheKey.get(cacheKey);
+        const record = {
+            cacheKey,
+            bookId: args.bookId,
+            chapterId: args.chapterId,
+            pageIndex: args.pageIndex,
+            sourceHash: args.sourceHash,
+            chapterContentHash: args.chapterContentHash,
+            promptVersion: args.promptVersion,
+            extraction: args.extraction,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        this.pageExtractionsByCacheKey.set(cacheKey, record);
+        this.schedulePersist(() => this.persistRecord('page_knowledge_extraction_cache', cacheKey, record));
+        return record;
     }
     async buildChapterSnapshot(bookId, chapterId) {
         const chapterRecordId = this.chaptersByKey.get(chapterKey(bookId, chapterId));
@@ -370,6 +410,18 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             entities,
             themes,
             relations,
+        };
+    }
+    createSlimResult(result) {
+        return {
+            title: result.title,
+            summary: result.summary,
+            people: [],
+            ideas: [],
+            events: [],
+            entities: [],
+            themes: [],
+            relations: [],
         };
     }
     buildBookKeyInformation(bookId) {
@@ -555,9 +607,10 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     async loadFromStore() {
         if (!this.surrealService)
             return;
-        const [workflowRuns, snapshots, books, chapters, people, concepts, themes, entities, events, appearances, relations, partOfEdges,] = await Promise.all([
+        const [workflowRuns, snapshots, pageCaches, books, chapters, people, concepts, themes, entities, events, appearances, relations, partOfEdges,] = await Promise.all([
             this.surrealService.selectTable('workflow_run'),
             this.surrealService.selectTable('chapter_knowledge_snapshot'),
+            this.surrealService.selectTable('page_knowledge_extraction_cache'),
             this.surrealService.selectTable('book'),
             this.surrealService.selectTable('chapter'),
             this.surrealService.selectTable('person'),
@@ -572,6 +625,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         this.runs.clear();
         this.runIdsByIdempotencyKey.clear();
         this.latestResultsByChapter.clear();
+        this.pageExtractionsByCacheKey.clear();
         this.books.clear();
         this.chapters.clear();
         this.chaptersByKey.clear();
@@ -585,12 +639,8 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         this.relations.clear();
         this.relationIdsByChapter.clear();
         this.partOfEdges.clear();
-        for (const run of workflowRuns) {
-            this.runs.set(run.id, run);
-            this.runIdsByIdempotencyKey.set(run.idempotencyKey, run.id);
-        }
-        for (const snapshot of snapshots) {
-            this.latestResultsByChapter.set(chapterKey(snapshot.bookId, snapshot.chapterId), snapshot);
+        for (const pageCache of pageCaches) {
+            this.pageExtractionsByCacheKey.set(pageCache.cacheKey, pageCache);
         }
         for (const book of books)
             this.books.set(book.recordId, book);
@@ -618,6 +668,35 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         }
         for (const partOfEdge of partOfEdges)
             this.partOfEdges.set(partOfEdge.recordId, partOfEdge);
+        const rebuiltSnapshots = new Map();
+        for (const snapshot of snapshots) {
+            const rebuiltResult = await this.buildChapterSnapshot(snapshot.bookId, snapshot.chapterId);
+            const persistedResult = snapshot.result;
+            if (persistedResult?.title)
+                rebuiltResult.title = persistedResult.title;
+            if (persistedResult?.summary)
+                rebuiltResult.summary = persistedResult.summary;
+            const hydratedSnapshot = {
+                ...snapshot,
+                result: rebuiltResult,
+            };
+            rebuiltSnapshots.set(chapterKey(snapshot.bookId, snapshot.chapterId), hydratedSnapshot);
+            this.latestResultsByChapter.set(chapterKey(snapshot.bookId, snapshot.chapterId), hydratedSnapshot);
+        }
+        for (const run of workflowRuns) {
+            const rebuiltSnapshot = rebuiltSnapshots.get(chapterKey(run.bookId, run.chapterId));
+            const hydratedRun = (run.status === 'completed'
+                && rebuiltSnapshot
+                && run.snapshotVersion === rebuiltSnapshot.snapshotVersion
+                && run.chapterContentHash === rebuiltSnapshot.chapterContentHash)
+                ? {
+                    ...run,
+                    output: rebuiltSnapshot.result,
+                }
+                : run;
+            this.runs.set(hydratedRun.id, hydratedRun);
+            this.runIdsByIdempotencyKey.set(hydratedRun.idempotencyKey, hydratedRun.id);
+        }
     }
     upsertBook(bookId, persistBatch) {
         const recordId = this.makeBookRecordId(bookId);
@@ -1014,6 +1093,22 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 counts.themeCount += 1;
         }
         return counts;
+    }
+    async clearChapterKnowledge(chapterRecordId) {
+        const appearanceIds = Array.from(this.appearanceIdsByChapter.get(chapterRecordId) ?? []);
+        const relationIds = Array.from(this.relationIdsByChapter.get(chapterRecordId) ?? []);
+        for (const appearanceId of appearanceIds) {
+            this.appearances.delete(appearanceId);
+        }
+        for (const relationId of relationIds) {
+            this.relations.delete(relationId);
+        }
+        this.appearanceIdsByChapter.delete(chapterRecordId);
+        this.relationIdsByChapter.delete(chapterRecordId);
+        if (!this.surrealService)
+            return;
+        await this.deleteRecords('appears_in', appearanceIds);
+        await this.deleteRecords('related_to', relationIds);
     }
     buildGlobalPeople(appearances, chapterByRecordId) {
         const appearancesByNodeRecordId = new Map();
@@ -1441,6 +1536,17 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     makeChapterSnapshotRecordId(bookId, chapterId) {
         return `chapter_snapshot_${encodeSegment(bookId)}_${encodeSegment(chapterId)}`;
     }
+    makePageExtractionCacheKey(bookId, chapterId, pageIndex, sourceHash, chapterContentHash, promptVersion) {
+        return [
+            'page_cache',
+            encodeSegment(bookId),
+            encodeSegment(chapterId),
+            pageIndex,
+            encodeSegment(sourceHash),
+            encodeSegment(chapterContentHash),
+            encodeSegment(promptVersion),
+        ].join('_');
+    }
     makeRecordRef(table, recordId) {
         return `${table}:${recordId}`;
     }
@@ -1521,6 +1627,11 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             await this.persistRecord(entry.table, entry.id, entry.record);
         }
     }
+    async deleteRecords(table, ids) {
+        if (!this.surrealService || ids.length === 0)
+            return;
+        await this.surrealService.query(ids.map((id) => `DELETE ONLY ${table}:${id};`).join('\n'));
+    }
     schedulePersist(task) {
         if (!this.surrealService)
             return;
@@ -1536,6 +1647,22 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         if (table === 'appears_in' || table === 'related_to' || table === 'part_of') {
             const relationRecord = record;
             await this.surrealService.putRelationRecord(table, id, relationRecord.in, relationRecord.out, record);
+            return;
+        }
+        if (table === 'workflow_run') {
+            const workflowRun = record;
+            const persistedRun = workflowRun.output
+                ? { ...workflowRun, output: this.createSlimResult(workflowRun.output) }
+                : workflowRun;
+            await this.surrealService.putRecord(table, id, persistedRun);
+            return;
+        }
+        if (table === 'chapter_knowledge_snapshot') {
+            const snapshot = record;
+            await this.surrealService.putRecord(table, id, {
+                ...snapshot,
+                result: this.createSlimResult(snapshot.result),
+            });
             return;
         }
         await this.surrealService.putRecord(table, id, record);

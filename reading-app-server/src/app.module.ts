@@ -9,6 +9,7 @@ import { KnowledgeExtractionWorkflowModule } from './modules/knowledge-extractio
 import { QuizWorkflowModule } from './modules/quiz-workflow/quiz-workflow.module';
 import { WorkflowQueueModule } from './modules/workflow-queue/workflow-queue.module';
 import { SurrealModule } from './modules/surrealDB/surrealdb.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { SurrealModule } from './modules/surrealDB/surrealdb.module';
     WorkflowQueueModule,
     KnowledgeExtractionWorkflowModule,
     QuizWorkflowModule,
+    UsersModule,
     SurrealModule,
   ],
   controllers: [HealthController, MessageController],

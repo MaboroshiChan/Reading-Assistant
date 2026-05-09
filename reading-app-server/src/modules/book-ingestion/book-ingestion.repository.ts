@@ -57,8 +57,8 @@ export class BookIngestionRepository {
   private readonly books = new Map<string, CanonicalBookRecord>();
   private readonly storePath: string;
 
-  constructor() {
-    const dataDir = process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR;
+  constructor(dataDirOverride?: string) {
+    const dataDir = dataDirOverride ?? process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR;
     this.storePath = path.join(dataDir, DEFAULT_STORE_FILE);
     this.loadPersistedStore();
   }

@@ -14,7 +14,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config';
-import { type GenerateContentStreamResult, GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { isAbortError, throwIfAborted } from '../src/utils/abort';
 
 // -----------------------------
 // Public types
@@ -26,6 +27,7 @@ export interface LLMOptions {
   maxOutputTokens?: number; // provider-specific (OpenAI: max_output_tokens)
   timeoutMs?: number;       // request timeout
   signal?: AbortSignal;     // external cancel
+  prefixCache?: LLMPrefixCacheOptions | null;
 }
 
 export interface LLMUsage {
@@ -50,6 +52,14 @@ export interface LLMClientFactoryOptions {
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  prefixCache?: LLMPrefixCacheOptions;
+}
+
+export interface LLMPrefixCacheOptions {
+  cacheKey: string;
+  prefix: string;
+  displayName?: string;
+  ttlSeconds?: number;
 }
 
 export interface LLMClient {
@@ -86,6 +96,7 @@ export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMCli
         maxOutputTokens: opts.maxOutputTokens ?? factoryOptions.maxOutputTokens,
         timeoutMs: opts.timeoutMs ?? factoryOptions.timeoutMs ?? config.timeoutMs,
         signal: opts.signal,
+        prefixCache: opts.prefixCache ?? factoryOptions.prefixCache,
       });
 
       let text = '';
@@ -106,6 +117,7 @@ export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMCli
         maxOutputTokens: opts.maxOutputTokens ?? factoryOptions.maxOutputTokens,
         timeoutMs: opts.timeoutMs ?? factoryOptions.timeoutMs ?? config.timeoutMs,
         signal: opts.signal,
+        prefixCache: opts.prefixCache ?? factoryOptions.prefixCache,
       });
     },
   };
@@ -221,11 +233,13 @@ interface CallArgs {
   maxOutputTokens?: number;
   timeoutMs: number;
   signal?: AbortSignal;
+  prefixCache?: LLMPrefixCacheOptions | null;
 }
 
 const LOG_DIR = path.join(__dirname, '..', 'log');
 const LOG_FILE = path.join(LOG_DIR, 'prompts.log');
 const RESPONSE_DIR = path.join(__dirname, '..', '..', 'resource', 'LLM_response');
+const cachedContentNames = new Map<string, Promise<string | null>>();
 
 function supportsDeveloperInstruction(model: string): boolean {
   return !/^gemma-/i.test(model.trim());
@@ -249,65 +263,249 @@ function buildInlineSystemPrompt(args: CallArgs): string {
  */
 async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
   await logPromptIfDebug(args);
-
-
-  // Note: The Google Generative AI Node SDK does not currently expose a simple AbortSignal hook
-  // for generateContent in the same way fetch does, but we can respect the timeout for the wrapper.
-  // For this implementation, we rely on the promise race or just standard await.
+  throwIfAborted(args.signal);
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error('Missing GEMINI_API_KEY environment variable');
     }
-    const genAI = new GoogleGenerativeAI(apiKey);
-    console.log(`LLM model is ${args.model}`);
     const useDeveloperInstruction = supportsDeveloperInstruction(args.model);
-    const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
-    const model = genAI.getGenerativeModel({
-      model: args.model,
-      systemInstruction: useDeveloperInstruction ? args.systemPrompt : undefined,
-      generationConfig: {
-        maxOutputTokens: args.maxOutputTokens,
-        temperature: args.temperature,
-        responseMimeType: args.responseAs === 'json' ? 'application/json' : 'text/plain',
-      },
-    });
-
-    const result: GenerateContentStreamResult = await model.generateContentStream(requestPrompt);
-
-    const usagePromise = result.response.then(res => ({
-      inputTokens: res.usageMetadata?.promptTokenCount || 0,
-      outputTokens: res.usageMetadata?.candidatesTokenCount || 0,
-      modelId: args.model,
-    }));
-
-    const dataStream = (async function* () {
-      let fullText = '';
-      for await (const chunk of result.stream) {
-        const text = chunk.text();
-        fullText += text;
-        yield text;
+    const cachedContentName = await resolveCachedContentName(args, apiKey, useDeveloperInstruction);
+    if (cachedContentName) {
+      try {
+        return await callLLMWithCachedPrefix(args, apiKey, cachedContentName);
+      } catch (error) {
+        if (!isCachedContentError(error)) {
+          throw error;
+        }
+        invalidateCachedContentName(args.prefixCache?.cacheKey);
+        if (config.debugMode) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(`[llm-cache] cached prefix request failed; retrying uncached (${message})`);
+        }
       }
+    }
 
+    return callLLMDirect(args, apiKey, useDeveloperInstruction);
+  } catch (error: unknown) {
+    throw normalizeError(error);
+  }
+}
+
+async function callLLMDirect(
+  args: CallArgs,
+  apiKey: string,
+  useDeveloperInstruction: boolean,
+): Promise<CallReturn<string>> {
+  const { GoogleGenAI } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey });
+  console.log(`LLM model is ${args.model}`);
+  const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
+  let resolveUsage!: (usage: LLMUsage) => void;
+  let rejectUsage!: (reason?: unknown) => void;
+  const usagePromise = new Promise<LLMUsage>((resolve, reject) => {
+    resolveUsage = resolve;
+    rejectUsage = reject;
+  });
+  const stream = await ai.models.generateContentStream({
+    model: args.model,
+    contents: requestPrompt,
+    config: {
+      ...(useDeveloperInstruction ? { systemInstruction: args.systemPrompt } : {}),
+      maxOutputTokens: args.maxOutputTokens,
+      temperature: args.temperature,
+      responseMimeType: args.responseAs === 'json' ? 'application/json' : 'text/plain',
+      abortSignal: args.signal,
+      httpOptions: {
+        timeout: args.timeoutMs,
+      },
+    },
+  });
+
+  const dataStream = (async function* () {
+    let fullText = '';
+    let latestUsage: LLMUsage = { modelId: args.model };
+    try {
+      for await (const chunk of stream) {
+        latestUsage = getUsageFromGenAIChunk(chunk, args.model);
+        const text = typeof chunk.text === 'string' ? chunk.text : '';
+        fullText += text;
+        if (text) {
+          yield text;
+        }
+      }
+      resolveUsage(latestUsage);
       if (config.debugMode) {
-        const u = await usagePromise;
         console.log(
           `[${new Date().toISOString()}][info][llm-service] LLM response received`
           + ` model=${args.model}`
           + ` inlineSystemPrompt=${useDeveloperInstruction ? '0' : '1'}`
+          + ` prefixCache=0`
           + ` responseAs=${args.responseAs}`
-          + ` inputTokens=${u.inputTokens ?? 0}`
-          + ` outputTokens=${u.outputTokens ?? 0}`,
+          + ` inputTokens=${latestUsage.inputTokens ?? 0}`
+          + ` outputTokens=${latestUsage.outputTokens ?? 0}`,
         );
       }
       void persistLLMResponse(args, fullText);
-    })();
+    } catch (error) {
+      rejectUsage(error);
+      throw error;
+    }
+  })();
 
-    return { data: dataStream, usage: usagePromise };
-  } catch (error: unknown) {
-    throw normalizeError(error);
+  return { data: dataStream, usage: usagePromise };
+}
+
+async function callLLMWithCachedPrefix(
+  args: CallArgs,
+  apiKey: string,
+  cachedContentName: string,
+): Promise<CallReturn<string>> {
+  const { GoogleGenAI } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey });
+  let resolveUsage!: (usage: LLMUsage) => void;
+  let rejectUsage!: (reason?: unknown) => void;
+  const usagePromise = new Promise<LLMUsage>((resolve, reject) => {
+    resolveUsage = resolve;
+    rejectUsage = reject;
+  });
+
+  const stream = await ai.models.generateContentStream({
+    model: args.model,
+    contents: args.userPrompt,
+    config: {
+      cachedContent: cachedContentName,
+      maxOutputTokens: args.maxOutputTokens,
+      temperature: args.temperature,
+      responseMimeType: args.responseAs === 'json' ? 'application/json' : 'text/plain',
+      abortSignal: args.signal,
+      httpOptions: {
+        timeout: args.timeoutMs,
+      },
+    },
+  });
+
+  const dataStream = (async function* () {
+    let fullText = '';
+    let latestUsage: LLMUsage = { modelId: args.model };
+    try {
+      for await (const chunk of stream) {
+        latestUsage = getUsageFromGenAIChunk(chunk, args.model);
+        const text = typeof chunk.text === 'string' ? chunk.text : '';
+        fullText += text;
+        if (text) {
+          yield text;
+        }
+      }
+      resolveUsage(latestUsage);
+      if (config.debugMode) {
+        console.log(
+          `[${new Date().toISOString()}][info][llm-service] LLM response received`
+          + ` model=${args.model}`
+          + ` inlineSystemPrompt=0`
+          + ` prefixCache=1`
+          + ` responseAs=${args.responseAs}`
+          + ` inputTokens=${latestUsage.inputTokens ?? 0}`
+          + ` outputTokens=${latestUsage.outputTokens ?? 0}`,
+        );
+      }
+      void persistLLMResponse(args, fullText);
+    } catch (error) {
+      rejectUsage(error);
+      throw error;
+    }
+  })();
+
+  return { data: dataStream, usage: usagePromise };
+}
+
+async function resolveCachedContentName(
+  args: CallArgs,
+  apiKey: string,
+  useDeveloperInstruction: boolean,
+): Promise<string | null> {
+  const prefixCache = args.prefixCache;
+  if (!prefixCache || prefixCache.prefix.trim().length === 0) {
+    return null;
   }
+
+  const existing = cachedContentNames.get(prefixCache.cacheKey);
+  if (existing) {
+    return existing;
+  }
+
+  const creation = createCachedContentName(args, apiKey, useDeveloperInstruction).catch((error) => {
+    if (config.debugMode) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[llm-cache] failed to create cached prefix for ${prefixCache.cacheKey}: ${message}`);
+    }
+    return null;
+  });
+  cachedContentNames.set(prefixCache.cacheKey, creation);
+  return creation;
+}
+
+async function createCachedContentName(
+  args: CallArgs,
+  apiKey: string,
+  useDeveloperInstruction: boolean,
+): Promise<string | null> {
+  const prefixCache = args.prefixCache;
+  if (!prefixCache || prefixCache.prefix.trim().length === 0) {
+    return null;
+  }
+
+  const { GoogleGenAI } = await import('@google/genai');
+  const ai = new GoogleGenAI({ apiKey });
+  const ttlSeconds = Math.max(
+    60,
+    prefixCache.ttlSeconds ?? Math.floor(config.cacheTtlMs / 1000),
+  );
+  const cachedPrefixText = useDeveloperInstruction
+    ? prefixCache.prefix
+    : [
+      '[System Instructions]',
+      args.systemPrompt,
+      '',
+      '[Cached Prefix]',
+      prefixCache.prefix,
+    ].join('\n');
+
+  const cachedContent = await ai.caches.create({
+    model: args.model,
+    config: {
+      contents: cachedPrefixText,
+      displayName: prefixCache.displayName ?? prefixCache.cacheKey.slice(0, 128),
+      ttl: `${ttlSeconds}s`,
+      systemInstruction: useDeveloperInstruction ? args.systemPrompt : undefined,
+    },
+  });
+
+  return typeof cachedContent.name === 'string' && cachedContent.name.trim().length > 0
+    ? cachedContent.name
+    : null;
+}
+
+function invalidateCachedContentName(cacheKey: string | undefined): void {
+  if (!cacheKey) return;
+  cachedContentNames.delete(cacheKey);
+}
+
+function isCachedContentError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /cached.?content|context cache/i.test(message);
+}
+
+function getUsageFromGenAIChunk(chunk: { usageMetadata?: {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+}; }, modelId: string): LLMUsage {
+  return {
+    inputTokens: chunk.usageMetadata?.promptTokenCount ?? 0,
+    outputTokens: chunk.usageMetadata?.candidatesTokenCount ?? 0,
+    modelId,
+  };
 }
 
 
@@ -327,6 +525,7 @@ async function logPromptIfDebug(args: CallArgs): Promise<void> {
     maxOutputTokens: args.maxOutputTokens,
     systemPrompt: args.systemPrompt,
     userPrompt: args.userPrompt,
+    prefixCache: args.prefixCache ?? undefined,
   };
 
   try {
@@ -415,16 +614,29 @@ function unwrapCodeFence(s: string): string | null {
  * @returns A standard Error object.
  */
 function normalizeError(error: unknown): Error {
+  if (isAbortError(error)) {
+    return error instanceof Error ? error : new Error('Operation aborted');
+  }
   if (error instanceof Error) return error;
   return new Error('Unknown LLM client error');
 }
 
 function formatDebugPrompt(args: CallArgs): string {
-  return [
+  const sections = [
     '[System Prompt]',
     args.systemPrompt,
     '',
-    '[User Prompt]',
-    args.userPrompt,
-  ].join('\n');
+  ];
+  if (args.prefixCache) {
+    sections.push(
+      '[Cached Prefix]',
+      args.prefixCache.prefix,
+      '',
+      '[User Prompt]',
+      args.userPrompt,
+    );
+    return sections.join('\n');
+  }
+  sections.push('[User Prompt]', args.userPrompt);
+  return sections.join('\n');
 }

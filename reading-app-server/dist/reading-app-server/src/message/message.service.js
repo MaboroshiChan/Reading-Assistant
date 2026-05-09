@@ -15,6 +15,7 @@ const sentence_structure_1 = require("../../handlers/sentence_structure");
 const quiz_1 = require("../../handlers/quiz");
 const knowledge_extraction_1 = require("../../handlers/knowledge_extraction");
 const src_1 = require("../../../packages/contracts/src");
+const abort_1 = require("../utils/abort");
 const UNKNOWN_REQUEST_ID = 'unknown';
 const parseBody = (raw) => {
     if (!raw || raw.trim() === '') {
@@ -33,26 +34,26 @@ const parseBody = (raw) => {
         };
     }
 };
-const dispatchEnvelope = async (envelope) => {
+const dispatchEnvelope = async (envelope, signal) => {
     let result;
     switch (envelope.type) {
         case 'analyze.skeleton.v1':
-            result = await (0, skeleton_1.handleSkeleton)(envelope);
+            result = await (0, skeleton_1.handleSkeleton)(envelope, signal);
             break;
         case 'analyze.paragraph.v1':
-            result = await (0, paragraph_1.handleParagraph)(envelope);
+            result = await (0, paragraph_1.handleParagraph)(envelope, signal);
             break;
         case 'analyze.sentence.v1':
-            result = await (0, sentence_1.handleSentence)(envelope);
+            result = await (0, sentence_1.handleSentence)(envelope, signal);
             break;
         case 'analyze.sentence-structure.v1':
-            result = await (0, sentence_structure_1.handleSentenceStructure)(envelope);
+            result = await (0, sentence_structure_1.handleSentenceStructure)(envelope, signal);
             break;
         case 'analyze.quiz.v1':
-            result = await (0, quiz_1.handleQuiz)(envelope);
+            result = await (0, quiz_1.handleQuiz)(envelope, signal);
             break;
         case 'analyze.knowledge-extraction.v1':
-            result = await (0, knowledge_extraction_1.handleKnowledgeExtraction)(envelope);
+            result = await (0, knowledge_extraction_1.handleKnowledgeExtraction)(envelope, signal);
             break;
         default: {
             const exhaustive = envelope;
@@ -72,7 +73,7 @@ const dispatchEnvelope = async (envelope) => {
     };
 };
 exports.dispatchEnvelope = dispatchEnvelope;
-const handleRawEnvelope = async (raw) => {
+const handleRawEnvelope = async (raw, signal) => {
     const parsed = parseBody(raw);
     if (!parsed.ok)
         return parsed.error;
@@ -80,22 +81,25 @@ const handleRawEnvelope = async (raw) => {
     if (!validation.ok)
         return validation.error;
     try {
-        return await (0, exports.dispatchEnvelope)(validation.envelope);
+        return await (0, exports.dispatchEnvelope)(validation.envelope, signal);
     }
     catch (error) {
+        if ((0, abort_1.isAbortError)(error)) {
+            throw error;
+        }
         return (0, src_1.errorResponse)(validation.envelope.request_id, 'E.SERVER', 500, error instanceof Error ? error.message : 'Unexpected server error');
     }
 };
-const handleRawMessage = async (raw) => handleRawEnvelope(raw);
+const handleRawMessage = async (raw, signal) => handleRawEnvelope(raw, signal);
 exports.handleRawMessage = handleRawMessage;
-const handleRawStream = async (raw) => handleRawEnvelope(raw);
+const handleRawStream = async (raw, signal) => handleRawEnvelope(raw, signal);
 exports.handleRawStream = handleRawStream;
 let MessageService = class MessageService {
-    handleMsg(raw) {
-        return (0, exports.handleRawMessage)(raw);
+    handleMsg(raw, signal) {
+        return (0, exports.handleRawMessage)(raw, signal);
     }
-    handleStream(raw) {
-        return (0, exports.handleRawStream)(raw);
+    handleStream(raw, signal) {
+        return (0, exports.handleRawStream)(raw, signal);
     }
 };
 exports.MessageService = MessageService;

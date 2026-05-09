@@ -17,7 +17,7 @@ import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { createLLMClient, extractJsonFromText, type CallReturn } from '../services/llmService';
 import { resolvePromptPath } from '../src/utils/prompt-path';
-import { buildStableCacheKey, summarize } from './shared';
+import { buildStableCacheKey, summarize, withBufferedStream } from './shared';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'knowledge-extraction';
@@ -300,6 +300,7 @@ const buildPrompt = (req: RequestEnvelopeKnowledgeExtraction): string => {
 
 const buildKnowledgeExtractionData = async (
   req: RequestEnvelopeKnowledgeExtraction,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   handlerLog('knowledge_extraction', 'building LLM prompt', {
     requestId: req.request_id,
@@ -321,11 +322,12 @@ const buildKnowledgeExtractionData = async (
     userPromptLength: userPrompt.length,
   });
 
-  return llmClient.json(userPrompt);
+  return llmClient.json(userPrompt, { signal });
 };
 
 export const handleKnowledgeExtraction = async (
   req: RequestEnvelopeKnowledgeExtraction,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   handlerLog('knowledge_extraction', 'request received', {
     requestId: req.request_id,
@@ -357,14 +359,10 @@ export const handleKnowledgeExtraction = async (
   }
 
   const started = Date.now();
-  const { data: stream, usage: usagePromise } = await buildKnowledgeExtractionData(req);
+  const { data: stream, usage: usagePromise } = await buildKnowledgeExtractionData(req, signal);
 
-  const tappedStream = (async function* () {
-    let text = '';
-    for await (const chunk of stream) {
-      text += chunk;
-      yield chunk;
-    }
+  const tappedStream = withBufferedStream(stream, async ({ text, completed }) => {
+    if (!completed) return;
 
     try {
       const usage = await usagePromise;
@@ -398,7 +396,7 @@ export const handleKnowledgeExtraction = async (
       };
       cache.set(cacheKey, response, config.cacheTtlMs);
     }
-  })();
+  });
 
   return { data: tappedStream, usage: usagePromise };
 };

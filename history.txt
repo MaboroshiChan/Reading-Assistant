@@ -1,0 +1,22 @@
+#V2
+SELECT count() AS count FROM workflow_run GROUP ALL;
+SELECT count() AS count FROM chapter_knowledge_snapshot GROUP ALL;
+SELECT count() AS count FROM page_knowledge_extraction_cache GROUP ALL;
+SELECT count() AS count FROM book GROUP ALL;
+SELECT count() AS count FROM chapter GROUP ALL;
+SELECT count() AS count FROM person GROUP ALL;
+SELECT count() AS count FROM concept GROUP ALL;
+SELECT count() AS count FROM theme GROUP ALL;
+SELECT count() AS count FROM entity GROUP ALL;
+SELECT count() AS count FROM event GROUP ALL;
+SELECT count() AS count FROM appears_in GROUP ALL;
+SELECT count() AS count FROM related_to GROUP ALL;
+SELECT count() AS count FROM part_of GROUP ALL;
+INFO FOR DB;
+SELECT * FROM person LIMIT 3;
+SELECT * FROM concept LIMIT 3;
+SELECT * FROM entity LIMIT 3;
+SELECT * FROM appears_in LIMIT 3;
+SELECT * FROM workflow_run LIMIT 3;
+SELECT * FROM book LIMIT 3;
+SELECT * FROM chapter LIMIT 3;

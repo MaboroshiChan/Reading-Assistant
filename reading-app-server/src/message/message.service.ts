@@ -11,6 +11,7 @@ import { handleSentenceStructure } from '../../handlers/sentence_structure';
 import { handleQuiz } from '../../handlers/quiz';
 import { handleKnowledgeExtraction } from '../../handlers/knowledge_extraction';
 import { errorResponse, validateEnvelope } from '../../../packages/contracts/src';
+import { isAbortError } from '../utils/abort';
 
 const UNKNOWN_REQUEST_ID = 'unknown';
 
@@ -44,27 +45,30 @@ const parseBody = (
   }
 };
 
-export const dispatchEnvelope = async (envelope: RequestEnvelope): Promise<ResponseEnvelope> => {
+export const dispatchEnvelope = async (
+  envelope: RequestEnvelope,
+  signal?: AbortSignal,
+): Promise<ResponseEnvelope> => {
   let result: CallReturn<string>;
 
   switch (envelope.type) {
     case 'analyze.skeleton.v1':
-      result = await handleSkeleton(envelope);
+      result = await handleSkeleton(envelope, signal);
       break;
     case 'analyze.paragraph.v1':
-      result = await handleParagraph(envelope);
+      result = await handleParagraph(envelope, signal);
       break;
     case 'analyze.sentence.v1':
-      result = await handleSentence(envelope);
+      result = await handleSentence(envelope, signal);
       break;
     case 'analyze.sentence-structure.v1':
-      result = await handleSentenceStructure(envelope);
+      result = await handleSentenceStructure(envelope, signal);
       break;
     case 'analyze.quiz.v1':
-      result = await handleQuiz(envelope);
+      result = await handleQuiz(envelope, signal);
       break;
     case 'analyze.knowledge-extraction.v1':
-      result = await handleKnowledgeExtraction(envelope);
+      result = await handleKnowledgeExtraction(envelope, signal);
       break;
     default: {
       const exhaustive: never = envelope;
@@ -90,7 +94,7 @@ export const dispatchEnvelope = async (envelope: RequestEnvelope): Promise<Respo
   } as ResponseEnvelope;
 };
 
-const handleRawEnvelope = async (raw: string): Promise<ResponseEnvelope> => {
+const handleRawEnvelope = async (raw: string, signal?: AbortSignal): Promise<ResponseEnvelope> => {
   const parsed = parseBody(raw);
   if (!parsed.ok) return parsed.error;
 
@@ -98,8 +102,11 @@ const handleRawEnvelope = async (raw: string): Promise<ResponseEnvelope> => {
   if (!validation.ok) return validation.error;
 
   try {
-    return await dispatchEnvelope(validation.envelope);
+    return await dispatchEnvelope(validation.envelope, signal);
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
     return errorResponse(
       validation.envelope.request_id,
       'E.SERVER',
@@ -109,19 +116,23 @@ const handleRawEnvelope = async (raw: string): Promise<ResponseEnvelope> => {
   }
 };
 
-export const handleRawMessage = async (raw: string): Promise<ResponseEnvelope> =>
-  handleRawEnvelope(raw);
+export const handleRawMessage = async (
+  raw: string,
+  signal?: AbortSignal,
+): Promise<ResponseEnvelope> => handleRawEnvelope(raw, signal);
 
-export const handleRawStream = async (raw: string): Promise<ResponseEnvelope> =>
-  handleRawEnvelope(raw);
+export const handleRawStream = async (
+  raw: string,
+  signal?: AbortSignal,
+): Promise<ResponseEnvelope> => handleRawEnvelope(raw, signal);
 
 @Injectable()
 export class MessageService {
-  handleMsg(raw: string): Promise<ResponseEnvelope> {
-    return handleRawMessage(raw);
+  handleMsg(raw: string, signal?: AbortSignal): Promise<ResponseEnvelope> {
+    return handleRawMessage(raw, signal);
   }
 
-  handleStream(raw: string): Promise<ResponseEnvelope> {
-    return handleRawStream(raw);
+  handleStream(raw: string, signal?: AbortSignal): Promise<ResponseEnvelope> {
+    return handleRawStream(raw, signal);
   }
 }

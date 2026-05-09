@@ -5,7 +5,7 @@ import type {
 } from '../../packages/contracts/src';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
-import { hashString } from './shared';
+import { hashString, withBufferedStream } from './shared';
 import { buildSkeletonData as generateSkeletonData } from './skeleton-data';
 import { handlerLog } from './logger';
 import type { CallReturn } from '../services/llmService';
@@ -58,6 +58,7 @@ const prepareSkeletonData = async (
  */
 export const handleSkeleton = async (
   req: RequestEnvelopeSkeleton,
+  _signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   handlerLog('skeleton', 'request received', {
     requestId: req.request_id,
@@ -81,12 +82,8 @@ export const handleSkeleton = async (
   const started = Date.now();
   const { data: stream, usage: usagePromise } = await prepareSkeletonData(req);
 
-  const tappedStream = (async function* () {
-    let text = '';
-    for await (const chunk of stream) {
-      text += chunk;
-      yield chunk;
-    }
+  const tappedStream = withBufferedStream(stream, async ({ text, completed }) => {
+    if (!completed) return;
 
     try {
       const usage = await usagePromise;
@@ -118,7 +115,7 @@ export const handleSkeleton = async (
     } catch (error) {
       console.warn('[skeleton] failed to cache response', error);
     }
-  })();
+  });
 
   return { data: tappedStream, usage: usagePromise };
 };

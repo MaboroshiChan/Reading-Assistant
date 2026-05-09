@@ -21,6 +21,12 @@ import type {
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
 import { config } from '../../config/runtime-config';
 import { resolvePromptPath } from '../../utils/prompt-path';
+import { BookContextService } from '../book-ingestion/book-context.service';
+import type {
+  BookContextBundle,
+  ChapterContextBundle,
+  PageWindowContext,
+} from '../book-ingestion/book-context.types';
 import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
 import type { CanonicalChapterRecord } from '../book-ingestion/book-ingestion.types';
 import { workflowLog } from '../workflow.logger';
@@ -39,7 +45,7 @@ import type {
 } from './knowledge-extraction-workflow.types';
 import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
-const PROMPT_VERSION = 'knowledge_extraction.v2.1';
+const PROMPT_VERSION = 'knowledge_extraction.v2.3';
 const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
 
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
@@ -67,6 +73,22 @@ type KnowledgePiece = {
   totalPieces: number;
 };
 
+type KnowledgeMemoryItem = {
+  local_id: string;
+  canonical_label: string;
+  aliases?: string[];
+  relation_hints?: string[];
+  seen_pages: number[];
+};
+
+type KnowledgeMemoryContext = {
+  people: KnowledgeMemoryItem[];
+  ideas: KnowledgeMemoryItem[];
+  events: KnowledgeMemoryItem[];
+  entities: KnowledgeMemoryItem[];
+  themes: KnowledgeMemoryItem[];
+};
+
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
@@ -79,23 +101,41 @@ const asString = (value: unknown): string | undefined =>
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 
+const CONTEXT_HEAVY_IDEA_TOKENS = [
+  'book',
+  'chapter',
+  'client',
+  'campaign',
+  'chewing gum',
+  'smith',
+  'clinton',
+  'teacher',
+  'sumo',
+  'home',
+  'election',
+] as const;
+
 let cachedSystemPrompt: string | null = null;
 
 @Injectable()
 export class KnowledgeExtractionWorkflowService {
   private readonly bookIngestionRepository: BookIngestionRepository;
+  private readonly bookContextService: BookContextService;
   private readonly knowledgeExtractionWorkflowRepository: KnowledgeExtractionWorkflowRepository;
   private readonly workflowQueueService: WorkflowQueueService;
 
   constructor(
     @Inject(forwardRef(() => BookIngestionRepository))
     bookIngestionRepository: BookIngestionRepository,
+    @Inject(BookContextService)
+    bookContextService: BookContextService,
     @Inject(KnowledgeExtractionWorkflowRepository)
     knowledgeExtractionWorkflowRepository: KnowledgeExtractionWorkflowRepository,
     @Inject(WorkflowQueueService)
     workflowQueueService: WorkflowQueueService,
   ) {
     this.bookIngestionRepository = bookIngestionRepository;
+    this.bookContextService = bookContextService;
     this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
     this.workflowQueueService = workflowQueueService;
   }
@@ -425,14 +465,34 @@ export class KnowledgeExtractionWorkflowService {
         chapterIndex: runningRun.chapterIndex,
         chapterTitle: chapter.chapterTitle,
         chapterText: chapter.chapterTextMaterialized,
+        chapterContentHash: chapter.chapterContentHash,
         pieces,
       });
 
-      this.knowledgeExtractionWorkflowRepository.completeRun({
+      const completedRun = this.knowledgeExtractionWorkflowRepository.completeRun({
         workflowRunId,
         snapshotVersion: book.snapshotVersion,
         chapterContentHash: chapter.chapterContentHash,
         result,
+      });
+
+      workflowLog('extraction.finished', {
+        workflowKind: runningRun.kind,
+        workflowRunId: runningRun.id,
+        bookId: runningRun.bookId,
+        chapterId: runningRun.chapterId,
+        chapterIndex: runningRun.chapterIndex,
+        workflowVersion: runningRun.workflowVersion,
+        snapshotVersion: book.snapshotVersion,
+        chapterContentHash: chapter.chapterContentHash,
+        pieceCount: pieces.length,
+        peopleCount: result.people?.length ?? 0,
+        ideaCount: result.ideas?.length ?? 0,
+        eventCount: result.events?.length ?? 0,
+        entityCount: result.entities?.length ?? 0,
+        themeCount: result.themes?.length ?? 0,
+        relationCount: result.relations?.length ?? 0,
+        completedAt: completedRun?.completedAt,
       });
     } catch (error) {
       this.knowledgeExtractionWorkflowRepository.failRun(
@@ -467,16 +527,47 @@ export class KnowledgeExtractionWorkflowService {
     chapterIndex: number;
     chapterTitle?: string;
     chapterText: string;
+    chapterContentHash: string;
     pieces: KnowledgePiece[];
   }): Promise<KnowledgeExtractionWorkflowResultPayload> {
+    const bookContext = this.bookContextService.buildBookContextBundle(input.bookId, input.chapterId);
+    const chapterContext = this.bookContextService.buildChapterContextBundle(input.bookId, input.chapterId);
+    const incrementalRepository = new KnowledgeExtractionWorkflowRepository();
+
     for (const piece of input.pieces) {
+      const memorySnapshot = await incrementalRepository.buildChapterSnapshot(
+        input.bookId,
+        input.chapterId,
+      );
+      const memoryContext = this.buildMemoryContext(memorySnapshot);
+      const pageWindow = this.bookContextService.buildPageWindowContext(
+        input.bookId,
+        input.chapterId,
+        piece.pageIndex,
+      ) ?? this.createFallbackPageWindow(piece);
       const pieceResult = await this.generateKnowledgeExtractionForPiece({
         bookId: input.bookId,
         chapterId: input.chapterId,
+        chapterIndex: input.chapterIndex,
         chapterTitle: input.chapterTitle,
+        chapterText: input.chapterText,
+        chapterContentHash: input.chapterContentHash,
         piece,
+        bookContext,
+        chapterContext,
+        pageWindow,
+        memoryContext,
       });
-      const chapterCounts = await this.knowledgeExtractionWorkflowRepository.upsertPageExtraction({
+      this.knowledgeExtractionWorkflowRepository.setCachedPageExtraction({
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        pageIndex: piece.pageIndex,
+        sourceHash: piece.sourceHash,
+        chapterContentHash: input.chapterContentHash,
+        promptVersion: PROMPT_VERSION,
+        extraction: pieceResult,
+      });
+      const chapterCounts = await incrementalRepository.upsertPageExtraction({
         bookId: input.bookId,
         chapterId: input.chapterId,
         chapterIndex: input.chapterIndex,
@@ -507,26 +598,67 @@ export class KnowledgeExtractionWorkflowService {
       });
     }
 
-    const knowledge = await this.knowledgeExtractionWorkflowRepository.buildChapterSnapshot(
+    const knowledge = await incrementalRepository.buildChapterSnapshot(
       input.bookId,
       input.chapterId,
     );
     knowledge.title = input.chapterTitle ?? knowledge.title;
     knowledge.summary = this.summarize(input.chapterText, 240);
+    await this.knowledgeExtractionWorkflowRepository.replaceChapterExtraction({
+      bookId: input.bookId,
+      chapterId: input.chapterId,
+      chapterIndex: input.chapterIndex,
+      chapterTitle: input.chapterTitle,
+      extraction: knowledge,
+    });
     return knowledge;
   }
 
   private async generateKnowledgeExtractionForPiece(input: {
     bookId: string;
     chapterId: string;
+    chapterIndex: number;
     chapterTitle?: string;
+    chapterText: string;
+    chapterContentHash: string;
     piece: KnowledgePiece;
+    bookContext: BookContextBundle | null;
+    chapterContext: ChapterContextBundle | null;
+    pageWindow: PageWindowContext;
+    memoryContext: KnowledgeMemoryContext;
   }): Promise<AnalyzeKnowledgeExtractionData> {
+    const cached = this.knowledgeExtractionWorkflowRepository.getCachedPageExtraction(
+      input.bookId,
+      input.chapterId,
+      input.piece.pageIndex,
+      input.piece.sourceHash,
+      input.chapterContentHash,
+      PROMPT_VERSION,
+    );
+    if (cached) {
+      workflowLog('piece.cache_hit', {
+        workflowKind: 'knowledge_extraction',
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        pageIndex: input.piece.pageIndex,
+        sourceHash: input.piece.sourceHash,
+        promptVersion: PROMPT_VERSION,
+      });
+      return cached;
+    }
+
     const [systemPrompt, userPrompt] = await Promise.all([
       this.loadPrompt(),
-      Promise.resolve(this.buildPiecePrompt(input)),
+      Promise.resolve(this.buildPieceSuffixPrompt(input)),
     ]);
-    const llmClient = createLLMClient({ systemPrompt });
+    const llmClient = createLLMClient({
+      systemPrompt,
+      prefixCache: {
+        cacheKey: `knowledge_extraction.chapter_prefix:${PROMPT_VERSION}:${input.bookId}:${input.chapterId}:${input.chapterContentHash}`,
+        displayName: `ke-${input.bookId}-${input.chapterId}`,
+        prefix: this.buildChapterCachedPrefix(input),
+      },
+    });
     const response = await llmClient.json(userPrompt);
 
     let text = '';
@@ -547,11 +679,59 @@ export class KnowledgeExtractionWorkflowService {
     }
   }
 
-  private buildPiecePrompt(input: {
+  private buildChapterCachedPrefix(input: {
     bookId: string;
     chapterId: string;
+    chapterIndex: number;
     chapterTitle?: string;
+    chapterText: string;
+    chapterContentHash: string;
+  }): string {
+    const book = this.bookIngestionRepository.getBook(input.bookId);
+    const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
+    const stableBookMetadata = {
+      bookId: input.bookId,
+      title: asString(metadataRecord.title),
+      author: asString(metadataRecord.author),
+      language: asString(metadataRecord.language),
+    };
+
+    return [
+      `Document ID: ${input.bookId}`,
+      `Chapter ID: ${input.chapterId}`,
+      `Chapter Title: ${input.chapterTitle ?? ''}`,
+      `Chapter Content Hash: ${input.chapterContentHash}`,
+      `Prompt Version: ${PROMPT_VERSION}`,
+      '',
+      'Stable book metadata:',
+      '```json',
+      JSON.stringify(stableBookMetadata, null, 2),
+      '```',
+      '',
+      'Canonical chapter text:',
+      '```text',
+      input.chapterText,
+      '```',
+      '',
+      'Fixed extraction rules:',
+      '- The canonical chapter text is background context for this chapter only.',
+      '- Primary evidence must come from the current page supplied in the request suffix.',
+      '- Use cached chapter context only to resolve references and maintain continuity.',
+    ].join('\n');
+  }
+
+  private buildPieceSuffixPrompt(input: {
+    bookId: string;
+    chapterId: string;
+    chapterIndex: number;
+    chapterTitle?: string;
+    chapterText: string;
+    chapterContentHash: string;
     piece: KnowledgePiece;
+    bookContext: BookContextBundle | null;
+    chapterContext: ChapterContextBundle | null;
+    pageWindow: PageWindowContext;
+    memoryContext: KnowledgeMemoryContext;
   }): string {
     const sections = [
       `Document ID: ${input.bookId}`,
@@ -565,14 +745,37 @@ export class KnowledgeExtractionWorkflowService {
       `Source Hash: ${input.piece.sourceHash}`,
       `Prompt Version: ${PROMPT_VERSION}`,
       '',
-      'Current page text:',
+      'Book context:',
+      '```json',
+      JSON.stringify(input.bookContext ?? this.createFallbackBookContext(input), null, 2),
+      '```',
+      '',
+      'Current chapter context:',
+      '```json',
+      JSON.stringify(input.chapterContext ?? this.createFallbackChapterContext(input), null, 2),
+      '```',
+      '',
+      'Page window:',
+      '```json',
+      JSON.stringify(input.pageWindow, null, 2),
+      '```',
+      '',
+      'Memory continuity:',
+      '```json',
+      JSON.stringify(input.memoryContext, null, 2),
+      '```',
+      '',
+      'Primary evidence page:',
       '```text',
       input.piece.rawText,
       '```',
       '',
-      'Only extract knowledge supported by the current page text.',
-      'local_id values only need to be unique within this single page response.',
-      `Every returned knowledge item must include pageRefs with pageIndex=${input.piece.pageIndex} and pageNumber=${input.piece.pageNumber}.`,
+      'Use the primary evidence page as the only source of evidence quotes.',
+      'Use the cached chapter prefix, book context, chapter context, page window, and memory continuity only for reference resolution and continuity.',
+      'Do not cite or import evidence from previous pages, next pages, summaries, or memory continuity.',
+      'Reuse an existing local_id from memory continuity only when the current page clearly refers to the same item.',
+      'local_id values only need to be unique within this chapter workflow response state.',
+      `Every returned knowledge item must include evidence anchored to pageIndex=${input.piece.pageIndex} and pageNumber=${input.piece.pageNumber}.`,
       'Respond with JSON only. Do not wrap the JSON in markdown fences.',
     ];
     return sections.join('\n');
@@ -629,6 +832,11 @@ export class KnowledgeExtractionWorkflowService {
     return items.length ? items : undefined;
   }
 
+  private sortStrings(values: string[] | undefined): string[] | undefined {
+    if (!values || values.length === 0) return undefined;
+    return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
+  }
+
   private sanitizeEvidence(value: unknown, currentPageRef: KnowledgePageRef): KnowledgeEvidence[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const evidence = value
@@ -636,16 +844,125 @@ export class KnowledgeExtractionWorkflowService {
         if (!isPlainObject(item)) return null;
         const quote = asString(item.quote);
         if (!quote) return null;
-        let pageIndex = asNumber(item.pageIndex);
-        let pageNumber = asNumber(item.pageNumber);
-        if (pageIndex === undefined || pageNumber === undefined) {
-          pageIndex = currentPageRef.pageIndex;
-          pageNumber = currentPageRef.pageNumber;
-        }
-        return { quote, pageIndex, pageNumber };
+        return {
+          quote,
+          pageIndex: currentPageRef.pageIndex,
+          pageNumber: currentPageRef.pageNumber,
+        };
       })
       .filter((item): item is KnowledgeEvidence => item !== null);
     return evidence.length ? evidence : undefined;
+  }
+
+  private buildMemoryContext(snapshot: AnalyzeKnowledgeExtractionData): KnowledgeMemoryContext {
+    const relationHintsByNode = new Map<string, string[]>();
+    for (const relation of snapshot.relations) {
+      const hint = `${relation.relation_type}:${relation.to_type}:${relation.to_id}`;
+      const reverseHint = `${relation.relation_type}:${relation.from_type}:${relation.from_id}`;
+      const fromHints = relationHintsByNode.get(relation.from_id) ?? [];
+      fromHints.push(hint);
+      relationHintsByNode.set(relation.from_id, fromHints);
+      const toHints = relationHintsByNode.get(relation.to_id) ?? [];
+      toHints.push(reverseHint);
+      relationHintsByNode.set(relation.to_id, toHints);
+    }
+
+    return {
+      people: snapshot.people.map((person) => ({
+        local_id: person.local_id,
+        canonical_label: person.name,
+        aliases: person.aliases,
+        relation_hints: this.sortStrings(relationHintsByNode.get(person.local_id)),
+        seen_pages: this.collectSeenPages(person.evidence),
+      })),
+      ideas: snapshot.ideas.map((idea) => ({
+        local_id: idea.local_id,
+        canonical_label: idea.label,
+        relation_hints: this.sortStrings(relationHintsByNode.get(idea.local_id)),
+        seen_pages: this.collectSeenPages(idea.evidence),
+      })),
+      events: snapshot.events.map((event) => ({
+        local_id: event.local_id,
+        canonical_label: event.label,
+        relation_hints: this.sortStrings(relationHintsByNode.get(event.local_id)),
+        seen_pages: this.collectSeenPages(event.evidence),
+      })),
+      entities: snapshot.entities.map((entity) => ({
+        local_id: entity.local_id,
+        canonical_label: entity.label,
+        relation_hints: this.sortStrings(relationHintsByNode.get(entity.local_id)),
+        seen_pages: this.collectSeenPages(entity.evidence),
+      })),
+      themes: snapshot.themes.map((theme) => ({
+        local_id: theme.local_id,
+        canonical_label: theme.label,
+        relation_hints: this.sortStrings(relationHintsByNode.get(theme.local_id)),
+        seen_pages: this.collectSeenPages(theme.evidence),
+      })),
+    };
+  }
+
+  private collectSeenPages(evidence: KnowledgeEvidence[] | undefined): number[] {
+    if (!evidence || evidence.length === 0) return [];
+    return Array.from(new Set(
+      evidence
+        .map((item) => item.pageIndex)
+        .filter((item): item is number => typeof item === 'number'),
+    )).sort((left, right) => left - right);
+  }
+
+  private createFallbackBookContext(input: {
+    bookId: string;
+    chapterId: string;
+    chapterIndex: number;
+    chapterTitle?: string;
+    piece: KnowledgePiece;
+  }): BookContextBundle {
+    return {
+      bookId: input.bookId,
+      snapshotVersion: 0,
+      chapters: [{
+        chapterId: input.chapterId,
+        chapterIndex: input.chapterIndex,
+        title: input.chapterTitle,
+      }],
+      priorChapterSummaries: [],
+      currentChapterPages: [{
+        pageIndex: input.piece.pageIndex,
+        pageNumber: input.piece.pageNumber,
+        sourceHash: input.piece.sourceHash,
+      }],
+    };
+  }
+
+  private createFallbackChapterContext(input: {
+    chapterId: string;
+    chapterIndex: number;
+    chapterTitle?: string;
+    piece: KnowledgePiece;
+  }): ChapterContextBundle {
+    return {
+      chapterId: input.chapterId,
+      chapterIndex: input.chapterIndex,
+      chapterTitle: input.chapterTitle,
+      pages: [{
+        pageIndex: input.piece.pageIndex,
+        pageNumber: input.piece.pageNumber,
+        sourceHash: input.piece.sourceHash,
+      }],
+    };
+  }
+
+  private createFallbackPageWindow(piece: KnowledgePiece): PageWindowContext {
+    return {
+      radius: 1,
+      current: {
+        pageIndex: piece.pageIndex,
+        pageNumber: piece.pageNumber,
+        sourceHash: piece.sourceHash,
+        text: piece.rawText,
+      },
+    };
   }
 
   private sanitizePeople(
@@ -683,16 +1000,40 @@ export class KnowledgeExtractionWorkflowService {
         const label = asString(item.label);
         if (!label) return null;
         const kind = asString(item.kind);
-        return {
+        const normalizedKind = kind && IDEA_KINDS.has(kind) ? kind as KnowledgeIdea['kind'] : 'claim';
+        const idea: KnowledgeIdea = {
           local_id: asString(item.local_id) ?? `i${index + 1}`,
           label,
           description: asString(item.description),
-          kind: kind && IDEA_KINDS.has(kind) ? kind as KnowledgeIdea['kind'] : 'claim',
+          kind: normalizedKind,
           evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
         };
+        if (!this.shouldKeepIdea(idea)) return null;
+        return idea;
       })
       .filter((item): item is KnowledgeIdea => item !== null);
     return ideas.length ? ideas : undefined;
+  }
+
+  private shouldKeepIdea(idea: KnowledgeIdea): boolean {
+    const label = idea.label.trim();
+    const normalized = label.toLowerCase();
+    const words = normalized.split(/\s+/).filter(Boolean);
+
+    if (words.length === 0) return false;
+    if (label.length > 72 || words.length > 10) return false;
+    if (/[.?!:]$/.test(label)) return false;
+
+    if (idea.kind === 'claim' || idea.kind === 'belief') {
+      if (words.length > 6) return false;
+      if (normalized.includes('\'s')) return false;
+      if (/\d/.test(normalized)) return false;
+      if (CONTEXT_HEAVY_IDEA_TOKENS.some((token) => normalized.includes(token))) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private sanitizeEvents(

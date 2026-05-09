@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix reading-app\" \"npm run dev --prefix reading-app-server\"",
+    "surreal:query": "./scripts/surreal-query.sh",
+    "surreal:dupes": "./scripts/surreal-check-duplicates.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

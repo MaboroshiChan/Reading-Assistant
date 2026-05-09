@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.clampSpan = exports.makeAnchor = exports.tokenize = exports.splitIntoSentences = exports.summarize = exports.sortAnchors = exports.buildStableCacheKey = exports.hashString = void 0;
+exports.clampSpan = exports.makeAnchor = exports.tokenize = exports.splitIntoSentences = exports.summarize = exports.sortAnchors = exports.withBufferedStream = exports.buildStableCacheKey = exports.hashString = void 0;
 const crypto_1 = require("crypto");
 /**
  * Generates a SHA-1 hash of the given string.
@@ -44,6 +44,21 @@ const buildStableCacheKey = (prefix, version, value) => {
     return `${prefix}:${version}:${(0, exports.hashString)(stableSerialize(value))}`;
 };
 exports.buildStableCacheKey = buildStableCacheKey;
+const withBufferedStream = (stream, finalize) => (async function* () {
+    let text = '';
+    let completed = false;
+    try {
+        for await (const chunk of stream) {
+            text += chunk;
+            yield chunk;
+        }
+        completed = true;
+    }
+    finally {
+        await finalize({ text, completed });
+    }
+})();
+exports.withBufferedStream = withBufferedStream;
 /**
  * Sorts an array of anchors by their start and end positions.
  *

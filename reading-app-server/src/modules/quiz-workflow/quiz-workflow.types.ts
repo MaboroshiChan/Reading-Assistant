@@ -9,18 +9,61 @@ export type QuizWorkflowStatus =
 
 export type QuizWorkflowProducer = 'server';
 export type QuizWorkflowQualityTier = 'server_final';
-export type QuizWorkflowQuestionType = 'multiple_choice';
+export type QuizWorkflowQuestionType =
+  | 'multiple_choice'
+  | 'true_false_not_given'
+  | 'short_answer'
+  | 'fill_in_blank';
 export type QuizWorkflowSkill = 'Facts' | 'Inference' | 'Tone' | 'Argument';
+export type QuizWorkflowSourceUnitType = 'idea' | 'event' | 'theme' | 'person' | 'entity';
 
-export interface QuizWorkflowQuestion {
+export interface QuizWorkflowPageRef {
+  pageIndex: number;
+  pageNumber?: number;
+}
+
+export interface QuizWorkflowQuestionBase {
   id: string;
   type: QuizWorkflowQuestionType;
   question: string;
-  options: [string, string, string, string];
-  correctAnswerIndex: number;
   explanation: string;
   skill: QuizWorkflowSkill;
+  sourceUnitId?: string;
+  sourceUnitType?: QuizWorkflowSourceUnitType;
+  sourcePageRefs?: QuizWorkflowPageRef[];
 }
+
+export interface QuizWorkflowMultipleChoiceQuestion extends QuizWorkflowQuestionBase {
+  type: 'multiple_choice';
+  options: [string, string, string, string];
+  correctAnswerIndex: number;
+}
+
+export interface QuizWorkflowTrueFalseNotGivenQuestion extends QuizWorkflowQuestionBase {
+  type: 'true_false_not_given';
+  options: ['True', 'False', 'Not Given'];
+  correctAnswerIndex: 0 | 1 | 2;
+}
+
+export interface QuizWorkflowShortAnswerQuestion extends QuizWorkflowQuestionBase {
+  type: 'short_answer';
+  acceptableAnswers: [string, ...string[]];
+  answerGuidance?: string;
+}
+
+export interface QuizWorkflowFillInBlankQuestion extends QuizWorkflowQuestionBase {
+  type: 'fill_in_blank';
+  options: [string, string, string, string];
+  correctAnswerIndex: number;
+  blankHint?: string;
+  acceptableAnswers?: [string, ...string[]];
+}
+
+export type QuizWorkflowQuestion =
+  | QuizWorkflowMultipleChoiceQuestion
+  | QuizWorkflowTrueFalseNotGivenQuestion
+  | QuizWorkflowShortAnswerQuestion
+  | QuizWorkflowFillInBlankQuestion;
 
 export interface QuizWorkflowResultPayload {
   questions: QuizWorkflowQuestion[];

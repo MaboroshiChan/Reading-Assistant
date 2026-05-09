@@ -10,6 +10,11 @@ exports.SurrealService = void 0;
 const common_1 = require("@nestjs/common");
 const runtime_config_1 = require("../../config/runtime-config");
 const trimTrailingSlash = (value) => value.replace(/\/+$/, '');
+const stripSurrealMetadata = (record) => {
+    const sanitized = { ...record };
+    delete sanitized.id;
+    return sanitized;
+};
 let SurrealService = class SurrealService {
     endpoint = '';
     async onModuleInit() {
@@ -64,13 +69,14 @@ let SurrealService = class SurrealService {
     }
     async putRecord(table, id, record) {
         this.ensureConfigured();
+        const sanitizedRecord = stripSurrealMetadata(record);
         const response = await fetch(`${this.endpoint}/key/${table}/${id}`, {
             method: 'PUT',
             headers: {
                 ...this.createHeaders(),
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(record),
+            body: JSON.stringify(sanitizedRecord),
         });
         if (!response.ok) {
             const body = await response.text().catch(() => '');
@@ -78,7 +84,7 @@ let SurrealService = class SurrealService {
         }
     }
     async putRelationRecord(table, id, inRef, outRef, record) {
-        const relationContent = { ...record };
+        const relationContent = { ...stripSurrealMetadata(record) };
         delete relationContent.in;
         delete relationContent.out;
         const content = JSON.stringify(relationContent);

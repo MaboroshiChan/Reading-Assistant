@@ -141,7 +141,7 @@ const coerceQuizResponse = (value) => {
 /**
  * Orchestrates quiz data collection from LLM.
  */
-const buildQuizData = async (req) => {
+const buildQuizData = async (req, signal) => {
     (0, logger_1.handlerLog)('quiz', 'building LLM prompt', {
         requestId: req.request_id,
         promptVersion: PROMPT_VERSION,
@@ -156,12 +156,12 @@ const buildQuizData = async (req) => {
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPrompt.length,
     });
-    return llmClient.json(userPrompt);
+    return llmClient.json(userPrompt, { signal });
 };
 /**
  * The main handler for quiz generation requests.
  */
-const handleQuiz = async (req) => {
+const handleQuiz = async (req, signal) => {
     (0, logger_1.handlerLog)('quiz', 'request received', {
         requestId: req.request_id,
         promptVersion: PROMPT_VERSION,
@@ -188,14 +188,10 @@ const handleQuiz = async (req) => {
         };
     }
     const started = Date.now();
-    const { data: stream, usage: usagePromise } = await buildQuizData(req);
-    const tappedStream = (async function* () {
-        let text = '';
-        for await (const chunk of stream) {
-            text += chunk;
-            yield chunk;
-        }
-        // Background processing
+    const { data: stream, usage: usagePromise } = await buildQuizData(req, signal);
+    const tappedStream = (0, shared_1.withBufferedStream)(stream, async ({ text, completed }) => {
+        if (!completed)
+            return;
         try {
             const usage = await usagePromise;
             const object = (0, llmService_1.extractJsonFromText)(text);
@@ -218,7 +214,7 @@ const handleQuiz = async (req) => {
         catch (error) {
             console.warn('[quiz] failed to cache response', error);
         }
-    })();
+    });
     return { data: tappedStream, usage: usagePromise };
 };
 exports.handleQuiz = handleQuiz;

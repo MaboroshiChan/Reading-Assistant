@@ -44,6 +44,11 @@ are not requested in the task list):
       "description": "string"
     }
   ],
+  "topic_sentence": {
+    "is_implicit": false,
+    "text": "string",
+    "id": "string|number"
+  },
   "confidence": 0.0
 }
 General instructions:
@@ -80,6 +85,10 @@ General instructions:
   - `name` should be a short, concise label for the tag (1-3 words).
   - `description` should briefly explain why this tag applies to the paragraph (1 sentence).
   - Please provide 1-2 logic tags and 1-3 concept tags.
+- `topic_sentence` identifies the paragraph's topic sentence.
+  - Set `is_implicit` to `true` only if the topic sentence is not explicitly stated.
+  - When explicit, include the sentence `text`.
+  - Prefer a 1-based sentence `id` matching the corresponding entry in `sentences`.
 - Confidence scores are floats between 0 and 1.
 - When a section is not requested, omit that key entirely.
 - If unsure about a value, omit the field instead of guessing.

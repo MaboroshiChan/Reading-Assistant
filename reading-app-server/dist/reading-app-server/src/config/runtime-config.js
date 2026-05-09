@@ -26,7 +26,7 @@ const loadEnvFiles = () => {
 loadEnvFiles();
 const createAppConfig = () => ({
     port: Number(process.env.PORT ?? 8787),
-    model: process.env.MODEL_ID ?? 'gemma-3-27b-it',
+    model: process.env.MODEL_ID ?? 'gemini-2.5-flash',
     timeoutMs: 50_000,
     cacheMax: 500,
     cacheTtlMs: 7 * 24 * 3600_000,
@@ -34,6 +34,7 @@ const createAppConfig = () => ({
     thinking: false,
     temperature: 0.1,
     autoSubmitKnowledgeExtractionWorkflow: process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === '1',
+    requireKnowledgeExtractionCache: process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE === '1',
     surrealUrl: process.env.SURREAL_URL ?? '',
     surrealNamespace: process.env.SURREAL_NS ?? '',
     surrealDatabase: process.env.SURREAL_DB ?? '',

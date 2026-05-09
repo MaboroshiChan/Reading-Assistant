@@ -24,6 +24,9 @@ export class QuizWorkflowRepository {
     if (existingRunId) {
       const existingRun = this.runs.get(existingRunId);
       if (existingRun) {
+        if (existingRun.status === 'failed' || existingRun.status === 'stale') {
+          this.runIdsByIdempotencyKey.delete(input.idempotencyKey);
+        } else {
         workflowLog('run.deduped', {
           workflowKind: existingRun.kind,
           workflowRunId: existingRun.id,
@@ -39,6 +42,7 @@ export class QuizWorkflowRepository {
           run: { ...existingRun, deduped: true },
           deduped: true,
         };
+        }
       }
     }
 

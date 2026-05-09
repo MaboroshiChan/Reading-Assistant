@@ -9,7 +9,7 @@ import type {
 } from '../../packages/contracts/src';
 import { config } from '../services/config';
 import * as cache from '../services/cache';
-import { buildStableCacheKey, hashString } from './shared';
+import { buildStableCacheKey, hashString, withBufferedStream } from './shared';
 import { handlerLog } from './logger';
 import { createLLMClient, extractJsonFromText, type CallReturn } from '../services/llmService';
 
@@ -310,6 +310,7 @@ const buildPrompt = (req: RequestEnvelopeSentenceStructure): string => {
  */
 const buildSentenceStructureData = async (
   req: RequestEnvelopeSentenceStructure,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
@@ -332,7 +333,7 @@ const buildSentenceStructureData = async (
     systemPromptLength: systemPrompt.length,
     userPromptLength: userPrompt.length,
   });
-  return llmClient.json(userPrompt);
+  return llmClient.json(userPrompt, { signal });
 };
 
 /**
@@ -344,6 +345,7 @@ const buildSentenceStructureData = async (
  */
 export const handleSentenceStructure = async (
   req: RequestEnvelopeSentenceStructure,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   //console.log("[DEBUG] handleSentenceStructure starting", req.request_id);
 
@@ -377,17 +379,11 @@ export const handleSentenceStructure = async (
   }
 
   const started = Date.now();
-  const { data: stream, usage: usagePromise } = await buildSentenceStructureData(req);
+  const { data: stream, usage: usagePromise } = await buildSentenceStructureData(req, signal);
 
-  const tappedStream = (async function* () {
-    let text = '';
-    for await (const chunk of stream) {
-      //console.log("[DEBUG] subsentence chunk:", chunk.slice(0, 50));
-      text += chunk;
-      yield chunk;
-    }
+  const tappedStream = withBufferedStream(stream, async ({ text, completed }) => {
+    if (!completed) return;
 
-    // Background processing
     try {
       const usage = await usagePromise;
       const object = extractJsonFromText(text);
@@ -414,7 +410,7 @@ export const handleSentenceStructure = async (
     } catch (error) {
       console.warn('[sentence_structure] failed to process/cache response', error);
     }
-  })();
+  });
 
   return { data: tappedStream, usage: usagePromise };
 };

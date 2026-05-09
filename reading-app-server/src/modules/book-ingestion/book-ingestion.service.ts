@@ -28,6 +28,9 @@ const isNonEmptyString = (value: unknown): value is string =>
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const isBoolean = (value: unknown): value is boolean =>
+  typeof value === 'boolean';
+
 const coerceNonNegativeInteger = (value: unknown, fieldName: string): number => {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
     throw new BadRequestException(`${fieldName} must be a non-negative integer`);
@@ -162,6 +165,9 @@ export class BookIngestionService {
     const chapterTitle = parsed.chapterTitle === undefined
       ? undefined
       : this.requireOptionalString(parsed.chapterTitle, 'chapterTitle');
+    const bookIngestionCompleted = parsed.bookIngestionCompleted === undefined
+      ? undefined
+      : this.requireBoolean(parsed.bookIngestionCompleted, 'bookIngestionCompleted');
 
     bookIngestionLog('request.parsed', {
       bookId,
@@ -172,6 +178,7 @@ export class BookIngestionService {
       sourceHash,
       paragraphCount: Object.keys(pageParagraphs).length,
       hasBookMetadata: bookMetadata !== undefined,
+      bookIngestionCompleted,
     });
 
     return {
@@ -183,6 +190,7 @@ export class BookIngestionService {
       sourceHash,
       pageParagraphs,
       bookMetadata,
+      bookIngestionCompleted,
     };
   }
 
@@ -210,9 +218,10 @@ export class BookIngestionService {
       config.autoSubmitKnowledgeExtractionWorkflow
       && !result.deduped
       && chapterTextAvailable
+      && input.bookIngestionCompleted === true
       && this.knowledgeExtractionWorkflowService
     ) {
-      void this.submitKnowledgeExtractionWorkflowAfterIngestion(result);
+      void this.submitKnowledgeExtractionWorkflowAfterBookIngestion(result.book.bookId);
     }
 
     return {
@@ -229,37 +238,50 @@ export class BookIngestionService {
     };
   }
 
-  private async submitKnowledgeExtractionWorkflowAfterIngestion(
-    result: ReturnType<BookIngestionRepository['upsertPageFragment']>,
-  ): Promise<void> {
+  private async submitKnowledgeExtractionWorkflowAfterBookIngestion(bookId: string): Promise<void> {
     try {
-      const response = this.knowledgeExtractionWorkflowService?.submitKnowledgeExtractionWorkflow({
-        bookId: result.book.bookId,
-        chapterId: result.chapter.chapterId,
-        chapterIndex: result.chapter.chapterIndex,
-        workflowVersion: 'v1',
-        expectedSnapshotVersion: result.book.snapshotVersion,
-        expectedChapterContentHash: result.chapter.chapterContentHash,
+      const book = this.repository.getBook(bookId);
+      if (!book) {
+        return;
+      }
+
+      const chapters = Array.from(book.chapters.values())
+        .filter((chapter) => chapter.chapterTextMaterialized.trim().length > 0)
+        .sort((left, right) => {
+          const chapterDelta = left.chapterIndex - right.chapterIndex;
+          if (chapterDelta !== 0) return chapterDelta;
+          return left.chapterId.localeCompare(right.chapterId);
+        });
+
+      bookIngestionLog('knowledge_extraction_workflow.auto_submit_started', {
+        bookId: book.bookId,
+        snapshotVersion: book.snapshotVersion,
+        chapterCount: chapters.length,
       });
 
-      bookIngestionLog('knowledge_extraction_workflow.auto_submitted', {
-        bookId: result.book.bookId,
-        chapterId: result.chapter.chapterId,
-        chapterIndex: result.chapter.chapterIndex,
-        pageIndex: result.page.pageIndex,
-        snapshotVersion: result.book.snapshotVersion,
-        chapterContentHash: result.chapter.chapterContentHash,
-        workflowRunId: response?.workflowRunId,
-        deduped: response?.deduped,
-      });
+      for (const chapter of chapters) {
+        const response = this.knowledgeExtractionWorkflowService?.submitKnowledgeExtractionWorkflow({
+          bookId: book.bookId,
+          chapterId: chapter.chapterId,
+          chapterIndex: chapter.chapterIndex,
+          workflowVersion: 'v1',
+          expectedSnapshotVersion: book.snapshotVersion,
+          expectedChapterContentHash: chapter.chapterContentHash,
+        });
+
+        bookIngestionLog('knowledge_extraction_workflow.auto_submitted', {
+          bookId: book.bookId,
+          chapterId: chapter.chapterId,
+          chapterIndex: chapter.chapterIndex,
+          snapshotVersion: book.snapshotVersion,
+          chapterContentHash: chapter.chapterContentHash,
+          workflowRunId: response?.workflowRunId,
+          deduped: response?.deduped,
+        });
+      }
     } catch (error) {
       bookIngestionLog('knowledge_extraction_workflow.auto_submit_failed', {
-        bookId: result.book.bookId,
-        chapterId: result.chapter.chapterId,
-        chapterIndex: result.chapter.chapterIndex,
-        pageIndex: result.page.pageIndex,
-        snapshotVersion: result.book.snapshotVersion,
-        chapterContentHash: result.chapter.chapterContentHash,
+        bookId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -353,18 +375,25 @@ export class BookIngestionService {
       });
 
     const chapterSnapshots = await Promise.all(chapters.map(async (chapter) => {
-      const snapshot = this.knowledgeExtractionWorkflowRepository
-        ? await this.knowledgeExtractionWorkflowRepository.buildChapterSnapshot(bookId, chapter.chapterId)
-        : {
-          title: chapter.chapterTitle ?? `Chapter ${chapter.chapterIndex}`,
-          summary: '',
-          people: [],
-          ideas: [],
-          events: [],
-          entities: [],
-          themes: [],
-          relations: [],
-        };
+      const latestResult = this.knowledgeExtractionWorkflowRepository?.getLatestResult(bookId, chapter.chapterId);
+      const snapshot = (
+        latestResult
+        && latestResult.snapshotVersion === book.snapshotVersion
+        && latestResult.chapterContentHash === chapter.chapterContentHash
+      )
+        ? latestResult.result
+        : this.knowledgeExtractionWorkflowRepository
+          ? await this.knowledgeExtractionWorkflowRepository.buildChapterSnapshot(bookId, chapter.chapterId)
+          : {
+            title: chapter.chapterTitle ?? `Chapter ${chapter.chapterIndex}`,
+            summary: '',
+            people: [],
+            ideas: [],
+            events: [],
+            entities: [],
+            themes: [],
+            relations: [],
+          };
 
       return {
         chapterId: chapter.chapterId,
@@ -537,5 +566,12 @@ export class BookIngestionService {
       throw new BadRequestException(`${fieldName} must be a non-empty string when provided`);
     }
     return value.trim();
+  }
+
+  private requireBoolean(value: unknown, fieldName: string): boolean {
+    if (!isBoolean(value)) {
+      throw new BadRequestException(`${fieldName} must be a boolean when provided`);
+    }
+    return value;
   }
 }

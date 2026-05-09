@@ -41,8 +41,8 @@ const sortParagraphEntries = (pageParagraphs) => {
 let BookIngestionRepository = class BookIngestionRepository {
     books = new Map();
     storePath;
-    constructor() {
-        const dataDir = process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR;
+    constructor(dataDirOverride) {
+        const dataDir = dataDirOverride ?? process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR;
         this.storePath = node_path_1.default.join(dataDir, DEFAULT_STORE_FILE);
         this.loadPersistedStore();
     }
@@ -241,6 +241,6 @@ let BookIngestionRepository = class BookIngestionRepository {
 exports.BookIngestionRepository = BookIngestionRepository;
 exports.BookIngestionRepository = BookIngestionRepository = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [])
+    __metadata("design:paramtypes", [String])
 ], BookIngestionRepository);
 //# sourceMappingURL=book-ingestion.repository.js.map

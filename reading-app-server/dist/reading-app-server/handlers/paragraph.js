@@ -167,7 +167,7 @@ exports.buildParagraphPrompt = buildPrompt;
  * @param req - The request envelope.
  * @returns A promise resolving to the call results.
  */
-const buildParagraphData = async (req) => {
+const buildParagraphData = async (req, signal) => {
     const tasks = buildTasks(req);
     (0, logger_1.handlerLog)('paragraph', 'building LLM prompt', {
         requestId: req.request_id,
@@ -188,7 +188,7 @@ const buildParagraphData = async (req) => {
         userPromptLength: userPrompt.length,
         prompt: userPrompt,
     });
-    return llmClient.json(userPrompt);
+    return llmClient.json(userPrompt, { signal });
 };
 /**
  * The main handler for paragraph analysis requests.
@@ -196,7 +196,7 @@ const buildParagraphData = async (req) => {
  * @param req - The request envelope.
  * @returns A promise resolving to the streaming response.
  */
-const handleParagraph = async (req) => {
+const handleParagraph = async (req, signal) => {
     (0, logger_1.handlerLog)('paragraph', 'request received', {
         requestId: req.request_id,
         paragraphId: req.payload.paragraph_id,
@@ -224,14 +224,10 @@ const handleParagraph = async (req) => {
         };
     }
     const started = Date.now();
-    const { data: stream, usage: usagePromise } = await buildParagraphData(req);
-    const tappedStream = (async function* () {
-        let text = '';
-        for await (const chunk of stream) {
-            text += chunk;
-            yield chunk;
-        }
-        // Background processing
+    const { data: stream, usage: usagePromise } = await buildParagraphData(req, signal);
+    const tappedStream = (0, shared_1.withBufferedStream)(stream, async ({ text, completed }) => {
+        if (!completed)
+            return;
         try {
             const usage = await usagePromise;
             const object = coerceParagraphResponse((0, llmService_1.extractJsonFromText)(text));
@@ -253,7 +249,7 @@ const handleParagraph = async (req) => {
         catch (error) {
             console.warn('[paragraph] failed to cache response', error);
         }
-    })();
+    });
     return { data: tappedStream, usage: usagePromise };
 };
 exports.handleParagraph = handleParagraph;
@@ -283,6 +279,11 @@ const coerceParagraphResponse = (value) => {
                 .map(coerceClaim)
                 .filter((item) => item !== null)
             : undefined,
+        sentences: Array.isArray(value.sentences)
+            ? value.sentences
+                .map(coerceSentence)
+                .filter((item) => item !== null)
+            : undefined,
         anchors: Array.isArray(value.anchors)
             ? coerceAnchorArray(value.anchors)
             : undefined,
@@ -299,6 +300,7 @@ const coerceParagraphResponse = (value) => {
                 return acc;
             }, [])
             : undefined,
+        topic_sentence: coerceTopicSentence(value.topic_sentence),
         confidence: asConfidence(value.confidence),
     };
 };
@@ -414,15 +416,54 @@ const mapParagraphResponse = (payload, req) => {
     const summary = shouldInclude('summary')
         ? payload.summary ?? (0, shared_1.summarize)(text)
         : undefined;
+    const sentences = payload.sentences?.length
+        ? payload.sentences
+            .map((sentence) => {
+            const keyWords = sentence.key_words
+                ?.map((item) => {
+                const word = asString(item.word);
+                const color = item.color === 'green' ? 'green' : item.color === 'red' ? 'red' : undefined;
+                if (!word || !color)
+                    return null;
+                return { word, color };
+            })
+                .filter((item) => item !== null);
+            const relation = sentence.relation && (asString(sentence.relation.type) || typeof sentence.relation.targetSentenceId === 'number')
+                ? {
+                    type: asString(sentence.relation.type),
+                    targetSentenceId: typeof sentence.relation.targetSentenceId === 'number' &&
+                        Number.isFinite(sentence.relation.targetSentenceId)
+                        ? Math.trunc(sentence.relation.targetSentenceId)
+                        : undefined,
+                }
+                : undefined;
+            return {
+                function: asString(sentence.function),
+                type: asString(sentence.type),
+                mood: asString(sentence.mood),
+                purpose: asString(sentence.purpose),
+                relation,
+                key_words: keyWords?.length ? keyWords : undefined,
+            };
+        })
+            .filter((sentence) => sentence.function ||
+            sentence.type ||
+            sentence.mood ||
+            sentence.purpose ||
+            sentence.relation ||
+            sentence.key_words?.length)
+        : undefined;
     const anchorList = anchorIndex.size ? (0, shared_1.sortAnchors)(Array.from(anchorIndex.values())) : undefined;
     return {
         summary,
         roles,
         rhetoric,
         claims,
+        sentences: sentences?.length ? sentences : undefined,
         anchors: anchorList,
         tags: shouldInclude('tags') ? payload.tags : undefined,
         confidence: payload.confidence,
+        topic_sentence: payload.topic_sentence,
     };
 };
 /**
@@ -554,6 +595,62 @@ const coerceClaim = (value) => {
                 .map(asString)
                 .filter((id) => typeof id === 'string')
             : undefined,
+    };
+};
+const coerceSentence = (value) => {
+    if (!isRecord(value))
+        return null;
+    const keyWords = Array.isArray(value.key_words)
+        ? value.key_words
+            .map((item) => {
+            if (!isRecord(item))
+                return null;
+            return {
+                word: asString(item.word),
+                color: asString(item.color),
+            };
+        })
+            .filter((item) => item !== null)
+        : undefined;
+    const relation = isRecord(value.relation)
+        ? {
+            type: asString(value.relation.type),
+            targetSentenceId: typeof value.relation.targetSentenceId === 'number' && Number.isFinite(value.relation.targetSentenceId)
+                ? Math.trunc(value.relation.targetSentenceId)
+                : undefined,
+        }
+        : undefined;
+    const sentence = {
+        function: asString(value.function),
+        type: asString(value.type),
+        mood: asString(value.mood),
+        purpose: asString(value.purpose),
+        relation,
+        key_words: keyWords,
+    };
+    if (!sentence.function &&
+        !sentence.type &&
+        !sentence.mood &&
+        !sentence.purpose &&
+        !sentence.relation &&
+        !sentence.key_words?.length) {
+        return null;
+    }
+    return sentence;
+};
+const coerceTopicSentence = (value) => {
+    if (!isRecord(value))
+        return undefined;
+    const isImplicit = typeof value.is_implicit === 'boolean' ? value.is_implicit : undefined;
+    const text = asString(value.text);
+    const id = typeof value.id === 'string' || typeof value.id === 'number' ? value.id : undefined;
+    if (isImplicit === undefined && !text && id === undefined) {
+        return undefined;
+    }
+    return {
+        is_implicit: isImplicit,
+        text,
+        id,
     };
 };
 /** Normalizes polarity values. */

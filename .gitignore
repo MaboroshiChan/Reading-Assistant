@@ -6,3 +6,5 @@ node_modules/
 /.VSCodeCounter
 reading-app-server/.env
 resource/LLM_response/
+reading-app-server/data/surrealdb/
+reading-app-server/log/

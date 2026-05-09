@@ -208,6 +208,17 @@ export interface AnalyzeParagraphData {
   roles?: ParagraphRole[];
   rhetoric?: ParagraphRhetoric[];
   claims?: ParagraphClaim[];
+  sentences?: Array<{
+    function?: string;
+    type?: string;
+    mood?: string;
+    purpose?: string;
+    relation?: {
+      type?: string;
+      targetSentenceId?: number;
+    };
+    key_words?: Array<{ word: string; color: 'red' | 'green' }>;
+  }>;
   anchors?: Anchor[];
   tags?: ParagraphTag[];
   confidence?: number; // aggregate
@@ -234,6 +245,10 @@ export interface ModalMarker { type: 'hedge' | 'necessity' | 'possibility' | 'ce
 export interface AnalyzeSentenceData {
   semantic_roles?: SentenceRole[];
   discourse_function?: string; // e.g., thesis|support|counter|definition|example|...
+  function?: string;
+  type?: string;
+  mood?: string;
+  purpose?: string;
   dependency_light?: DependencyLight;
   modal_markers?: ModalMarker[];
   anchors?: Anchor[];

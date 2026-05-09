@@ -309,7 +309,7 @@ const buildPrompt = (req) => {
     ];
     return sections.join('\n');
 };
-const buildKnowledgeExtractionData = async (req) => {
+const buildKnowledgeExtractionData = async (req, signal) => {
     (0, logger_1.handlerLog)('knowledge_extraction', 'building LLM prompt', {
         requestId: req.request_id,
         chapterId: req.payload.chapter_id,
@@ -328,9 +328,9 @@ const buildKnowledgeExtractionData = async (req) => {
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPrompt.length,
     });
-    return llmClient.json(userPrompt);
+    return llmClient.json(userPrompt, { signal });
 };
-const handleKnowledgeExtraction = async (req) => {
+const handleKnowledgeExtraction = async (req, signal) => {
     (0, logger_1.handlerLog)('knowledge_extraction', 'request received', {
         requestId: req.request_id,
         chapterId: req.payload.chapter_id,
@@ -359,13 +359,10 @@ const handleKnowledgeExtraction = async (req) => {
         };
     }
     const started = Date.now();
-    const { data: stream, usage: usagePromise } = await buildKnowledgeExtractionData(req);
-    const tappedStream = (async function* () {
-        let text = '';
-        for await (const chunk of stream) {
-            text += chunk;
-            yield chunk;
-        }
+    const { data: stream, usage: usagePromise } = await buildKnowledgeExtractionData(req, signal);
+    const tappedStream = (0, shared_1.withBufferedStream)(stream, async ({ text, completed }) => {
+        if (!completed)
+            return;
         try {
             const usage = await usagePromise;
             const raw = (0, llmService_1.extractJsonFromText)(text);
@@ -398,7 +395,7 @@ const handleKnowledgeExtraction = async (req) => {
             };
             cache.set(cacheKey, response, config_1.config.cacheTtlMs);
         }
-    })();
+    });
     return { data: tappedStream, usage: usagePromise };
 };
 exports.handleKnowledgeExtraction = handleKnowledgeExtraction;

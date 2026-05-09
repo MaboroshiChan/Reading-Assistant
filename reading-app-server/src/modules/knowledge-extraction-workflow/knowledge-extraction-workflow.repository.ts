@@ -25,6 +25,7 @@ import type {
 import { workflowLog } from '../workflow.logger';
 import { SurrealService } from '../surrealDB/surrealdb.service';
 import type {
+  PageExtractionCacheRecord,
   KnowledgeExtractionWorkflowResultPayload,
   KnowledgeExtractionWorkflowRunRecord,
   KnowledgeExtractionWorkflowStoredResult,
@@ -44,6 +45,7 @@ type KnowledgeNodeType = KnowledgeRelation['from_type'];
 type PersistTable =
   | 'workflow_run'
   | 'chapter_knowledge_snapshot'
+  | 'page_knowledge_extraction_cache'
   | 'book'
   | 'chapter'
   | 'person'
@@ -238,6 +240,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
   private readonly runs = new Map<string, KnowledgeExtractionWorkflowRunRecord>();
   private readonly runIdsByIdempotencyKey = new Map<string, string>();
   private readonly latestResultsByChapter = new Map<string, KnowledgeExtractionWorkflowStoredResult>();
+  private readonly pageExtractionsByCacheKey = new Map<string, PageExtractionCacheRecord>();
 
   private readonly books = new Map<string, BookGraphRecord>();
   private readonly chapters = new Map<string, ChapterGraphRecord>();
@@ -455,6 +458,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     const statements = [
       'DEFINE TABLE IF NOT EXISTS workflow_run SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS chapter_knowledge_snapshot SCHEMALESS;',
+      'DEFINE TABLE IF NOT EXISTS page_knowledge_extraction_cache SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS book SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS chapter SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS person SCHEMALESS;',
@@ -471,10 +475,24 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
   }
 
   async upsertPageExtraction(input: UpsertPageExtractionInput): Promise<ChapterCounts> {
+    return this.writePageExtraction(input, false);
+  }
+
+  async replaceChapterExtraction(input: UpsertPageExtractionInput): Promise<ChapterCounts> {
+    return this.writePageExtraction(input, true);
+  }
+
+  private async writePageExtraction(
+    input: UpsertPageExtractionInput,
+    replaceChapter: boolean,
+  ): Promise<ChapterCounts> {
     const persistBatch = new Map<string, { table: PersistTable; id: string; record: object }>();
     const bookRecord = this.upsertBook(input.bookId, persistBatch);
     const chapterRecord = this.upsertChapter(input, persistBatch);
     this.upsertPartOf(bookRecord, chapterRecord, persistBatch);
+    if (replaceChapter) {
+      await this.clearChapterKnowledge(chapterRecord.recordId);
+    }
 
     const remap = this.createEmptyIdRemap();
 
@@ -524,6 +542,61 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
 
     await this.persistBatch(persistBatch);
     return this.countChapter(chapterRecord.recordId);
+  }
+
+  getCachedPageExtraction(
+    bookId: string,
+    chapterId: string,
+    pageIndex: number,
+    sourceHash: string,
+    chapterContentHash: string,
+    promptVersion: string,
+  ): AnalyzeKnowledgeExtractionData | null {
+    const cacheKey = this.makePageExtractionCacheKey(
+      bookId,
+      chapterId,
+      pageIndex,
+      sourceHash,
+      chapterContentHash,
+      promptVersion,
+    );
+    return this.pageExtractionsByCacheKey.get(cacheKey)?.extraction ?? null;
+  }
+
+  setCachedPageExtraction(args: {
+    bookId: string;
+    chapterId: string;
+    pageIndex: number;
+    sourceHash: string;
+    chapterContentHash: string;
+    promptVersion: string;
+    extraction: AnalyzeKnowledgeExtractionData;
+  }): PageExtractionCacheRecord {
+    const cacheKey = this.makePageExtractionCacheKey(
+      args.bookId,
+      args.chapterId,
+      args.pageIndex,
+      args.sourceHash,
+      args.chapterContentHash,
+      args.promptVersion,
+    );
+    const now = new Date().toISOString();
+    const existing = this.pageExtractionsByCacheKey.get(cacheKey);
+    const record: PageExtractionCacheRecord = {
+      cacheKey,
+      bookId: args.bookId,
+      chapterId: args.chapterId,
+      pageIndex: args.pageIndex,
+      sourceHash: args.sourceHash,
+      chapterContentHash: args.chapterContentHash,
+      promptVersion: args.promptVersion,
+      extraction: args.extraction,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.pageExtractionsByCacheKey.set(cacheKey, record);
+    this.schedulePersist(() => this.persistRecord('page_knowledge_extraction_cache', cacheKey, record));
+    return record;
   }
 
   async buildChapterSnapshot(bookId: string, chapterId: string): Promise<AnalyzeKnowledgeExtractionData> {
@@ -877,6 +950,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     const [
       workflowRuns,
       snapshots,
+      pageCaches,
       books,
       chapters,
       people,
@@ -890,6 +964,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     ] = await Promise.all([
       this.surrealService.selectTable<KnowledgeExtractionWorkflowRunRecord>('workflow_run'),
       this.surrealService.selectTable<KnowledgeExtractionWorkflowStoredResult>('chapter_knowledge_snapshot'),
+      this.surrealService.selectTable<PageExtractionCacheRecord>('page_knowledge_extraction_cache'),
       this.surrealService.selectTable<BookGraphRecord>('book'),
       this.surrealService.selectTable<ChapterGraphRecord>('chapter'),
       this.surrealService.selectTable<PersonGraphRecord>('person'),
@@ -905,6 +980,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     this.runs.clear();
     this.runIdsByIdempotencyKey.clear();
     this.latestResultsByChapter.clear();
+    this.pageExtractionsByCacheKey.clear();
     this.books.clear();
     this.chapters.clear();
     this.chaptersByKey.clear();
@@ -919,6 +995,9 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     this.relationIdsByChapter.clear();
     this.partOfEdges.clear();
 
+    for (const pageCache of pageCaches) {
+      this.pageExtractionsByCacheKey.set(pageCache.cacheKey, pageCache);
+    }
     for (const book of books) this.books.set(book.recordId, book);
     for (const chapter of chapters) {
       this.chapters.set(chapter.recordId, chapter);
@@ -1452,6 +1531,25 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     return counts;
   }
 
+  private async clearChapterKnowledge(chapterRecordId: string): Promise<void> {
+    const appearanceIds = Array.from(this.appearanceIdsByChapter.get(chapterRecordId) ?? []);
+    const relationIds = Array.from(this.relationIdsByChapter.get(chapterRecordId) ?? []);
+
+    for (const appearanceId of appearanceIds) {
+      this.appearances.delete(appearanceId);
+    }
+    for (const relationId of relationIds) {
+      this.relations.delete(relationId);
+    }
+
+    this.appearanceIdsByChapter.delete(chapterRecordId);
+    this.relationIdsByChapter.delete(chapterRecordId);
+
+    if (!this.surrealService) return;
+    await this.deleteRecords('appears_in', appearanceIds);
+    await this.deleteRecords('related_to', relationIds);
+  }
+
   private buildGlobalPeople(
     appearances: NodeAppearanceRecord[],
     chapterByRecordId: Map<string, ChapterGraphRecord>,
@@ -1952,6 +2050,25 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     return `chapter_snapshot_${encodeSegment(bookId)}_${encodeSegment(chapterId)}`;
   }
 
+  private makePageExtractionCacheKey(
+    bookId: string,
+    chapterId: string,
+    pageIndex: number,
+    sourceHash: string,
+    chapterContentHash: string,
+    promptVersion: string,
+  ): string {
+    return [
+      'page_cache',
+      encodeSegment(bookId),
+      encodeSegment(chapterId),
+      pageIndex,
+      encodeSegment(sourceHash),
+      encodeSegment(chapterContentHash),
+      encodeSegment(promptVersion),
+    ].join('_');
+  }
+
   private makeRecordRef(table: string, recordId: string): string {
     return `${table}:${recordId}`;
   }
@@ -2060,6 +2177,13 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     for (const entry of persistBatch.values()) {
       await this.persistRecord(entry.table, entry.id, entry.record);
     }
+  }
+
+  private async deleteRecords(table: PersistTable, ids: string[]): Promise<void> {
+    if (!this.surrealService || ids.length === 0) return;
+    await this.surrealService.query<unknown>(
+      ids.map((id) => `DELETE ONLY ${table}:${id};`).join('\n'),
+    );
   }
 
   private schedulePersist(task: () => Promise<void>): void {

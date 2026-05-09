@@ -13,7 +13,7 @@ import type {
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { createLLMClient, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
-import { buildStableCacheKey, makeAnchor, sortAnchors } from './shared';
+import { buildStableCacheKey, makeAnchor, sortAnchors, withBufferedStream } from './shared';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'sentence';
@@ -249,6 +249,7 @@ const buildPrompt = (req: RequestEnvelopeSentence): string => {
  */
 const buildSentenceData = async (
   req: RequestEnvelopeSentence,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
@@ -272,7 +273,7 @@ const buildSentenceData = async (
     userPromptLength: userPrompt.length,
     prompt: userPrompt,
   });
-  return llmClient.json(userPrompt);
+  return llmClient.json(userPrompt, { signal });
 };
 
 /**
@@ -284,6 +285,7 @@ const buildSentenceData = async (
  */
 export const handleSentence = async (
   req: RequestEnvelopeSentence,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   handlerLog('sentence', 'request received', {
     requestId: req.request_id,
@@ -312,16 +314,11 @@ export const handleSentence = async (
   }
 
   const started = Date.now();
-  const { data: stream, usage: usagePromise } = await buildSentenceData(req);
+  const { data: stream, usage: usagePromise } = await buildSentenceData(req, signal);
 
-  const tappedStream = (async function* () {
-    let text = '';
-    for await (const chunk of stream) {
-      text += chunk;
-      yield chunk;
-    }
+  const tappedStream = withBufferedStream(stream, async ({ text, completed }) => {
+    if (!completed) return;
 
-    // Background processing: parse, map, and cache
     try {
       const usage = await usagePromise;
       const object = coerceSentenceResponse(extractJsonFromText(text));
@@ -343,7 +340,7 @@ export const handleSentence = async (
     } catch (error) {
       console.warn('[sentence] failed to cache response', error);
     }
-  })();
+  });
 
   return { data: tappedStream, usage: usagePromise };
 };
@@ -458,6 +455,7 @@ const mapSentenceResponse = (
 
   // Map 'discourse_function' task to the new classification fields
   const classification = shouldInclude('discourse_function') ? {
+    discourse_function: payload.function,
     function: payload.function,
     type: payload.type,
     mood: payload.mood,

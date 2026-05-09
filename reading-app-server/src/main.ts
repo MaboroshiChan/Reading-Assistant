@@ -23,7 +23,7 @@ export const createApp = async (): Promise<INestApplication> => {
       'Idempotency-Key',
       'X-App-Client',
     ],
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
   return app;

@@ -59,6 +59,23 @@ export const buildStableCacheKey = (prefix: string, version: string, value: unkn
   return `${prefix}:${version}:${hashString(stableSerialize(value))}`;
 };
 
+export const withBufferedStream = (
+  stream: AsyncIterable<string>,
+  finalize: (args: { text: string; completed: boolean }) => Promise<void> | void,
+): AsyncIterable<string> => (async function* () {
+  let text = '';
+  let completed = false;
+  try {
+    for await (const chunk of stream) {
+      text += chunk;
+      yield chunk;
+    }
+    completed = true;
+  } finally {
+    await finalize({ text, completed });
+  }
+})();
+
 /**
  * Sorts an array of anchors by their start and end positions.
  *
