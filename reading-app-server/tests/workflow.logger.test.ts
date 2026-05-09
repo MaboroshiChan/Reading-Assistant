@@ -2,16 +2,19 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { BookContextService } from '../src/modules/book-ingestion/book-context.service';
 import { BookIngestionRepository } from '../src/modules/book-ingestion/book-ingestion.repository';
 import { KnowledgeExtractionWorkflowRepository } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.repository';
 import { KnowledgeExtractionWorkflowService } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.service';
 import { QuizWorkflowRepository } from '../src/modules/quiz-workflow/quiz-workflow.repository';
 import { QuizWorkflowService } from '../src/modules/quiz-workflow/quiz-workflow.service';
+import { WorkflowQueueService } from '../src/modules/workflow-queue/workflow-queue.service';
 import { flushWorkflowLogs } from '../src/modules/workflow.logger';
 
 describe('workflow logging', () => {
   afterEach(async () => {
     delete process.env.WORKFLOW_LOG_FILE;
+    delete process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE;
     vi.restoreAllMocks();
     await flushWorkflowLogs();
   });
@@ -20,6 +23,7 @@ describe('workflow logging', () => {
     const logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workflow-log-'));
     const logFile = path.join(logDir, 'workflows.log');
     process.env.WORKFLOW_LOG_FILE = logFile;
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
     const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     const bookRepository = new BookIngestionRepository();
@@ -36,10 +40,21 @@ describe('workflow logging', () => {
       },
     });
 
-    const quizService = new QuizWorkflowService(bookRepository, new QuizWorkflowRepository());
+    const queueService = new WorkflowQueueService();
+    const knowledgeRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, knowledgeRepository);
+    const quizService = new QuizWorkflowService(
+      bookRepository,
+      bookContextService,
+      knowledgeRepository,
+      new QuizWorkflowRepository(),
+      queueService,
+    );
     const knowledgeService = new KnowledgeExtractionWorkflowService(
       bookRepository,
-      new KnowledgeExtractionWorkflowRepository(),
+      bookContextService,
+      knowledgeRepository,
+      queueService,
     );
 
     vi.spyOn(quizService as never, 'generateQuiz').mockResolvedValue({
@@ -66,6 +81,18 @@ describe('workflow logging', () => {
       relations: [],
     });
 
+    const parsedKnowledgeRequest = knowledgeService.parseSubmitRequest(JSON.stringify({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+    }));
+    const knowledgeSubmit = knowledgeService.submitKnowledgeExtractionWorkflow(parsedKnowledgeRequest);
+
+    await vi.waitFor(() => {
+      expect(knowledgeService.getWorkflowStatus(knowledgeSubmit.workflowRunId).status).toBe('completed');
+    });
+
     const parsedQuizRequest = quizService.parseSubmitRequest(JSON.stringify({
       bookId: 'book-1',
       chapterId: 'chapter-1',
@@ -76,17 +103,8 @@ describe('workflow logging', () => {
 
     const dedupedQuizSubmit = quizService.submitQuizWorkflow(parsedQuizRequest);
 
-    const parsedKnowledgeRequest = knowledgeService.parseSubmitRequest(JSON.stringify({
-      bookId: 'book-1',
-      chapterId: 'chapter-1',
-      chapterIndex: 1,
-      workflowVersion: 'v1',
-    }));
-    const knowledgeSubmit = knowledgeService.submitKnowledgeExtractionWorkflow(parsedKnowledgeRequest);
-
     await vi.waitFor(() => {
       expect(quizService.getWorkflowStatus(quizSubmit.workflowRunId).status).toBe('completed');
-      expect(knowledgeService.getWorkflowStatus(knowledgeSubmit.workflowRunId).status).toBe('completed');
     });
 
     quizService.getWorkflowResult(quizSubmit.workflowRunId);

@@ -32,6 +32,9 @@ let BookIngestionController = class BookIngestionController {
     getChapter(bookId, chapterId) {
         return this.bookIngestionService.getChapter(bookId, chapterId);
     }
+    getBookModel(bookId) {
+        return this.bookIngestionService.getBookModel(bookId);
+    }
     getPage(bookId, chapterId, rawPageIndex) {
         return this.bookIngestionService.getPage(bookId, chapterId, this.bookIngestionService.parsePageIndex(rawPageIndex));
     }
@@ -55,6 +58,13 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Object)
 ], BookIngestionController.prototype, "getChapter", null);
+__decorate([
+    (0, common_1.Get)(':bookId/model'),
+    __param(0, (0, common_1.Param)('bookId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BookIngestionController.prototype, "getBookModel", null);
 __decorate([
     (0, common_1.Get)(':bookId/chapters/:chapterId/pages/:pageIndex'),
     __param(0, (0, common_1.Param)('bookId')),

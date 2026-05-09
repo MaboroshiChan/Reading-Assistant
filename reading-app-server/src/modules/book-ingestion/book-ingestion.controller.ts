@@ -6,6 +6,7 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
+import type { GetBookModelResponseDto } from './book-model.dto';
 import type {
   GetChapterResponseDto,
   GetPageResponseDto,
@@ -44,6 +45,13 @@ export class BookIngestionController {
     @Param('chapterId') chapterId: string,
   ): GetChapterResponseDto {
     return this.bookIngestionService.getChapter(bookId, chapterId);
+  }
+
+  @Get(':bookId/model')
+  getBookModel(
+    @Param('bookId') bookId: string,
+  ): Promise<GetBookModelResponseDto> {
+    return this.bookIngestionService.getBookModel(bookId);
   }
 
   @Get(':bookId/chapters/:chapterId/pages/:pageIndex')

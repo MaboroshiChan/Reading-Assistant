@@ -20,21 +20,26 @@ let QuizWorkflowRepository = class QuizWorkflowRepository {
         if (existingRunId) {
             const existingRun = this.runs.get(existingRunId);
             if (existingRun) {
-                (0, workflow_logger_1.workflowLog)('run.deduped', {
-                    workflowKind: existingRun.kind,
-                    workflowRunId: existingRun.id,
-                    dedupedWorkflowRunId: existingRun.id,
-                    bookId: existingRun.bookId,
-                    chapterId: existingRun.chapterId,
-                    chapterIndex: existingRun.chapterIndex,
-                    workflowVersion: existingRun.workflowVersion,
-                    idempotencyKey: existingRun.idempotencyKey,
-                    status: existingRun.status,
-                });
-                return {
-                    run: { ...existingRun, deduped: true },
-                    deduped: true,
-                };
+                if (existingRun.status === 'failed' || existingRun.status === 'stale') {
+                    this.runIdsByIdempotencyKey.delete(input.idempotencyKey);
+                }
+                else {
+                    (0, workflow_logger_1.workflowLog)('run.deduped', {
+                        workflowKind: existingRun.kind,
+                        workflowRunId: existingRun.id,
+                        dedupedWorkflowRunId: existingRun.id,
+                        bookId: existingRun.bookId,
+                        chapterId: existingRun.chapterId,
+                        chapterIndex: existingRun.chapterIndex,
+                        workflowVersion: existingRun.workflowVersion,
+                        idempotencyKey: existingRun.idempotencyKey,
+                        status: existingRun.status,
+                    });
+                    return {
+                        run: { ...existingRun, deduped: true },
+                        deduped: true,
+                    };
+                }
             }
         }
         const timestamp = new Date().toISOString();

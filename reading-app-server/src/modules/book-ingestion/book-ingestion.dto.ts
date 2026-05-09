@@ -13,6 +13,7 @@ export interface UpsertBookPageFragmentRequestDto {
   sourceHash: string;
   pageParagraphs: Record<string, string>;
   bookMetadata?: Record<string, unknown>;
+  bookIngestionCompleted?: boolean;
 }
 
 export interface UpsertBookPageFragmentResponseDto {

@@ -10,7 +10,7 @@ import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { createLLMClient, extractJsonFromText, type CallReturn } from '../services/llmService';
 import { resolvePromptPath } from '../src/utils/prompt-path';
-import { buildStableCacheKey } from './shared';
+import { buildStableCacheKey, withBufferedStream } from './shared';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'quiz';
@@ -128,6 +128,7 @@ const coerceQuizResponse = (value: unknown): QuizQuestion[] => {
  */
 const buildQuizData = async (
   req: RequestEnvelopeQuiz,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   handlerLog('quiz', 'building LLM prompt', {
     requestId: req.request_id,
@@ -144,7 +145,7 @@ const buildQuizData = async (
     userPromptLength: userPrompt.length,
   });
 
-  return llmClient.json(userPrompt);
+  return llmClient.json(userPrompt, { signal });
 };
 
 /**
@@ -152,6 +153,7 @@ const buildQuizData = async (
  */
 export const handleQuiz = async (
   req: RequestEnvelopeQuiz,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   handlerLog('quiz', 'request received', {
     requestId: req.request_id,
@@ -182,16 +184,11 @@ export const handleQuiz = async (
   }
 
   const started = Date.now();
-  const { data: stream, usage: usagePromise } = await buildQuizData(req);
+  const { data: stream, usage: usagePromise } = await buildQuizData(req, signal);
 
-  const tappedStream = (async function* () {
-    let text = '';
-    for await (const chunk of stream) {
-      text += chunk;
-      yield chunk;
-    }
+  const tappedStream = withBufferedStream(stream, async ({ text, completed }) => {
+    if (!completed) return;
 
-    // Background processing
     try {
       const usage = await usagePromise;
       const object = extractJsonFromText(text);
@@ -214,7 +211,7 @@ export const handleQuiz = async (
     } catch (error) {
       console.warn('[quiz] failed to cache response', error);
     }
-  })();
+  });
 
   return { data: tappedStream, usage: usagePromise };
 };

@@ -14,6 +14,7 @@ import {
   makeAnchor,
   sortAnchors,
   summarize,
+  withBufferedStream,
 } from './shared';
 import { handlerLog } from './logger';
 
@@ -52,13 +53,35 @@ interface LLMParagraphClaim {
   entity_links?: string[];
 }
 
+interface LLMParagraphSentenceRelation {
+  type?: string;
+  targetSentenceId?: number;
+}
+
+interface LLMParagraphSentence {
+  function?: string;
+  type?: string;
+  mood?: string;
+  purpose?: string;
+  relation?: LLMParagraphSentenceRelation;
+  key_words?: Array<{ word?: string; color?: 'red' | 'green' | string }>;
+}
+
+interface LLMParagraphTopicSentence {
+  is_implicit?: boolean;
+  text?: string;
+  id?: string | number;
+}
+
 interface LLMParagraphResponse {
   summary?: string;
   roles?: LLMParagraphRole[];
   rhetoric?: LLMParagraphRhetoric[];
   claims?: LLMParagraphClaim[];
+  sentences?: LLMParagraphSentence[];
   anchors?: LLMParagraphAnchor[];
   tags?: { name: string; type: 'logic' | 'concept'; description?: string }[];
+  topic_sentence?: LLMParagraphTopicSentence;
   confidence?: number;
 }
 
@@ -190,6 +213,7 @@ const buildPrompt = (req: RequestEnvelopeParagraph): string => {
  */
 const buildParagraphData = async (
   req: RequestEnvelopeParagraph,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   const tasks = buildTasks(req);
 
@@ -212,7 +236,7 @@ const buildParagraphData = async (
     userPromptLength: userPrompt.length,
     prompt: userPrompt,
   });
-  return llmClient.json(userPrompt);
+  return llmClient.json(userPrompt, { signal });
 };
 
 /**
@@ -223,6 +247,7 @@ const buildParagraphData = async (
  */
 export const handleParagraph = async (
   req: RequestEnvelopeParagraph,
+  signal?: AbortSignal,
 ): Promise<CallReturn<string>> => {
   handlerLog('paragraph', 'request received', {
     requestId: req.request_id,
@@ -252,16 +277,11 @@ export const handleParagraph = async (
   }
 
   const started = Date.now();
-  const { data: stream, usage: usagePromise } = await buildParagraphData(req);
+  const { data: stream, usage: usagePromise } = await buildParagraphData(req, signal);
 
-  const tappedStream = (async function* () {
-    let text = '';
-    for await (const chunk of stream) {
-      text += chunk;
-      yield chunk;
-    }
+  const tappedStream = withBufferedStream(stream, async ({ text, completed }) => {
+    if (!completed) return;
 
-    // Background processing
     try {
       const usage = await usagePromise;
       const object = coerceParagraphResponse(extractJsonFromText(text));
@@ -283,7 +303,7 @@ export const handleParagraph = async (
     } catch (error) {
       console.warn('[paragraph] failed to cache response', error);
     }
-  })();
+  });
 
   return { data: tappedStream, usage: usagePromise };
 };
@@ -315,6 +335,11 @@ const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
         .map(coerceClaim)
         .filter((item): item is LLMParagraphClaim => item !== null)
       : undefined,
+    sentences: Array.isArray(value.sentences)
+      ? value.sentences
+        .map(coerceSentence)
+        .filter((item): item is LLMParagraphSentence => item !== null)
+      : undefined,
     anchors: Array.isArray(value.anchors)
       ? coerceAnchorArray(value.anchors)
       : undefined,
@@ -330,6 +355,7 @@ const coerceParagraphResponse = (value: unknown): LLMParagraphResponse => {
         return acc;
       }, [])
       : undefined,
+    topic_sentence: coerceTopicSentence(value.topic_sentence),
     confidence: asConfidence(value.confidence),
   };
 };
@@ -478,6 +504,50 @@ const mapParagraphResponse = (
     ? payload.summary ?? summarize(text)
     : undefined;
 
+  const sentences = payload.sentences?.length
+    ? payload.sentences
+      .map((sentence) => {
+        const keyWords = sentence.key_words
+          ?.map((item) => {
+            const word = asString(item.word);
+            const color = item.color === 'green' ? 'green' : item.color === 'red' ? 'red' : undefined;
+            if (!word || !color) return null;
+            return { word, color };
+          })
+          .filter((item): item is { word: string; color: 'red' | 'green' } => item !== null);
+
+        const relation = sentence.relation && (
+          asString(sentence.relation.type) || typeof sentence.relation.targetSentenceId === 'number'
+        )
+          ? {
+            type: asString(sentence.relation.type),
+            targetSentenceId:
+              typeof sentence.relation.targetSentenceId === 'number' &&
+              Number.isFinite(sentence.relation.targetSentenceId)
+                ? Math.trunc(sentence.relation.targetSentenceId)
+                : undefined,
+          }
+          : undefined;
+
+        return {
+          function: asString(sentence.function),
+          type: asString(sentence.type),
+          mood: asString(sentence.mood),
+          purpose: asString(sentence.purpose),
+          relation,
+          key_words: keyWords?.length ? keyWords : undefined,
+        };
+      })
+      .filter((sentence) =>
+        sentence.function ||
+        sentence.type ||
+        sentence.mood ||
+        sentence.purpose ||
+        sentence.relation ||
+        sentence.key_words?.length,
+      )
+    : undefined;
+
   const anchorList = anchorIndex.size ? sortAnchors(Array.from(anchorIndex.values())) : undefined;
 
   return {
@@ -485,9 +555,11 @@ const mapParagraphResponse = (
     roles,
     rhetoric,
     claims,
+    sentences: sentences?.length ? sentences : undefined,
     anchors: anchorList,
     tags: shouldInclude('tags') ? payload.tags : undefined,
     confidence: payload.confidence,
+    topic_sentence: payload.topic_sentence,
   };
 };
 
@@ -626,6 +698,72 @@ const coerceClaim = (value: unknown): LLMParagraphClaim | null => {
         .map(asString)
         .filter((id): id is string => typeof id === 'string')
       : undefined,
+  };
+};
+
+const coerceSentence = (value: unknown): LLMParagraphSentence | null => {
+  if (!isRecord(value)) return null;
+
+  const keyWords = Array.isArray(value.key_words)
+    ? value.key_words
+      .map((item) => {
+        if (!isRecord(item)) return null;
+        return {
+          word: asString(item.word),
+          color: asString(item.color),
+        };
+      })
+      .filter((item) => item !== null)
+    : undefined;
+
+  const relation = isRecord(value.relation)
+    ? {
+      type: asString(value.relation.type),
+      targetSentenceId:
+        typeof value.relation.targetSentenceId === 'number' && Number.isFinite(value.relation.targetSentenceId)
+          ? Math.trunc(value.relation.targetSentenceId)
+          : undefined,
+    }
+    : undefined;
+
+  const sentence: LLMParagraphSentence = {
+    function: asString(value.function),
+    type: asString(value.type),
+    mood: asString(value.mood),
+    purpose: asString(value.purpose),
+    relation,
+    key_words: keyWords,
+  };
+
+  if (
+    !sentence.function &&
+    !sentence.type &&
+    !sentence.mood &&
+    !sentence.purpose &&
+    !sentence.relation &&
+    !sentence.key_words?.length
+  ) {
+    return null;
+  }
+
+  return sentence;
+};
+
+const coerceTopicSentence = (value: unknown): LLMParagraphTopicSentence | undefined => {
+  if (!isRecord(value)) return undefined;
+
+  const isImplicit = typeof value.is_implicit === 'boolean' ? value.is_implicit : undefined;
+  const text = asString(value.text);
+  const id = typeof value.id === 'string' || typeof value.id === 'number' ? value.id : undefined;
+
+  if (isImplicit === undefined && !text && id === undefined) {
+    return undefined;
+  }
+
+  return {
+    is_implicit: isImplicit,
+    text,
+    id,
   };
 };
 

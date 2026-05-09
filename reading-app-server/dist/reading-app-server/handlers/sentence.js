@@ -224,7 +224,7 @@ exports.buildSentencePrompt = buildPrompt;
  * @param req - The request envelope.
  * @returns A promise resolving to the LLM call return (stream and usage).
  */
-const buildSentenceData = async (req) => {
+const buildSentenceData = async (req, signal) => {
     const tasks = buildTasks(req);
     (0, logger_1.handlerLog)('sentence', 'building LLM payload', {
         requestId: req.request_id,
@@ -246,7 +246,7 @@ const buildSentenceData = async (req) => {
         userPromptLength: userPrompt.length,
         prompt: userPrompt,
     });
-    return llmClient.json(userPrompt);
+    return llmClient.json(userPrompt, { signal });
 };
 /**
  * The main handler for sentence analysis requests.
@@ -255,7 +255,7 @@ const buildSentenceData = async (req) => {
  * @param req - The request envelope.
  * @returns A promise resolving to the streaming response.
  */
-const handleSentence = async (req) => {
+const handleSentence = async (req, signal) => {
     (0, logger_1.handlerLog)('sentence', 'request received', {
         requestId: req.request_id,
         promptVersion: PROMPT_VERSION,
@@ -282,14 +282,10 @@ const handleSentence = async (req) => {
         };
     }
     const started = Date.now();
-    const { data: stream, usage: usagePromise } = await buildSentenceData(req);
-    const tappedStream = (async function* () {
-        let text = '';
-        for await (const chunk of stream) {
-            text += chunk;
-            yield chunk;
-        }
-        // Background processing: parse, map, and cache
+    const { data: stream, usage: usagePromise } = await buildSentenceData(req, signal);
+    const tappedStream = (0, shared_1.withBufferedStream)(stream, async ({ text, completed }) => {
+        if (!completed)
+            return;
         try {
             const usage = await usagePromise;
             const object = coerceSentenceResponse((0, llmService_1.extractJsonFromText)(text));
@@ -311,7 +307,7 @@ const handleSentence = async (req) => {
         catch (error) {
             console.warn('[sentence] failed to cache response', error);
         }
-    })();
+    });
     return { data: tappedStream, usage: usagePromise };
 };
 exports.handleSentence = handleSentence;
@@ -412,6 +408,7 @@ const mapSentenceResponse = (payload, req) => {
         : undefined;
     // Map 'discourse_function' task to the new classification fields
     const classification = shouldInclude('discourse_function') ? {
+        discourse_function: payload.function,
         function: payload.function,
         type: payload.type,
         mood: payload.mood,

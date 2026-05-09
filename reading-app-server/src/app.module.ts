@@ -8,6 +8,8 @@ import { BookIngestionModule } from './modules/book-ingestion/book-ingestion.mod
 import { KnowledgeExtractionWorkflowModule } from './modules/knowledge-extraction-workflow/knowledge-extraction-workflow.module';
 import { QuizWorkflowModule } from './modules/quiz-workflow/quiz-workflow.module';
 import { WorkflowQueueModule } from './modules/workflow-queue/workflow-queue.module';
+import { SurrealModule } from './modules/surrealDB/surrealdb.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { WorkflowQueueModule } from './modules/workflow-queue/workflow-queue.mod
     WorkflowQueueModule,
     KnowledgeExtractionWorkflowModule,
     QuizWorkflowModule,
+    UsersModule,
+    SurrealModule,
   ],
   controllers: [HealthController, MessageController],
   providers: [MessageService],

@@ -70,3 +70,16 @@ export interface KnowledgeExtractionWorkflowStoredResult {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface PageExtractionCacheRecord {
+  cacheKey: string;
+  bookId: string;
+  chapterId: string;
+  pageIndex: number;
+  sourceHash: string;
+  chapterContentHash: string;
+  promptVersion: string;
+  extraction: AnalyzeKnowledgeExtractionData;
+  createdAt: string;
+  updatedAt: string;
+}

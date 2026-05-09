@@ -80,7 +80,7 @@ const prepareSkeletonData = async (req) => {
  * @param req - The request envelope.
  * @returns A promise resolving to the streaming response.
  */
-const handleSkeleton = async (req) => {
+const handleSkeleton = async (req, _signal) => {
     (0, logger_1.handlerLog)('skeleton', 'request received', {
         requestId: req.request_id,
     });
@@ -101,12 +101,9 @@ const handleSkeleton = async (req) => {
     }
     const started = Date.now();
     const { data: stream, usage: usagePromise } = await prepareSkeletonData(req);
-    const tappedStream = (async function* () {
-        let text = '';
-        for await (const chunk of stream) {
-            text += chunk;
-            yield chunk;
-        }
+    const tappedStream = (0, shared_1.withBufferedStream)(stream, async ({ text, completed }) => {
+        if (!completed)
+            return;
         try {
             const usage = await usagePromise;
             const data = JSON.parse(text);
@@ -135,7 +132,7 @@ const handleSkeleton = async (req) => {
         catch (error) {
             console.warn('[skeleton] failed to cache response', error);
         }
-    })();
+    });
     return { data: tappedStream, usage: usagePromise };
 };
 exports.handleSkeleton = handleSkeleton;

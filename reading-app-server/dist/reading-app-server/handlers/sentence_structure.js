@@ -292,7 +292,7 @@ const buildPrompt = (req) => {
  * @param req - The request envelope.
  * @returns A promise resolving to the LLM call return (stream and usage).
  */
-const buildSentenceStructureData = async (req) => {
+const buildSentenceStructureData = async (req, signal) => {
     const tasks = buildTasks(req);
     (0, logger_1.handlerLog)('sentence_structure', 'building LLM payload', {
         requestId: req.request_id,
@@ -313,7 +313,7 @@ const buildSentenceStructureData = async (req) => {
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPrompt.length,
     });
-    return llmClient.json(userPrompt);
+    return llmClient.json(userPrompt, { signal });
 };
 /**
  * The main handler for sentence structure analysis requests.
@@ -322,7 +322,7 @@ const buildSentenceStructureData = async (req) => {
  * @param req - The request envelope.
  * @returns A promise resolving to the streaming response.
  */
-const handleSentenceStructure = async (req) => {
+const handleSentenceStructure = async (req, signal) => {
     //console.log("[DEBUG] handleSentenceStructure starting", req.request_id);
     (0, logger_1.handlerLog)('sentence_structure', 'request received', {
         requestId: req.request_id,
@@ -352,15 +352,10 @@ const handleSentenceStructure = async (req) => {
         }
     }
     const started = Date.now();
-    const { data: stream, usage: usagePromise } = await buildSentenceStructureData(req);
-    const tappedStream = (async function* () {
-        let text = '';
-        for await (const chunk of stream) {
-            //console.log("[DEBUG] subsentence chunk:", chunk.slice(0, 50));
-            text += chunk;
-            yield chunk;
-        }
-        // Background processing
+    const { data: stream, usage: usagePromise } = await buildSentenceStructureData(req, signal);
+    const tappedStream = (0, shared_1.withBufferedStream)(stream, async ({ text, completed }) => {
+        if (!completed)
+            return;
         try {
             const usage = await usagePromise;
             const object = (0, llmService_1.extractJsonFromText)(text);
@@ -385,7 +380,7 @@ const handleSentenceStructure = async (req) => {
         catch (error) {
             console.warn('[sentence_structure] failed to process/cache response', error);
         }
-    })();
+    });
     return { data: tappedStream, usage: usagePromise };
 };
 exports.handleSentenceStructure = handleSentenceStructure;

@@ -7,13 +7,19 @@
     "dev": "tsx src/main.ts",
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "start": "node dist/reading-app-server/src/main.js",
-    "smoke:knowledge-extraction": "node scripts/knowledge-extraction-smoke.cjs"
+    "smoke:knowledge-extraction": "node scripts/knowledge-extraction-smoke.cjs",
+    "surreal:query": "node scripts/surreal-query.cjs",
+    "surreal:dupes": "node scripts/surreal-check-duplicates.cjs",
+    "delete:surreal": "node scripts/delete-surreal-records.cjs",
+    "delete:surreal:chapter": "node scripts/delete-surreal-records.cjs --scope chapter",
+    "delete:surreal:book": "node scripts/delete-surreal-records.cjs --scope book"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google/genai": "^1.34.0",
     "@google/generative-ai": "^0.12.0",
     "@nestjs/common": "^11.1.19",
     "@nestjs/config": "^4.0.4",
