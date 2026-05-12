@@ -25,7 +25,7 @@ const createApp = async () => {
             'Idempotency-Key',
             'X-App-Client',
         ],
-        methods: ['GET', 'POST', 'OPTIONS'],
+        methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     });
     return app;
 };

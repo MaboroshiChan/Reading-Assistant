@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,6 +21,7 @@ const hashText = (input: string): string =>
 
 const DEFAULT_DATA_DIR = path.join(__dirname, '..', '..', '..', 'data', 'book-ingestion');
 const DEFAULT_STORE_FILE = 'store.json';
+export const BOOK_INGESTION_DATA_DIR = 'BOOK_INGESTION_DATA_DIR';
 
 interface SerializedCanonicalChapterRecord extends Omit<CanonicalChapterRecord, 'pages'> {
   pages: Record<string, CanonicalPageRecord>;
@@ -57,7 +58,11 @@ export class BookIngestionRepository {
   private readonly books = new Map<string, CanonicalBookRecord>();
   private readonly storePath: string;
 
-  constructor(dataDirOverride?: string) {
+  constructor(
+    @Optional()
+    @Inject(BOOK_INGESTION_DATA_DIR)
+    dataDirOverride?: string,
+  ) {
     const dataDir = dataDirOverride ?? process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR;
     this.storePath = path.join(dataDir, DEFAULT_STORE_FILE);
     this.loadPersistedStore();

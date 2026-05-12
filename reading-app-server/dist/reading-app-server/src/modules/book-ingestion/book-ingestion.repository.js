@@ -8,11 +8,14 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BookIngestionRepository = void 0;
+exports.BookIngestionRepository = exports.BOOK_INGESTION_DATA_DIR = void 0;
 const common_1 = require("@nestjs/common");
 const node_crypto_1 = require("node:crypto");
 const node_fs_1 = __importDefault(require("node:fs"));
@@ -21,6 +24,7 @@ const book_ingestion_logger_1 = require("./book-ingestion.logger");
 const hashText = (input) => (0, node_crypto_1.createHash)('sha256').update(input).digest('hex');
 const DEFAULT_DATA_DIR = node_path_1.default.join(__dirname, '..', '..', '..', 'data', 'book-ingestion');
 const DEFAULT_STORE_FILE = 'store.json';
+exports.BOOK_INGESTION_DATA_DIR = 'BOOK_INGESTION_DATA_DIR';
 const sortParagraphEntries = (pageParagraphs) => {
     return Object.entries(pageParagraphs)
         .sort(([left], [right]) => {
@@ -241,6 +245,8 @@ let BookIngestionRepository = class BookIngestionRepository {
 exports.BookIngestionRepository = BookIngestionRepository;
 exports.BookIngestionRepository = BookIngestionRepository = __decorate([
     (0, common_1.Injectable)(),
+    __param(0, (0, common_1.Optional)()),
+    __param(0, (0, common_1.Inject)(exports.BOOK_INGESTION_DATA_DIR)),
     __metadata("design:paramtypes", [String])
 ], BookIngestionRepository);
 //# sourceMappingURL=book-ingestion.repository.js.map

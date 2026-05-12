@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "postinstall": "npm install --prefix reading-app-server",
+    "build": "npm run build --prefix reading-app-server",
+    "start": "npm start --prefix reading-app-server",
     "dev": "concurrently \"npm run dev --prefix reading-app\" \"npm run dev --prefix reading-app-server\"",
     "surreal:query": "./scripts/surreal-query.sh",
     "surreal:dupes": "./scripts/surreal-check-duplicates.sh",

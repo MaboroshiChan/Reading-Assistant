@@ -20,7 +20,12 @@ exports.BookIngestionModule = BookIngestionModule = __decorate([
     (0, common_1.Module)({
         imports: [(0, common_1.forwardRef)(() => knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule)],
         controllers: [book_ingestion_controller_1.BookIngestionController],
-        providers: [book_ingestion_repository_1.BookIngestionRepository, book_ingestion_service_1.BookIngestionService, book_context_service_1.BookContextService],
+        providers: [
+            { provide: book_ingestion_repository_1.BOOK_INGESTION_DATA_DIR, useValue: undefined },
+            book_ingestion_repository_1.BookIngestionRepository,
+            book_ingestion_service_1.BookIngestionService,
+            book_context_service_1.BookContextService,
+        ],
         exports: [book_ingestion_repository_1.BookIngestionRepository, book_ingestion_service_1.BookIngestionService, book_context_service_1.BookContextService],
     })
 ], BookIngestionModule);

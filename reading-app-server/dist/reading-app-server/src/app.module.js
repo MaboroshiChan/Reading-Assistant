@@ -18,6 +18,7 @@ const knowledge_extraction_workflow_module_1 = require("./modules/knowledge-extr
 const quiz_workflow_module_1 = require("./modules/quiz-workflow/quiz-workflow.module");
 const workflow_queue_module_1 = require("./modules/workflow-queue/workflow-queue.module");
 const surrealdb_module_1 = require("./modules/surrealDB/surrealdb.module");
+const users_module_1 = require("./modules/users/users.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -33,6 +34,7 @@ exports.AppModule = AppModule = __decorate([
             workflow_queue_module_1.WorkflowQueueModule,
             knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule,
             quiz_workflow_module_1.QuizWorkflowModule,
+            users_module_1.UsersModule,
             surrealdb_module_1.SurrealModule,
         ],
         controllers: [health_controller_1.HealthController, message_controller_1.MessageController],

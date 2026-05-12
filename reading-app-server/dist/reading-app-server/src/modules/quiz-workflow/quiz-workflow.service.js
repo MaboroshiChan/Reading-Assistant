@@ -26,7 +26,7 @@ const prompt_path_1 = require("../../utils/prompt-path");
 const quiz_workflow_repository_1 = require("./quiz-workflow.repository");
 const llmService_1 = require("../../../services/llmService");
 const workflow_queue_service_1 = require("../workflow-queue/workflow-queue.service");
-const PROMPT_VERSION = 'quiz.v3.0';
+const PROMPT_VERSION = 'quiz.v3.1';
 const PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('quiz.txt');
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -404,7 +404,7 @@ let QuizWorkflowService = class QuizWorkflowService {
             'Generate exactly one question for each source knowledge unit, preserving both order and targetQuestionType.',
             'Each question must be grounded in exactly one source knowledge unit.',
             'Use the cached chapter prefix, chapter summary, and page window only as supporting context; do not introduce facts outside the source units and page window.',
-            'Each question must preserve the sourceUnitId, sourceUnitType, and sourcePageRefs for its matching source unit.',
+            'Each question must preserve the sourceUnitId, sourceUnitType, sourcePageRefs, and sourceEvidence for its matching source unit.',
             'For fill_in_blank questions, return exactly 4 options and a correctAnswerIndex between 0 and 3.',
             'For fill_in_blank questions, the question text must contain exactly one blank written as ____ or otherwise explicitly tell the learner to choose the best word or phrase for the blank.',
             'Respond with JSON only. Do not wrap the JSON in markdown fences.',
@@ -448,6 +448,7 @@ let QuizWorkflowService = class QuizWorkflowService {
             sourceUnitId: sourceUnit?.unitId,
             sourceUnitType: sourceUnit?.type,
             sourcePageRefs: sourceUnit?.sourcePageRefs,
+            sourceEvidence: sourceUnit?.sourceEvidence,
         };
         if (type === 'multiple_choice') {
             const options = Array.isArray(value.options)
@@ -637,8 +638,9 @@ let QuizWorkflowService = class QuizWorkflowService {
         return groups;
     }
     toKnowledgeUnit(type, unitId, label, description, evidence, skill, aliases, relationHints) {
+        const sourceEvidence = this.toSourceEvidence(evidence);
         const sourcePageRefs = this.toSourcePageRefs(evidence);
-        if (sourcePageRefs.length === 0)
+        if (sourcePageRefs.length === 0 || sourceEvidence.length === 0)
             return null;
         const anchorPage = sourcePageRefs[0];
         return {
@@ -650,9 +652,32 @@ let QuizWorkflowService = class QuizWorkflowService {
             anchorPageIndex: anchorPage.pageIndex,
             anchorPageNumber: anchorPage.pageNumber ?? (anchorPage.pageIndex + 1),
             sourcePageRefs,
+            sourceEvidence,
             aliases,
             relationHints: relationHints ? Array.from(new Set(relationHints)).sort((left, right) => left.localeCompare(right)) : undefined,
         };
+    }
+    toSourceEvidence(evidence) {
+        if (!evidence || evidence.length === 0)
+            return [];
+        const unique = new Map();
+        for (const item of evidence) {
+            const quote = asString(item.quote);
+            if (!quote)
+                continue;
+            const pageIndex = item.pageIndex;
+            const pageNumber = item.pageNumber;
+            const key = `${quote}|${pageIndex ?? -1}|${pageNumber ?? -1}`;
+            if (!unique.has(key)) {
+                unique.set(key, { quote, pageIndex, pageNumber });
+            }
+        }
+        return Array.from(unique.values()).sort((left, right) => {
+            const pageDelta = (left.pageIndex ?? Number.MAX_SAFE_INTEGER) - (right.pageIndex ?? Number.MAX_SAFE_INTEGER);
+            if (pageDelta !== 0)
+                return pageDelta;
+            return left.quote.localeCompare(right.quote);
+        });
     }
     toSourcePageRefs(evidence) {
         if (!evidence || evidence.length === 0)
