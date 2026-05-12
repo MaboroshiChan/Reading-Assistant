@@ -22,7 +22,7 @@ const DEFAULT_SKILLS = {
     Tone: 0,
     Argument: 0,
 };
-const hashSegment = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('base64url').slice(0, 32);
+const hashSegment = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('hex').slice(0, 32);
 const randomId = (prefix) => `${prefix}_${(0, node_crypto_1.randomUUID)().replace(/-/g, '')}`;
 const clampSkill = (value) => Math.max(0, Math.min(100, Math.round(value)));
 const computeDepth = (skills) => Math.round((skills.Facts + skills.Inference + skills.Tone + skills.Argument) / 4);

@@ -19,7 +19,8 @@ const workflow_logger_1 = require("../workflow.logger");
 const surrealdb_service_1 = require("../surrealDB/surrealdb.service");
 const chapterKey = (bookId, chapterId) => `${bookId}::${chapterId}`;
 const normalizeText = (value) => value.trim().replace(/\s+/g, ' ').toLowerCase();
-const encodeSegment = (value) => Buffer.from(value, 'utf8').toString('base64url');
+const encodeSegment = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('hex').slice(0, 32);
+const randomRecordId = (prefix) => `${prefix}_${(0, node_crypto_1.randomUUID)().replace(/-/g, '')}`;
 const stableLocalId = (prefix, seed) => `${prefix}_${encodeSegment(seed)}`;
 let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRepository {
     surrealService;
@@ -79,7 +80,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         }
         const timestamp = new Date().toISOString();
         const run = {
-            id: (0, node_crypto_1.randomUUID)(),
+            id: randomRecordId('wr'),
             kind: 'knowledge_extraction',
             status: 'queued',
             bookId: input.bookId,
