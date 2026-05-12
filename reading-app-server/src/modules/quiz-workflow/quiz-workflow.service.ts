@@ -27,6 +27,7 @@ import type {
 } from './quiz-workflow.dto';
 import { QuizWorkflowRepository } from './quiz-workflow.repository';
 import type {
+  QuizWorkflowEvidence,
   QuizWorkflowPageRef,
   QuizWorkflowQuestion,
   QuizWorkflowQuestionType,
@@ -38,7 +39,7 @@ import type {
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
 import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
-const PROMPT_VERSION = 'quiz.v3.0';
+const PROMPT_VERSION = 'quiz.v3.1';
 const PROMPT_PATH = resolvePromptPath('quiz.txt');
 
 const isNonEmptyString = (value: unknown): value is string =>
@@ -68,6 +69,7 @@ type KnowledgeUnit = {
   anchorPageIndex: number;
   anchorPageNumber: number;
   sourcePageRefs: QuizWorkflowPageRef[];
+  sourceEvidence: QuizWorkflowEvidence[];
   aliases?: string[];
   relationHints?: string[];
 };
@@ -585,7 +587,7 @@ export class QuizWorkflowService {
       'Generate exactly one question for each source knowledge unit, preserving both order and targetQuestionType.',
       'Each question must be grounded in exactly one source knowledge unit.',
       'Use the cached chapter prefix, chapter summary, and page window only as supporting context; do not introduce facts outside the source units and page window.',
-      'Each question must preserve the sourceUnitId, sourceUnitType, and sourcePageRefs for its matching source unit.',
+      'Each question must preserve the sourceUnitId, sourceUnitType, sourcePageRefs, and sourceEvidence for its matching source unit.',
       'For fill_in_blank questions, return exactly 4 options and a correctAnswerIndex between 0 and 3.',
       'For fill_in_blank questions, the question text must contain exactly one blank written as ____ or otherwise explicitly tell the learner to choose the best word or phrase for the blank.',
       'Respond with JSON only. Do not wrap the JSON in markdown fences.',
@@ -637,6 +639,7 @@ export class QuizWorkflowService {
       sourceUnitId: sourceUnit?.unitId,
       sourceUnitType: sourceUnit?.type,
       sourcePageRefs: sourceUnit?.sourcePageRefs,
+      sourceEvidence: sourceUnit?.sourceEvidence,
     } as const;
 
     if (type === 'multiple_choice') {
@@ -885,8 +888,9 @@ export class QuizWorkflowService {
     aliases?: string[],
     relationHints?: string[],
   ): KnowledgeUnit | null {
+    const sourceEvidence = this.toSourceEvidence(evidence);
     const sourcePageRefs = this.toSourcePageRefs(evidence);
-    if (sourcePageRefs.length === 0) return null;
+    if (sourcePageRefs.length === 0 || sourceEvidence.length === 0) return null;
     const anchorPage = sourcePageRefs[0];
     return {
       unitId,
@@ -897,9 +901,30 @@ export class QuizWorkflowService {
       anchorPageIndex: anchorPage.pageIndex,
       anchorPageNumber: anchorPage.pageNumber ?? (anchorPage.pageIndex + 1),
       sourcePageRefs,
+      sourceEvidence,
       aliases,
       relationHints: relationHints ? Array.from(new Set(relationHints)).sort((left, right) => left.localeCompare(right)) : undefined,
     };
+  }
+
+  private toSourceEvidence(evidence: KnowledgeEvidence[] | undefined): QuizWorkflowEvidence[] {
+    if (!evidence || evidence.length === 0) return [];
+    const unique = new Map<string, QuizWorkflowEvidence>();
+    for (const item of evidence) {
+      const quote = asString(item.quote);
+      if (!quote) continue;
+      const pageIndex = item.pageIndex;
+      const pageNumber = item.pageNumber;
+      const key = `${quote}|${pageIndex ?? -1}|${pageNumber ?? -1}`;
+      if (!unique.has(key)) {
+        unique.set(key, { quote, pageIndex, pageNumber });
+      }
+    }
+    return Array.from(unique.values()).sort((left, right) => {
+      const pageDelta = (left.pageIndex ?? Number.MAX_SAFE_INTEGER) - (right.pageIndex ?? Number.MAX_SAFE_INTEGER);
+      if (pageDelta !== 0) return pageDelta;
+      return left.quote.localeCompare(right.quote);
+    });
   }
 
   private toSourcePageRefs(evidence: KnowledgeEvidence[] | undefined): QuizWorkflowPageRef[] {

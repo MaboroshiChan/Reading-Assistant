@@ -302,6 +302,9 @@ describe('QuizWorkflowService', () => {
         acceptableAnswers: ['Freedom', 'Freedom answer'],
         sourceUnitId: 'i_freedom',
         sourceUnitType: 'idea',
+        sourceEvidence: [
+          { quote: 'freedom is essential', pageIndex: 0, pageNumber: 1 },
+        ],
         sourcePageRefs: [{ pageIndex: 0, pageNumber: 1 }],
       }),
       expect.objectContaining({
@@ -310,6 +313,10 @@ describe('QuizWorkflowService', () => {
         correctAnswerIndex: 0,
         sourceUnitId: 'p_alice',
         sourceUnitType: 'person',
+        sourceEvidence: [
+          { quote: 'Alice arrives', pageIndex: 0, pageNumber: 1 },
+          { quote: 'Alice speaks', pageIndex: 1, pageNumber: 2 },
+        ],
         sourcePageRefs: [
           { pageIndex: 0, pageNumber: 1 },
           { pageIndex: 1, pageNumber: 2 },
@@ -321,6 +328,9 @@ describe('QuizWorkflowService', () => {
         correctAnswerIndex: 0,
         sourceUnitId: 'e_speech',
         sourceUnitType: 'event',
+        sourceEvidence: [
+          { quote: 'Alice speaks to the crowd', pageIndex: 1, pageNumber: 2 },
+        ],
         sourcePageRefs: [{ pageIndex: 1, pageNumber: 2 }],
       }),
       expect.objectContaining({
@@ -329,6 +339,9 @@ describe('QuizWorkflowService', () => {
         correctAnswerIndex: 0,
         sourceUnitId: 't_resistance',
         sourceUnitType: 'theme',
+        sourceEvidence: [
+          { quote: 'the resistance grows', pageIndex: 2, pageNumber: 3 },
+        ],
         sourcePageRefs: [{ pageIndex: 2, pageNumber: 3 }],
       }),
     ]);
@@ -336,9 +349,10 @@ describe('QuizWorkflowService', () => {
     expect(prompts[0]).toContain('Current chapter summary:');
     expect(prompts[0]).toContain('Page window:');
     expect(prompts[0]).toContain('targetQuestionType');
+    expect(prompts[0]).toContain('sourceEvidence');
     expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
       prefixCache: expect.objectContaining({
-        cacheKey: `quiz.chapter_prefix:quiz.v3.0:book-1:chapter-1:${chapter.chapterContentHash}`,
+        cacheKey: `quiz.chapter_prefix:quiz.v3.1:book-1:chapter-1:${chapter.chapterContentHash}`,
       }),
     }));
   });
