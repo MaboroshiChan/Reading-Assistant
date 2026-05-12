@@ -1,9 +1,4 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-
 type WorkflowLogMeta = Record<string, unknown>;
-
-const DEFAULT_LOG_PATH = path.join(__dirname, '..', '..', 'log', 'workflows.log');
 const TERMINAL_PRIMARY_KEYS = [
   'workflowKind',
   'workflowRunId',
@@ -21,13 +16,6 @@ const TERMINAL_PRIMARY_KEYS = [
   'completedAt',
   'startedAt',
 ] as const;
-
-let writeChain: Promise<void> = Promise.resolve();
-
-const resolveLogPath = (): string => {
-  const configured = process.env.WORKFLOW_LOG_FILE?.trim();
-  return configured ? path.resolve(configured) : DEFAULT_LOG_PATH;
-};
 
 const stringifyValue = (value: unknown): string => {
   if (typeof value === 'string') return value;
@@ -72,18 +60,6 @@ export const workflowLog = (event: string, meta: WorkflowLogMeta = {}): void => 
   const line = `${JSON.stringify(payload)}\n`;
 
   console.info(formatTerminalLine(payload));
-
-  writeChain = writeChain
-    .then(async () => {
-      const logPath = resolveLogPath();
-      await fs.mkdir(path.dirname(logPath), { recursive: true });
-      await fs.appendFile(logPath, line, 'utf8');
-    })
-    .catch((error) => {
-      console.warn('[workflow-log] failed to persist log entry', error);
-    });
 };
 
-export const flushWorkflowLogs = async (): Promise<void> => {
-  await writeChain;
-};
+export const flushWorkflowLogs = async (): Promise<void> => {};

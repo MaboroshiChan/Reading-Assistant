@@ -1,6 +1,3 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { BookContextService } from '../src/modules/book-ingestion/book-context.service';
 import { BookIngestionRepository } from '../src/modules/book-ingestion/book-ingestion.repository';
@@ -13,16 +10,12 @@ import { flushWorkflowLogs } from '../src/modules/workflow.logger';
 
 describe('workflow logging', () => {
   afterEach(async () => {
-    delete process.env.WORKFLOW_LOG_FILE;
     delete process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE;
     vi.restoreAllMocks();
     await flushWorkflowLogs();
   });
 
-  test('persists structured logs for quiz and knowledge extraction workflows', async () => {
-    const logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workflow-log-'));
-    const logFile = path.join(logDir, 'workflows.log');
-    process.env.WORKFLOW_LOG_FILE = logFile;
+  test('emits structured terminal logs for quiz and knowledge extraction workflows', async () => {
     process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
     const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
@@ -114,39 +107,31 @@ describe('workflow logging', () => {
 
     await flushWorkflowLogs();
 
-    const content = await fs.readFile(logFile, 'utf8');
-    const lines = content.trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
-    const events = lines.map((line) => line.event);
-
-    expect(events).toContain('request.parsed');
-    expect(events).toContain('run.queued');
-    expect(events).toContain('run.submitted');
-    expect(events).toContain('run.deduped');
-    expect(events).toContain('run.running');
-    expect(events).toContain('run.completed');
-    expect(events).toContain('status.read_hit');
-    expect(events).toContain('result.read_hit');
-    expect(events).toContain('latest_result.read_hit');
-
-    const queuedKinds = lines
-      .filter((line) => line.event === 'run.queued')
-      .map((line) => line.workflowKind);
-    expect(queuedKinds).toContain('quiz_generation');
-    expect(queuedKinds).toContain('knowledge_extraction');
-
-    const dedupedEntry = lines.find(
-      (line) => line.event === 'run.deduped' && line.workflowKind === 'quiz_generation',
-    );
-    expect(dedupedEntry).toMatchObject({
-      bookId: 'book-1',
-      chapterId: 'chapter-1',
-      dedupedWorkflowRunId: quizSubmit.workflowRunId,
-    });
-
     expect(dedupedQuizSubmit.workflowRunId).toBe(quizSubmit.workflowRunId);
     expect(dedupedQuizSubmit.deduped).toBe(true);
     expect(consoleInfoSpy).toHaveBeenCalled();
-    const firstTerminalLine = consoleInfoSpy.mock.calls[0]?.[0];
+    const terminalLines = consoleInfoSpy.mock.calls
+      .map(([line]) => line)
+      .filter((line): line is string => typeof line === 'string' && line.trim().length > 0);
+    const firstTerminalLine = terminalLines[0];
+    expect(terminalLines.some((line) => line.includes('[workflow][request.parsed]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('[workflow][run.queued]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('[workflow][run.submitted]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('[workflow][run.deduped]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('[workflow][run.running]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('[workflow][run.completed]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('[workflow][status.read_hit]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('[workflow][result.read_hit]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('[workflow][latest_result.read_hit]'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('workflowKind=quiz_generation'))).toBe(true);
+    expect(terminalLines.some((line) => line.includes('workflowKind=knowledge_extraction'))).toBe(true);
+    expect(
+      terminalLines.some((line) =>
+        line.includes('[workflow][run.deduped]')
+        && line.includes(`dedupedWorkflowRunId=${quizSubmit.workflowRunId}`)
+        && line.includes('bookId=book-1')
+        && line.includes('chapterId=chapter-1')),
+    ).toBe(true);
     expect(firstTerminalLine).toContain('[workflow]');
     expect(firstTerminalLine).toContain('workflowKind=');
     expect(firstTerminalLine.startsWith('{')).toBe(false);

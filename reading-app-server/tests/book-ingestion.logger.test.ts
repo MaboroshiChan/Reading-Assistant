@@ -1,21 +1,18 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { BookIngestionRepository } from '../src/modules/book-ingestion/book-ingestion.repository';
 import { BookIngestionService } from '../src/modules/book-ingestion/book-ingestion.service';
 import { flushBookIngestionLogs } from '../src/modules/book-ingestion/book-ingestion.logger';
 
 describe('book ingestion logging', () => {
   afterEach(async () => {
-    delete process.env.BOOK_INGESTION_LOG_FILE;
+    delete process.env.BOOK_INGESTION_LOG_STDOUT;
+    vi.restoreAllMocks();
     await flushBookIngestionLogs();
   });
 
-  test('persists structured logs for parse, upsert, materialize, and read operations', async () => {
-    const logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'book-ingestion-log-'));
-    const logFile = path.join(logDir, 'book-ingestion.log');
-    process.env.BOOK_INGESTION_LOG_FILE = logFile;
+  test('emits structured stdout logs for parse, upsert, materialize, and read operations', async () => {
+    process.env.BOOK_INGESTION_LOG_STDOUT = '1';
+    const stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
     const service = new BookIngestionService(new BookIngestionRepository());
 
@@ -45,8 +42,10 @@ describe('book ingestion logging', () => {
 
     await flushBookIngestionLogs();
 
-    const content = await fs.readFile(logFile, 'utf8');
-    const lines = content.trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+    const lines = stdoutWriteSpy.mock.calls
+      .map(([line]) => line)
+      .filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
     const events = lines.map((line) => line.event);
 
     expect(events).toContain('request.parsed');
@@ -67,5 +66,7 @@ describe('book ingestion logging', () => {
       sourceHash: 'hash-1',
       paragraphCount: 2,
     });
+
+    expect(stdoutWriteSpy).toHaveBeenCalled();
   });
 });

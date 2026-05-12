@@ -36,7 +36,7 @@ const DEFAULT_SKILLS: UserSkills = {
 };
 
 const hashSegment = (value: string): string =>
-  createHash('sha256').update(value).digest('base64url').slice(0, 32);
+  createHash('sha256').update(value).digest('hex').slice(0, 32);
 
 const randomId = (prefix: string): string => `${prefix}_${randomUUID().replace(/-/g, '')}`;
 

@@ -1,5 +1,5 @@
 import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type {
   AnalyzeKnowledgeExtractionData,
   KnowledgeEntity,
@@ -37,7 +37,11 @@ const chapterKey = (bookId: string, chapterId: string): string => `${bookId}::${
 const normalizeText = (value: string): string =>
   value.trim().replace(/\s+/g, ' ').toLowerCase();
 
-const encodeSegment = (value: string): string => Buffer.from(value, 'utf8').toString('base64url');
+const encodeSegment = (value: string): string =>
+  createHash('sha256').update(value).digest('hex').slice(0, 32);
+
+const randomRecordId = (prefix: string): string =>
+  `${prefix}_${randomUUID().replace(/-/g, '')}`;
 
 const stableLocalId = (prefix: string, seed: string): string => `${prefix}_${encodeSegment(seed)}`;
 
@@ -303,7 +307,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
 
     const timestamp = new Date().toISOString();
     const run: KnowledgeExtractionWorkflowRunRecord = {
-      id: randomUUID(),
+      id: randomRecordId('wr'),
       kind: 'knowledge_extraction',
       status: 'queued',
       bookId: input.bookId,
