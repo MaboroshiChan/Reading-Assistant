@@ -22,6 +22,12 @@ export interface QuizWorkflowPageRef {
   pageNumber?: number;
 }
 
+export interface QuizWorkflowEvidence {
+  quote: string;
+  pageIndex?: number;
+  pageNumber?: number;
+}
+
 export interface QuizWorkflowQuestionBase {
   id: string;
   type: QuizWorkflowQuestionType;
@@ -31,6 +37,7 @@ export interface QuizWorkflowQuestionBase {
   sourceUnitId?: string;
   sourceUnitType?: QuizWorkflowSourceUnitType;
   sourcePageRefs?: QuizWorkflowPageRef[];
+  sourceEvidence?: QuizWorkflowEvidence[];
 }
 
 export interface QuizWorkflowMultipleChoiceQuestion extends QuizWorkflowQuestionBase {
