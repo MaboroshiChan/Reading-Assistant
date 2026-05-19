@@ -352,7 +352,8 @@ describe('QuizWorkflowService', () => {
     expect(prompts[0]).toContain('sourceEvidence');
     expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
       prefixCache: expect.objectContaining({
-        cacheKey: `quiz.chapter_prefix:quiz.v3.1:book-1:chapter-1:${chapter.chapterContentHash}`,
+        cacheKey: `chapter_context.v1:book-1:chapter-1:${chapter.chapterContentHash}`,
+        systemPromptMode: 'request',
       }),
     }));
   });

@@ -43,6 +43,7 @@ This repository already has a fixed local SurrealDB access path. Prefer the repo
 - `workflow_run`: `idempotencyKey`
 - `chapter_knowledge_snapshot`: `bookId + chapterId`
 - `page_knowledge_extraction_cache`: `bookId + chapterId + pageIndex + promptVersion + sourceHash`
+- `knowledge_evidence`: `ownerTable + ownerRecordId + pageIndex + pageNumber + quoteHash`
 
 ## Troubleshooting
 

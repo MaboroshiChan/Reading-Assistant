@@ -129,6 +129,7 @@ export interface EnvelopeFrame<T = unknown> {
 export type AnalyzeMessageType =
   | 'analyze.skeleton.v1'
   | 'analyze.paragraph.v1'
+  | 'analyze.chapter-keywords.v1'
   | 'analyze.sentence.v1'
   | 'analyze.sentence-structure.v1'
   | 'analyze.quiz.v1'
@@ -229,7 +230,47 @@ export interface AnalyzeParagraphData {
   };
 }
 
-// 3) analyze.sentence.v1
+// 3) analyze.chapter-keywords.v1
+export interface SentenceRef {
+  page_index: number;
+  paragraph_index: number;
+  paragraph_id: number;
+  sentence_id: number;
+}
+
+export interface AnalyzeChapterKeywordsPayload {
+  doc_id: string;
+  chapter_id: string;
+  chapter_index: number;
+  chunk_id: string;
+  chunk_index: number;
+  total_chunks: number;
+  chunk_text: string;
+  sentences: Array<{
+    ref: SentenceRef;
+    text: string;
+  }>;
+}
+
+export interface ChunkKeySentence {
+  sentence_ref: SentenceRef;
+  sentence_text: string;
+  importance: number;
+  reason: string;
+}
+
+export interface ChunkSentenceKeywords {
+  sentence_ref: SentenceRef;
+  sentence_text: string;
+  keywords: Array<{ word: string; color: 'red' | 'green' | string }>;
+}
+
+export interface AnalyzeChapterKeywordsData {
+  key_sentences: ChunkKeySentence[];
+  sentence_keywords: ChunkSentenceKeywords[];
+}
+
+// 4) analyze.sentence.v1
 export interface AnalyzeSentencePayload {
   doc_id: string;
   sentence_id: string;
@@ -256,7 +297,7 @@ export interface AnalyzeSentenceData {
   key_words?: Array<{ word: string; color: 'red' | 'green' }>;
 }
 
-// 4) analyze.sentence-structure.v1
+// 5) analyze.sentence-structure.v1
 export interface AnalyzeSentenceStructurePayload {
   doc_id: string;
   sentence_id: string;
@@ -327,7 +368,7 @@ export interface AnalyzeSentenceStructureData {
   confidence?: number;
 }
 
-// 5) analyze.quiz.v1
+// 6) analyze.quiz.v1
 export interface AnalyzeQuizPayload {
   doc_id: string;
   article_text: string;
@@ -347,7 +388,7 @@ export interface AnalyzeQuizData {
   questions: QuizQuestion[];
 }
 
-// 6) analyze.knowledge-extraction.v1
+// 7) analyze.knowledge-extraction.v1
 export interface AnalyzeKnowledgeExtractionPayload {
   doc_id: string;
   chapter_id: string;
@@ -477,6 +518,11 @@ export interface RequestEnvelopeParagraph extends StandardEnvelopeBase {
   payload: AnalyzeParagraphPayload;
 }
 
+export interface RequestEnvelopeChapterKeywords extends StandardEnvelopeBase {
+  type: 'analyze.chapter-keywords.v1';
+  payload: AnalyzeChapterKeywordsPayload;
+}
+
 export interface RequestEnvelopeSentence extends StandardEnvelopeBase {
   type: 'analyze.sentence.v1';
   payload: AnalyzeSentencePayload;
@@ -501,6 +547,7 @@ export interface RequestEnvelopeKnowledgeExtraction extends StandardEnvelopeBase
 export type RequestEnvelope =
   | RequestEnvelopeSkeleton
   | RequestEnvelopeParagraph
+  | RequestEnvelopeChapterKeywords
   | RequestEnvelopeSentence
   | RequestEnvelopeSentenceStructure
   | RequestEnvelopeQuiz
@@ -530,6 +577,11 @@ export interface ResponseEnvelopeParagraph extends ResponseEnvelopeBase {
   frames?: EnvelopeFrame<Partial<AnalyzeParagraphData>>[];
 }
 
+export interface ResponseEnvelopeChapterKeywords extends ResponseEnvelopeBase {
+  data?: AnalyzeChapterKeywordsData;
+  frames?: EnvelopeFrame<Partial<AnalyzeChapterKeywordsData>>[];
+}
+
 export interface ResponseEnvelopeSentence extends ResponseEnvelopeBase {
   data?: AnalyzeSentenceData;
   frames?: EnvelopeFrame<Partial<AnalyzeSentenceData>>[];
@@ -553,6 +605,7 @@ export interface ResponseEnvelopeKnowledgeExtraction extends ResponseEnvelopeBas
 export type ResponseEnvelope =
   | ResponseEnvelopeSkeleton
   | ResponseEnvelopeParagraph
+  | ResponseEnvelopeChapterKeywords
   | ResponseEnvelopeSentence
   | ResponseEnvelopeSentenceStructure
   | ResponseEnvelopeQuiz
@@ -566,6 +619,7 @@ export type ResponseEnvelope =
 export const isAnalyzeType = (t: string): t is AnalyzeMessageType =>
   t === 'analyze.skeleton.v1' ||
   t === 'analyze.paragraph.v1' ||
+  t === 'analyze.chapter-keywords.v1' ||
   t === 'analyze.sentence.v1' ||
   t === 'analyze.sentence-structure.v1' ||
   t === 'analyze.quiz.v1' ||

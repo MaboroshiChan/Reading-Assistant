@@ -289,6 +289,7 @@ function buildScopeDryRunSummary(args) {
       '  - workflow_run',
       '  - chapter_knowledge_snapshot',
       '  - page_knowledge_extraction_cache',
+      '  - knowledge_evidence',
       '  - appears_in',
       '  - related_to',
       '  - part_of',
@@ -306,6 +307,7 @@ function buildScopeDryRunSummary(args) {
     '  - workflow_run',
     '  - chapter_knowledge_snapshot',
     '  - page_knowledge_extraction_cache',
+    '  - knowledge_evidence',
     '  - appears_in',
     '  - related_to',
     '  - part_of',
@@ -318,12 +320,13 @@ async function buildScopedDeletionPlan(config, args) {
     ? `${buildEquals('bookId', args.bookId)} AND ${buildEquals('chapterId', args.chapterId)}`
     : buildEquals('bookId', args.bookId);
 
-  const [chapters, allBookChapters, workflowRuns, snapshots, pageCaches, books] = await Promise.all([
+  const [chapters, allBookChapters, workflowRuns, snapshots, pageCaches, evidences, books] = await Promise.all([
     selectRows(config, 'chapter', chapterWhere),
     selectRows(config, 'chapter', buildEquals('bookId', args.bookId)),
     selectRows(config, 'workflow_run', chapterWhere),
     selectRows(config, 'chapter_knowledge_snapshot', chapterWhere),
     selectRows(config, 'page_knowledge_extraction_cache', chapterWhere),
+    selectRows(config, 'knowledge_evidence', chapterWhere),
     selectRows(config, 'book', buildEquals('bookId', args.bookId)),
   ]);
 
@@ -415,6 +418,9 @@ async function buildScopedDeletionPlan(config, args) {
   if (pageCaches.length > 0) {
     statements.push(`DELETE page_knowledge_extraction_cache WHERE ${chapterWhere};`);
   }
+  if (evidences.length > 0) {
+    statements.push(`DELETE knowledge_evidence WHERE ${chapterWhere};`);
+  }
 
   const chapterDelete = buildDeleteByRecordIds(
     'chapter',
@@ -440,6 +446,7 @@ async function buildScopedDeletionPlan(config, args) {
       workflowRuns: workflowRuns.length,
       snapshots: snapshots.length,
       pageCaches: pageCaches.length,
+      evidences: evidences.length,
       appearances: appearances.length,
       relations: relations.length,
       partOfEdges: partOfEdges.length,
@@ -465,6 +472,7 @@ function printScopePlan(plan, args) {
   console.log(`  workflow_run: ${plan.counts.workflowRuns}`);
   console.log(`  chapter_knowledge_snapshot: ${plan.counts.snapshots}`);
   console.log(`  page_knowledge_extraction_cache: ${plan.counts.pageCaches}`);
+  console.log(`  knowledge_evidence: ${plan.counts.evidences}`);
   console.log(`  appears_in: ${plan.counts.appearances}`);
   console.log(`  related_to: ${plan.counts.relations}`);
   console.log(`  part_of: ${plan.counts.partOfEdges}`);

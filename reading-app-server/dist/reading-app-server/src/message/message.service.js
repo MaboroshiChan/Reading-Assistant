@@ -14,6 +14,7 @@ const skeleton_1 = require("../../handlers/skeleton");
 const sentence_structure_1 = require("../../handlers/sentence_structure");
 const quiz_1 = require("../../handlers/quiz");
 const knowledge_extraction_1 = require("../../handlers/knowledge_extraction");
+const chapter_keywords_1 = require("../../handlers/chapter_keywords");
 const src_1 = require("../../../packages/contracts/src");
 const abort_1 = require("../utils/abort");
 const UNKNOWN_REQUEST_ID = 'unknown';
@@ -42,6 +43,9 @@ const dispatchEnvelope = async (envelope, signal) => {
             break;
         case 'analyze.paragraph.v1':
             result = await (0, paragraph_1.handleParagraph)(envelope, signal);
+            break;
+        case 'analyze.chapter-keywords.v1':
+            result = await (0, chapter_keywords_1.handleChapterKeywords)(envelope, signal);
             break;
         case 'analyze.sentence.v1':
             result = await (0, sentence_1.handleSentence)(envelope, signal);

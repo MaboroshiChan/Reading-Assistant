@@ -20,6 +20,7 @@ const surrealdb_service_1 = require("../surrealDB/surrealdb.service");
 const chapterKey = (bookId, chapterId) => `${bookId}::${chapterId}`;
 const normalizeText = (value) => value.trim().replace(/\s+/g, ' ').toLowerCase();
 const encodeSegment = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('hex').slice(0, 32);
+const hashText = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('hex');
 const randomRecordId = (prefix) => `${prefix}_${(0, node_crypto_1.randomUUID)().replace(/-/g, '')}`;
 const stableLocalId = (prefix, seed) => `${prefix}_${encodeSegment(seed)}`;
 let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRepository {
@@ -41,6 +42,8 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     relations = new Map();
     relationIdsByChapter = new Map();
     partOfEdges = new Map();
+    evidences = new Map();
+    evidenceIdsByOwner = new Map();
     pendingPersist = Promise.resolve();
     constructor(surrealService) {
         this.surrealService = surrealService;
@@ -115,6 +118,16 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     }
     getRun(workflowRunId) {
         return this.runs.get(workflowRunId) ?? null;
+    }
+    listRecoverableRuns() {
+        return Array.from(this.runs.values())
+            .filter((run) => run.status === 'queued' || run.status === 'running')
+            .sort((left, right) => {
+            const leftTime = Date.parse(left.startedAt ?? left.createdAt);
+            const rightTime = Date.parse(right.startedAt ?? right.createdAt);
+            return leftTime - rightTime;
+        })
+            .map((run) => ({ ...run }));
     }
     markRunning(workflowRunId) {
         const run = this.runs.get(workflowRunId);
@@ -213,6 +226,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             'DEFINE TABLE IF NOT EXISTS workflow_run SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS chapter_knowledge_snapshot SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS page_knowledge_extraction_cache SCHEMALESS;',
+            'DEFINE TABLE IF NOT EXISTS knowledge_evidence SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS book SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS chapter SCHEMALESS;',
             'DEFINE TABLE IF NOT EXISTS person SCHEMALESS;',
@@ -242,28 +256,28 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         }
         const remap = this.createEmptyIdRemap();
         for (const person of input.extraction.people) {
-            const personRecord = this.upsertPerson(person, persistBatch);
+            const personRecord = this.upsertPerson(chapterRecord, person, persistBatch);
             remap.person.set(person.local_id, personRecord.recordId);
             this.upsertPersonAppearance(chapterRecord, personRecord, person, persistBatch);
         }
         for (const idea of input.extraction.ideas) {
-            const conceptRecord = this.upsertConcept(idea, persistBatch);
+            const conceptRecord = this.upsertConcept(chapterRecord, idea, persistBatch);
             remap.idea.set(idea.local_id, conceptRecord.recordId);
             this.upsertIdeaAppearance(chapterRecord, conceptRecord, idea, persistBatch);
         }
         for (const entity of input.extraction.entities) {
-            const entityRecord = this.upsertEntity(entity, persistBatch);
+            const entityRecord = this.upsertEntity(chapterRecord, entity, persistBatch);
             remap.entity.set(entity.local_id, entityRecord.recordId);
             this.upsertEntityAppearance(chapterRecord, entityRecord, entity, persistBatch);
         }
         for (const theme of input.extraction.themes) {
-            const themeRecord = this.upsertTheme(theme, persistBatch);
+            const themeRecord = this.upsertTheme(chapterRecord, theme, persistBatch);
             remap.theme.set(theme.local_id, themeRecord.recordId);
             this.upsertThemeAppearance(chapterRecord, themeRecord, theme, persistBatch);
         }
         for (const event of input.extraction.events) {
             const participantRecordIds = this.remapNodeIds(event.participant_local_ids, remap.person);
-            const eventRecord = this.upsertEvent(input, event, participantRecordIds, persistBatch);
+            const eventRecord = this.upsertEvent(chapterRecord, input, event, participantRecordIds, persistBatch);
             remap.event.set(event.local_id, eventRecord.recordId);
             this.upsertEventAppearance(chapterRecord, eventRecord, event, participantRecordIds, persistBatch);
         }
@@ -335,7 +349,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             description: appearance.description,
             roles: this.sortStrings(appearance.roles),
             traits: this.sortStrings(appearance.traits),
-            evidence: this.sortEvidence(appearance.evidence),
+            evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
         }))
             .sort((left, right) => this.compareStrings(left.name, right.name, left.local_id, right.local_id));
         const ideas = appearances
@@ -345,7 +359,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             label: appearance.label,
             description: appearance.description,
             kind: appearance.kind ?? 'claim',
-            evidence: this.sortEvidence(appearance.evidence),
+            evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
         }))
             .sort((left, right) => this.compareStrings(left.label, right.label, left.local_id, right.local_id));
         const events = appearances
@@ -357,7 +371,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             participant_local_ids: this.sortStrings(appearance.participantRecordIds?.map((participantRecordId) => localIdsByNodeRecordId.get(participantRecordId) ?? participantRecordId)),
             time_hint: appearance.timeHint,
             place_hint: appearance.placeHint,
-            evidence: this.sortEvidence(appearance.evidence),
+            evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
         }))
             .sort((left, right) => this.compareStrings(left.label, right.label, left.local_id, right.local_id));
         const entities = appearances
@@ -367,7 +381,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             label: appearance.label,
             type: appearance.entityType,
             description: appearance.description,
-            evidence: this.sortEvidence(appearance.evidence),
+            evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
         }))
             .sort((left, right) => this.compareStrings(left.label, right.label, left.local_id, right.local_id));
         const themes = appearances
@@ -377,7 +391,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             label: appearance.label,
             strength: appearance.strength,
             description: appearance.description,
-            evidence: this.sortEvidence(appearance.evidence),
+            evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
         }))
             .sort((left, right) => this.compareStrings(left.label, right.label, left.local_id, right.local_id));
         const relations = Array.from(this.relationIdsByChapter.get(chapterRecordId) ?? [])
@@ -397,7 +411,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 relation_type: relation.relationType,
                 description: relation.description,
                 confidence: relation.confidence,
-                evidence: this.sortEvidence(relation.evidence),
+                evidence: this.getEvidenceForOwner('related_to', relation.recordId),
             };
         })
             .filter((relation) => relation !== null)
@@ -496,7 +510,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 toProjection.id,
             ].join('|');
             const existing = relationsByKey.get(relationKey);
-            const evidence = this.toBookEvidenceRefs(relation.evidence, chapter);
+            const evidence = this.toBookEvidenceRefs(this.getEvidenceForOwner('related_to', relation.recordId), chapter);
             if (!existing) {
                 relationsByKey.set(relationKey, {
                     relationId: this.makeProjectedRelationId(relationKey),
@@ -608,10 +622,11 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     async loadFromStore() {
         if (!this.surrealService)
             return;
-        const [workflowRuns, snapshots, pageCaches, books, chapters, people, concepts, themes, entities, events, appearances, relations, partOfEdges,] = await Promise.all([
+        const [workflowRuns, snapshots, pageCaches, evidenceRecords, books, chapters, people, concepts, themes, entities, events, appearances, relations, partOfEdges,] = await Promise.all([
             this.surrealService.selectTable('workflow_run'),
             this.surrealService.selectTable('chapter_knowledge_snapshot'),
             this.surrealService.selectTable('page_knowledge_extraction_cache'),
+            this.surrealService.selectTable('knowledge_evidence'),
             this.surrealService.selectTable('book'),
             this.surrealService.selectTable('chapter'),
             this.surrealService.selectTable('person'),
@@ -640,6 +655,8 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         this.relations.clear();
         this.relationIdsByChapter.clear();
         this.partOfEdges.clear();
+        this.evidences.clear();
+        this.evidenceIdsByOwner.clear();
         for (const pageCache of pageCaches) {
             this.pageExtractionsByCacheKey.set(pageCache.cacheKey, pageCache);
         }
@@ -669,6 +686,9 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         }
         for (const partOfEdge of partOfEdges)
             this.partOfEdges.set(partOfEdge.recordId, partOfEdge);
+        for (const evidence of evidenceRecords)
+            this.addEvidenceToIndexes(evidence);
+        this.hydrateLegacyEvidence(people, concepts, themes, entities, events, appearances, relations);
         const rebuiltSnapshots = new Map();
         for (const snapshot of snapshots) {
             const rebuiltResult = await this.buildChapterSnapshot(snapshot.bookId, snapshot.chapterId);
@@ -697,6 +717,82 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 : run;
             this.runs.set(hydratedRun.id, hydratedRun);
             this.runIdsByIdempotencyKey.set(hydratedRun.idempotencyKey, hydratedRun.id);
+        }
+    }
+    hydrateLegacyEvidence(people, concepts, themes, entities, events, appearances, relations) {
+        const chapterByNodeRecordId = new Map();
+        for (const appearance of appearances) {
+            const chapter = this.chapters.get(appearance.chapterRecordId);
+            if (!chapter)
+                continue;
+            if (!chapterByNodeRecordId.has(appearance.nodeRecordId)) {
+                chapterByNodeRecordId.set(appearance.nodeRecordId, chapter);
+            }
+            this.addLegacyEvidence(chapter, 'appears_in', appearance.recordId, appearance.evidence);
+        }
+        for (const person of people) {
+            const chapter = chapterByNodeRecordId.get(person.recordId);
+            if (!chapter)
+                continue;
+            this.addLegacyEvidence(chapter, 'person', person.recordId, person.evidence);
+        }
+        for (const concept of concepts) {
+            const chapter = chapterByNodeRecordId.get(concept.recordId);
+            if (!chapter)
+                continue;
+            this.addLegacyEvidence(chapter, 'concept', concept.recordId, concept.evidence);
+        }
+        for (const theme of themes) {
+            const chapter = chapterByNodeRecordId.get(theme.recordId);
+            if (!chapter)
+                continue;
+            this.addLegacyEvidence(chapter, 'theme', theme.recordId, theme.evidence);
+        }
+        for (const entity of entities) {
+            const chapter = chapterByNodeRecordId.get(entity.recordId);
+            if (!chapter)
+                continue;
+            this.addLegacyEvidence(chapter, 'entity', entity.recordId, entity.evidence);
+        }
+        for (const event of events) {
+            const chapter = this.findChapterByExternalIds(event.bookId, event.chapterId)
+                ?? chapterByNodeRecordId.get(event.recordId);
+            if (!chapter)
+                continue;
+            this.addLegacyEvidence(chapter, 'event', event.recordId, event.evidence);
+        }
+        for (const relation of relations) {
+            const chapter = this.chapters.get(relation.chapterRecordId);
+            if (!chapter)
+                continue;
+            this.addLegacyEvidence(chapter, 'related_to', relation.recordId, relation.evidence);
+        }
+    }
+    findChapterByExternalIds(bookId, chapterId) {
+        for (const chapter of this.chapters.values()) {
+            if (chapter.bookId === bookId && chapter.chapterId === chapterId)
+                return chapter;
+        }
+        return null;
+    }
+    addLegacyEvidence(chapterRecord, ownerTable, ownerRecordId, evidence) {
+        for (const item of evidence ?? []) {
+            const normalized = this.normalizeEvidence(item);
+            if (!normalized)
+                continue;
+            this.addEvidenceToIndexes({
+                recordId: this.makeEvidenceRecordId(ownerTable, ownerRecordId, normalized),
+                bookId: chapterRecord.bookId,
+                chapterId: chapterRecord.chapterId,
+                chapterRecordId: chapterRecord.recordId,
+                ownerTable,
+                ownerRecordId,
+                pageIndex: normalized.pageIndex,
+                pageNumber: normalized.pageNumber,
+                quote: normalized.quote,
+                quoteHash: hashText(normalized.quote),
+                createdAt: new Date().toISOString(),
+            });
         }
     }
     upsertBook(bookId, persistBatch) {
@@ -749,7 +845,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         this.partOfEdges.set(recordId, edge);
         this.addToPersistBatch(persistBatch, 'part_of', recordId, edge);
     }
-    upsertPerson(person, persistBatch) {
+    upsertPerson(chapterRecord, person, persistBatch) {
         const normalizedName = normalizeText(person.name);
         const recordId = this.makeGlobalRecordId('person', normalizedName);
         const existing = this.people.get(recordId);
@@ -763,9 +859,9 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 description: person.description,
                 roles: this.mergeStringArrays(undefined, person.roles),
                 traits: this.mergeStringArrays(undefined, person.traits),
-                evidence: this.mergeEvidence(undefined, person.evidence),
             };
             this.people.set(recordId, created);
+            this.upsertEvidence(chapterRecord, 'person', recordId, person.evidence, persistBatch);
             this.addToPersistBatch(persistBatch, 'person', recordId, created);
             return created;
         }
@@ -775,13 +871,13 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             description: existing.description ?? person.description,
             roles: this.mergeStringArrays(existing.roles, person.roles),
             traits: this.mergeStringArrays(existing.traits, person.traits),
-            evidence: this.mergeEvidence(existing.evidence, person.evidence),
         };
         this.people.set(recordId, updated);
+        this.upsertEvidence(chapterRecord, 'person', recordId, person.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'person', recordId, updated);
         return updated;
     }
-    upsertConcept(idea, persistBatch) {
+    upsertConcept(chapterRecord, idea, persistBatch) {
         const normalizedLabel = normalizeText(idea.label);
         const recordId = this.makeGlobalRecordId('concept', normalizedLabel);
         const existing = this.concepts.get(recordId);
@@ -793,9 +889,9 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 normalizedLabel,
                 description: idea.description,
                 kind: idea.kind,
-                evidence: this.mergeEvidence(undefined, idea.evidence),
             };
             this.concepts.set(recordId, created);
+            this.upsertEvidence(chapterRecord, 'concept', recordId, idea.evidence, persistBatch);
             this.addToPersistBatch(persistBatch, 'concept', recordId, created);
             return created;
         }
@@ -803,13 +899,13 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             ...existing,
             description: existing.description ?? idea.description,
             kind: existing.kind ?? idea.kind,
-            evidence: this.mergeEvidence(existing.evidence, idea.evidence),
         };
         this.concepts.set(recordId, updated);
+        this.upsertEvidence(chapterRecord, 'concept', recordId, idea.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'concept', recordId, updated);
         return updated;
     }
-    upsertTheme(theme, persistBatch) {
+    upsertTheme(chapterRecord, theme, persistBatch) {
         const normalizedLabel = normalizeText(theme.label);
         const recordId = this.makeGlobalRecordId('theme', normalizedLabel);
         const existing = this.themes.get(recordId);
@@ -821,9 +917,9 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 normalizedLabel,
                 description: theme.description,
                 strength: theme.strength,
-                evidence: this.mergeEvidence(undefined, theme.evidence),
             };
             this.themes.set(recordId, created);
+            this.upsertEvidence(chapterRecord, 'theme', recordId, theme.evidence, persistBatch);
             this.addToPersistBatch(persistBatch, 'theme', recordId, created);
             return created;
         }
@@ -831,13 +927,13 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             ...existing,
             description: existing.description ?? theme.description,
             strength: this.maxNumber(existing.strength, theme.strength),
-            evidence: this.mergeEvidence(existing.evidence, theme.evidence),
         };
         this.themes.set(recordId, updated);
+        this.upsertEvidence(chapterRecord, 'theme', recordId, theme.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'theme', recordId, updated);
         return updated;
     }
-    upsertEntity(entity, persistBatch) {
+    upsertEntity(chapterRecord, entity, persistBatch) {
         const normalizedLabel = normalizeText(entity.label);
         const recordId = this.makeEntityRecordId(entity.type, normalizedLabel);
         const existing = this.entities.get(recordId);
@@ -849,22 +945,22 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 normalizedLabel,
                 entityType: entity.type,
                 description: entity.description,
-                evidence: this.mergeEvidence(undefined, entity.evidence),
             };
             this.entities.set(recordId, created);
+            this.upsertEvidence(chapterRecord, 'entity', recordId, entity.evidence, persistBatch);
             this.addToPersistBatch(persistBatch, 'entity', recordId, created);
             return created;
         }
         const updated = {
             ...existing,
             description: existing.description ?? entity.description,
-            evidence: this.mergeEvidence(existing.evidence, entity.evidence),
         };
         this.entities.set(recordId, updated);
+        this.upsertEvidence(chapterRecord, 'entity', recordId, entity.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'entity', recordId, updated);
         return updated;
     }
-    upsertEvent(input, event, participantRecordIds, persistBatch) {
+    upsertEvent(chapterRecord, input, event, participantRecordIds, persistBatch) {
         const normalizedLabel = normalizeText(event.label);
         const recordId = this.makeEventRecordId(input.bookId, input.chapterId, normalizedLabel);
         const existing = this.events.get(recordId);
@@ -880,9 +976,9 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 participantRecordIds: this.mergeStringArrays(undefined, participantRecordIds),
                 timeHint: event.time_hint,
                 placeHint: event.place_hint,
-                evidence: this.mergeEvidence(undefined, event.evidence),
             };
             this.events.set(recordId, created);
+            this.upsertEvidence(chapterRecord, 'event', recordId, event.evidence, persistBatch);
             this.addToPersistBatch(persistBatch, 'event', recordId, created);
             return created;
         }
@@ -892,9 +988,9 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             participantRecordIds: this.mergeStringArrays(existing.participantRecordIds, participantRecordIds),
             timeHint: existing.timeHint ?? event.time_hint,
             placeHint: existing.placeHint ?? event.place_hint,
-            evidence: this.mergeEvidence(existing.evidence, event.evidence),
         };
         this.events.set(recordId, updated);
+        this.upsertEvidence(chapterRecord, 'event', recordId, event.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'event', recordId, updated);
         return updated;
     }
@@ -908,7 +1004,6 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 description: existing.description ?? person.description,
                 roles: this.mergeStringArrays(existing.roles, person.roles),
                 traits: this.mergeStringArrays(existing.traits, person.traits),
-                evidence: this.mergeEvidence(existing.evidence, person.evidence),
             }
             : {
                 recordId,
@@ -923,10 +1018,10 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 description: person.description,
                 roles: this.mergeStringArrays(undefined, person.roles),
                 traits: this.mergeStringArrays(undefined, person.traits),
-                evidence: this.mergeEvidence(undefined, person.evidence),
             };
         this.appearances.set(recordId, updated);
         this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+        this.upsertEvidence(chapterRecord, 'appears_in', recordId, person.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
     }
     upsertIdeaAppearance(chapterRecord, conceptRecord, idea, persistBatch) {
@@ -937,7 +1032,6 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 ...existing,
                 description: existing.description ?? idea.description,
                 kind: existing.kind ?? idea.kind,
-                evidence: this.mergeEvidence(existing.evidence, idea.evidence),
             }
             : {
                 recordId,
@@ -950,10 +1044,10 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 label: conceptRecord.label,
                 description: idea.description,
                 kind: idea.kind,
-                evidence: this.mergeEvidence(undefined, idea.evidence),
             };
         this.appearances.set(recordId, updated);
         this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+        this.upsertEvidence(chapterRecord, 'appears_in', recordId, idea.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
     }
     upsertThemeAppearance(chapterRecord, themeRecord, theme, persistBatch) {
@@ -964,7 +1058,6 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 ...existing,
                 description: existing.description ?? theme.description,
                 strength: this.maxNumber(existing.strength, theme.strength),
-                evidence: this.mergeEvidence(existing.evidence, theme.evidence),
             }
             : {
                 recordId,
@@ -977,10 +1070,10 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 label: themeRecord.label,
                 description: theme.description,
                 strength: theme.strength,
-                evidence: this.mergeEvidence(undefined, theme.evidence),
             };
         this.appearances.set(recordId, updated);
         this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+        this.upsertEvidence(chapterRecord, 'appears_in', recordId, theme.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
     }
     upsertEntityAppearance(chapterRecord, entityRecord, entity, persistBatch) {
@@ -990,7 +1083,6 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             ? {
                 ...existing,
                 description: existing.description ?? entity.description,
-                evidence: this.mergeEvidence(existing.evidence, entity.evidence),
             }
             : {
                 recordId,
@@ -1003,10 +1095,10 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 label: entityRecord.label,
                 entityType: entityRecord.entityType,
                 description: entity.description,
-                evidence: this.mergeEvidence(undefined, entity.evidence),
             };
         this.appearances.set(recordId, updated);
         this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+        this.upsertEvidence(chapterRecord, 'appears_in', recordId, entity.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
     }
     upsertEventAppearance(chapterRecord, eventRecord, event, participantRecordIds, persistBatch) {
@@ -1019,7 +1111,6 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 participantRecordIds: this.mergeStringArrays(existing.participantRecordIds, participantRecordIds),
                 timeHint: existing.timeHint ?? event.time_hint,
                 placeHint: existing.placeHint ?? event.place_hint,
-                evidence: this.mergeEvidence(existing.evidence, event.evidence),
             }
             : {
                 recordId,
@@ -1034,10 +1125,10 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 participantRecordIds: this.mergeStringArrays(undefined, participantRecordIds),
                 timeHint: event.time_hint,
                 placeHint: event.place_hint,
-                evidence: this.mergeEvidence(undefined, event.evidence),
             };
         this.appearances.set(recordId, updated);
         this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+        this.upsertEvidence(chapterRecord, 'appears_in', recordId, event.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
     }
     upsertRelation(chapterRecord, relation, persistBatch) {
@@ -1048,7 +1139,6 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 ...existing,
                 description: existing.description ?? relation.description,
                 confidence: this.maxNumber(existing.confidence, relation.confidence),
-                evidence: this.mergeEvidence(existing.evidence, relation.evidence),
             }
             : {
                 recordId,
@@ -1063,10 +1153,10 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 relationType: relation.relation_type,
                 description: relation.description,
                 confidence: relation.confidence,
-                evidence: this.mergeEvidence(undefined, relation.evidence),
             };
         this.relations.set(recordId, updated);
         this.ensureSet(this.relationIdsByChapter, chapterRecord.recordId).add(recordId);
+        this.upsertEvidence(chapterRecord, 'related_to', recordId, relation.evidence, persistBatch);
         this.addToPersistBatch(persistBatch, 'related_to', recordId, updated);
     }
     countChapter(chapterRecordId) {
@@ -1098,6 +1188,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     async clearChapterKnowledge(chapterRecordId) {
         const appearanceIds = Array.from(this.appearanceIdsByChapter.get(chapterRecordId) ?? []);
         const relationIds = Array.from(this.relationIdsByChapter.get(chapterRecordId) ?? []);
+        const evidenceIds = this.removeEvidenceForChapter(chapterRecordId);
         for (const appearanceId of appearanceIds) {
             this.appearances.delete(appearanceId);
         }
@@ -1110,6 +1201,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             return;
         await this.deleteRecords('appears_in', appearanceIds);
         await this.deleteRecords('related_to', relationIds);
+        await this.deleteRecords('knowledge_evidence', evidenceIds);
     }
     buildGlobalPeople(appearances, chapterByRecordId) {
         const appearancesByNodeRecordId = new Map();
@@ -1320,7 +1412,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             const chapter = chapterByRecordId.get(appearance.chapterRecordId);
             if (!chapter)
                 continue;
-            aggregated = this.mergeBookEvidenceRefs(aggregated, this.toBookEvidenceRefs(appearance.evidence, chapter));
+            aggregated = this.mergeBookEvidenceRefs(aggregated, this.toBookEvidenceRefs(this.getEvidenceForOwner('appears_in', appearance.recordId), chapter));
         }
         return this.sortBookEvidenceRefs(aggregated);
     }
@@ -1463,6 +1555,76 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             return undefined;
         return this.mergeStringArrays(undefined, ids.map((id) => remap.get(id)).filter((item) => Boolean(item)));
     }
+    upsertEvidence(chapterRecord, ownerTable, ownerRecordId, evidence, persistBatch) {
+        for (const item of evidence ?? []) {
+            const normalized = this.normalizeEvidence(item);
+            if (!normalized)
+                continue;
+            const recordId = this.makeEvidenceRecordId(ownerTable, ownerRecordId, normalized);
+            if (this.evidences.has(recordId))
+                continue;
+            const record = {
+                recordId,
+                bookId: chapterRecord.bookId,
+                chapterId: chapterRecord.chapterId,
+                chapterRecordId: chapterRecord.recordId,
+                ownerTable,
+                ownerRecordId,
+                pageIndex: normalized.pageIndex,
+                pageNumber: normalized.pageNumber,
+                quote: normalized.quote,
+                quoteHash: hashText(normalized.quote),
+                createdAt: new Date().toISOString(),
+            };
+            this.addEvidenceToIndexes(record);
+            this.addToPersistBatch(persistBatch, 'knowledge_evidence', recordId, record);
+        }
+    }
+    addEvidenceToIndexes(record) {
+        if (this.evidences.has(record.recordId))
+            return;
+        this.evidences.set(record.recordId, record);
+        this.ensureSet(this.evidenceIdsByOwner, this.makeEvidenceOwnerKey(record.ownerTable, record.ownerRecordId)).add(record.recordId);
+    }
+    getEvidenceForOwner(ownerTable, ownerRecordId) {
+        const evidence = Array.from(this.evidenceIdsByOwner.get(this.makeEvidenceOwnerKey(ownerTable, ownerRecordId)) ?? [])
+            .map((recordId) => this.evidences.get(recordId))
+            .filter((record) => Boolean(record))
+            .map((record) => ({
+            quote: record.quote,
+            pageIndex: record.pageIndex,
+            pageNumber: record.pageNumber,
+        }));
+        return this.sortEvidence(evidence);
+    }
+    removeEvidenceForChapter(chapterRecordId) {
+        const recordIds = Array.from(this.evidences.values())
+            .filter((record) => record.chapterRecordId === chapterRecordId)
+            .map((record) => record.recordId);
+        for (const recordId of recordIds) {
+            const record = this.evidences.get(recordId);
+            if (!record)
+                continue;
+            const ownerKey = this.makeEvidenceOwnerKey(record.ownerTable, record.ownerRecordId);
+            const ownerSet = this.evidenceIdsByOwner.get(ownerKey);
+            ownerSet?.delete(recordId);
+            if (ownerSet?.size === 0) {
+                this.evidenceIdsByOwner.delete(ownerKey);
+            }
+            this.evidences.delete(recordId);
+        }
+        return recordIds;
+    }
+    normalizeEvidence(value) {
+        const quote = value.quote?.trim();
+        if (!quote)
+            return null;
+        return {
+            quote,
+            pageIndex: value.pageIndex,
+            pageNumber: value.pageNumber,
+        };
+    }
     mergeStringArrays(existing, incoming) {
         const values = [...(existing ?? []), ...(incoming ?? [])];
         if (values.length === 0)
@@ -1475,28 +1637,6 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 continue;
             seen.add(normalized);
             merged.push(value.trim());
-        }
-        return merged.length > 0 ? merged : undefined;
-    }
-    mergeEvidence(existing, incoming) {
-        const values = [...(existing ?? []), ...(incoming ?? [])];
-        if (values.length === 0)
-            return undefined;
-        const merged = [];
-        const seen = new Set();
-        for (const value of values) {
-            const normalized = normalizeText(value.quote);
-            if (!normalized)
-                continue;
-            const key = `${normalized}|${value.pageIndex ?? -1}`;
-            if (seen.has(key))
-                continue;
-            seen.add(key);
-            merged.push({
-                quote: value.quote.trim(),
-                pageIndex: value.pageIndex,
-                pageNumber: value.pageNumber,
-            });
         }
         return merged.length > 0 ? merged : undefined;
     }
@@ -1547,6 +1687,18 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             encodeSegment(chapterContentHash),
             encodeSegment(promptVersion),
         ].join('_');
+    }
+    makeEvidenceOwnerKey(ownerTable, ownerRecordId) {
+        return `${ownerTable}:${ownerRecordId}`;
+    }
+    makeEvidenceRecordId(ownerTable, ownerRecordId, evidence) {
+        return `evidence_${encodeSegment([
+            ownerTable,
+            ownerRecordId,
+            evidence.pageIndex ?? -1,
+            evidence.pageNumber ?? -1,
+            evidence.quote,
+        ].join('|'))}`;
     }
     makeRecordRef(table, recordId) {
         return `${table}:${recordId}`;
@@ -1642,12 +1794,18 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             console.error('[knowledge-extraction] failed to persist repository state', error);
         });
     }
+    withoutEvidence(record) {
+        if (!('evidence' in record))
+            return record;
+        const { evidence: _evidence, ...rest } = record;
+        return rest;
+    }
     async persistRecord(table, id, record) {
         if (!this.surrealService)
             return;
         if (table === 'appears_in' || table === 'related_to' || table === 'part_of') {
-            const relationRecord = record;
-            await this.surrealService.putRelationRecord(table, id, relationRecord.in, relationRecord.out, record);
+            const relationRecord = this.withoutEvidence(record);
+            await this.surrealService.putRelationRecord(table, id, relationRecord.in, relationRecord.out, relationRecord);
             return;
         }
         if (table === 'workflow_run') {
@@ -1664,6 +1822,14 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 ...snapshot,
                 result: this.createSlimResult(snapshot.result),
             });
+            return;
+        }
+        if (table === 'person'
+            || table === 'concept'
+            || table === 'theme'
+            || table === 'entity'
+            || table === 'event') {
+            await this.surrealService.putRecord(table, id, this.withoutEvidence(record));
             return;
         }
         await this.surrealService.putRecord(table, id, record);

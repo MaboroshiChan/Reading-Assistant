@@ -14,9 +14,11 @@ exports.isOk = exports.isError = exports.isPartial = exports.isAnalyzeType = voi
 // Quick predicate for narrowing string -> AnalyzeMessageType.
 const isAnalyzeType = (t) => t === 'analyze.skeleton.v1' ||
     t === 'analyze.paragraph.v1' ||
+    t === 'analyze.chapter-keywords.v1' ||
     t === 'analyze.sentence.v1' ||
     t === 'analyze.sentence-structure.v1' ||
-    t === 'analyze.quiz.v1';
+    t === 'analyze.quiz.v1' ||
+    t === 'analyze.knowledge-extraction.v1';
 exports.isAnalyzeType = isAnalyzeType;
 // Type guards that help SDK callers branch on response status.
 const isPartial = (r) => r.status === 'partial';

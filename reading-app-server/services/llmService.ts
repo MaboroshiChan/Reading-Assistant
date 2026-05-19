@@ -60,6 +60,13 @@ export interface LLMPrefixCacheOptions {
   prefix: string;
   displayName?: string;
   ttlSeconds?: number;
+  /**
+   * "cached" preserves the legacy behavior: the system prompt is part of the
+   * provider cached content. "request" caches only the prefix and sends the
+   * current system prompt with each request, allowing multiple task prompts to
+   * share the same cached chapter context safely.
+   */
+  systemPromptMode?: 'cached' | 'request';
 }
 
 export interface LLMClient {
@@ -274,7 +281,7 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
     const cachedContentName = await resolveCachedContentName(args, apiKey, useDeveloperInstruction);
     if (cachedContentName) {
       try {
-        return await callLLMWithCachedPrefix(args, apiKey, cachedContentName);
+        return await callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDeveloperInstruction);
       } catch (error) {
         if (!isCachedContentError(error)) {
           throw error;
@@ -361,9 +368,13 @@ async function callLLMWithCachedPrefix(
   args: CallArgs,
   apiKey: string,
   cachedContentName: string,
+  useDeveloperInstruction: boolean,
 ): Promise<CallReturn<string>> {
   const { GoogleGenAI } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey });
+  const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
+  const shouldSendSystemPrompt =
+    useDeveloperInstruction && args.prefixCache?.systemPromptMode === 'request';
   let resolveUsage!: (usage: LLMUsage) => void;
   let rejectUsage!: (reason?: unknown) => void;
   const usagePromise = new Promise<LLMUsage>((resolve, reject) => {
@@ -373,9 +384,10 @@ async function callLLMWithCachedPrefix(
 
   const stream = await ai.models.generateContentStream({
     model: args.model,
-    contents: args.userPrompt,
+    contents: requestPrompt,
     config: {
       cachedContent: cachedContentName,
+      ...(shouldSendSystemPrompt ? { systemInstruction: args.systemPrompt } : {}),
       maxOutputTokens: args.maxOutputTokens,
       temperature: args.temperature,
       responseMimeType: args.responseAs === 'json' ? 'application/json' : 'text/plain',
@@ -462,15 +474,22 @@ async function createCachedContentName(
     60,
     prefixCache.ttlSeconds ?? Math.floor(config.cacheTtlMs / 1000),
   );
-  const cachedPrefixText = useDeveloperInstruction
-    ? prefixCache.prefix
-    : [
+  const systemPromptMode = prefixCache.systemPromptMode ?? 'cached';
+  const cachedPrefixText = (() => {
+    if (systemPromptMode === 'request') {
+      return prefixCache.prefix;
+    }
+    if (useDeveloperInstruction) {
+      return prefixCache.prefix;
+    }
+    return [
       '[System Instructions]',
       args.systemPrompt,
       '',
       '[Cached Prefix]',
       prefixCache.prefix,
     ].join('\n');
+  })();
 
   const cachedContent = await ai.caches.create({
     model: args.model,
@@ -478,7 +497,8 @@ async function createCachedContentName(
       contents: cachedPrefixText,
       displayName: prefixCache.displayName ?? prefixCache.cacheKey.slice(0, 128),
       ttl: `${ttlSeconds}s`,
-      systemInstruction: useDeveloperInstruction ? args.systemPrompt : undefined,
+      systemInstruction:
+        useDeveloperInstruction && systemPromptMode === 'cached' ? args.systemPrompt : undefined,
     },
   });
 

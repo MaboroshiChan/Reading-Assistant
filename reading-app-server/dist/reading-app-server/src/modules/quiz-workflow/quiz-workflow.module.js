@@ -18,7 +18,7 @@ let QuizWorkflowModule = class QuizWorkflowModule {
 exports.QuizWorkflowModule = QuizWorkflowModule;
 exports.QuizWorkflowModule = QuizWorkflowModule = __decorate([
     (0, common_1.Module)({
-        imports: [book_ingestion_module_1.BookIngestionModule, knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule],
+        imports: [book_ingestion_module_1.BookIngestionModule, (0, common_1.forwardRef)(() => knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule)],
         controllers: [quiz_workflow_controller_1.QuizWorkflowController],
         providers: [quiz_workflow_repository_1.QuizWorkflowRepository, quiz_workflow_service_1.QuizWorkflowService],
         exports: [quiz_workflow_repository_1.QuizWorkflowRepository, quiz_workflow_service_1.QuizWorkflowService],

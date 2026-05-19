@@ -13,6 +13,7 @@ export interface Config {
   thinking: boolean;
   temperature: number;
   autoSubmitKnowledgeExtractionWorkflow: boolean;
+  autoSubmitQuizWorkflow: boolean;
   requireKnowledgeExtractionCache: boolean;
   surrealUrl: string;
   surrealNamespace: string;
@@ -49,6 +50,7 @@ export const createAppConfig = (): Config => ({
   thinking: false,
   temperature: 0.1,
   autoSubmitKnowledgeExtractionWorkflow: process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === '1',
+  autoSubmitQuizWorkflow: process.env.AUTO_SUBMIT_QUIZ_WORKFLOW !== '0',
   requireKnowledgeExtractionCache: process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE === '1',
   surrealUrl: process.env.SURREAL_URL ?? '',
   surrealNamespace: process.env.SURREAL_NS ?? '',

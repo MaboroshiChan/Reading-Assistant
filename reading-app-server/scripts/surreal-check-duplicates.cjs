@@ -6,6 +6,7 @@ const TABLE_ORDER = [
   'workflow_run',
   'chapter_knowledge_snapshot',
   'page_knowledge_extraction_cache',
+  'knowledge_evidence',
   'book',
   'chapter',
   'person',
@@ -33,6 +34,8 @@ const KEY_BUILDERS = {
   chapter_knowledge_snapshot: (row) => `${row.bookId}::${row.chapterId}`,
   page_knowledge_extraction_cache: (row) =>
     `${row.bookId}::${row.chapterId}::${row.pageIndex}::${row.promptVersion}::${row.sourceHash}`,
+  knowledge_evidence: (row) =>
+    `${row.ownerTable}::${row.ownerRecordId}::${row.pageIndex ?? -1}::${row.pageNumber ?? -1}::${row.quoteHash}`,
 };
 
 function parseArgs(argv) {

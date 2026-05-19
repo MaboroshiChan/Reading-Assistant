@@ -19,6 +19,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     delete process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE;
+    delete process.env.AUTO_SUBMIT_QUIZ_WORKFLOW;
   });
 
   test('processes pages in pageIndex order and merges repeated knowledge across pages', async () => {
@@ -314,6 +315,75 @@ describe('KnowledgeExtractionWorkflowService', () => {
       chapterIndex: 2,
       workflowVersion: 'v1',
     })).toThrowError(ConflictException);
+  });
+
+  test('re-enqueues queued and running runs during application bootstrap', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const queueService = new WorkflowQueueService();
+    const enqueueSpy = vi.spyOn(queueService, 'enqueue').mockImplementation(() => undefined);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      queueService,
+    );
+
+    const queuedRun = workflowRepository.createOrReuseRun({
+      bookId: 'book-queued',
+      chapterId: 'chapter-queued',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge:v1:book-queued:chapter-queued:hash-queued',
+      expectedSnapshotVersion: 1,
+      expectedChapterContentHash: 'hash-queued',
+      requestedByUserId: undefined,
+    }).run;
+    const runningRun = workflowRepository.createOrReuseRun({
+      bookId: 'book-running',
+      chapterId: 'chapter-running',
+      chapterIndex: 2,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge:v1:book-running:chapter-running:hash-running',
+      expectedSnapshotVersion: 2,
+      expectedChapterContentHash: 'hash-running',
+      requestedByUserId: undefined,
+    }).run;
+    const completedRun = workflowRepository.createOrReuseRun({
+      bookId: 'book-completed',
+      chapterId: 'chapter-completed',
+      chapterIndex: 3,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge:v1:book-completed:chapter-completed:hash-completed',
+      expectedSnapshotVersion: 3,
+      expectedChapterContentHash: 'hash-completed',
+      requestedByUserId: undefined,
+    }).run;
+    workflowRepository.markRunning(runningRun.id);
+    workflowRepository.completeRun({
+      workflowRunId: completedRun.id,
+      snapshotVersion: 3,
+      chapterContentHash: 'hash-completed',
+      result: {
+        title: 'Completed',
+        summary: '',
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+    });
+
+    service.onApplicationBootstrap();
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(2);
+    expect(workflowRepository.listRecoverableRuns().map((run) => run.id)).toEqual([
+      queuedRun.id,
+      runningRun.id,
+    ]);
   });
 
   test('reuses the latest completed result when canonical chapter content is unchanged', async () => {
@@ -654,7 +724,8 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(prompts[0]).toContain('Use the primary evidence page as the only source of evidence quotes.');
     expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
       prefixCache: expect.objectContaining({
-        cacheKey: 'knowledge_extraction.chapter_prefix:knowledge_extraction.v2.3:book-5:chapter-5:chapter-hash-5',
+        cacheKey: 'chapter_context.v1:book-5:chapter-5:chapter-hash-5',
+        systemPromptMode: 'request',
       }),
     }));
   });
@@ -755,5 +826,174 @@ describe('KnowledgeExtractionWorkflowService', () => {
     });
 
     expect(prompts).toHaveLength(1);
+  });
+
+  test('auto-submits quiz after knowledge extraction completes', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+    process.env.AUTO_SUBMIT_QUIZ_WORKFLOW = '1';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const quizService = {
+      submitQuizWorkflow: vi.fn(() => ({
+        workflowRunId: 'quiz-run-1',
+        deduped: false,
+      })),
+    };
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+      { get: vi.fn(() => quizService) } as never,
+    );
+
+    const upsert = bookRepository.upsertPageFragment({
+      bookId: 'book-auto-quiz',
+      chapterId: 'chapter-auto-quiz',
+      chapterIndex: 7,
+      chapterTitle: 'Auto Quiz',
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: { '0': 'Alice studies the chapter.' },
+    });
+
+    vi.spyOn(service as never, 'generateKnowledgeExtraction').mockResolvedValue({
+      title: 'Auto Quiz',
+      summary: 'Alice studies the chapter.',
+      people: [],
+      ideas: [],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [],
+    });
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-auto-quiz',
+      chapterId: 'chapter-auto-quiz',
+      chapterIndex: 7,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+      expect(quizService.submitQuizWorkflow).toHaveBeenCalledTimes(1);
+    });
+
+    expect(quizService.submitQuizWorkflow).toHaveBeenCalledWith({
+      bookId: 'book-auto-quiz',
+      chapterId: 'chapter-auto-quiz',
+      chapterIndex: 7,
+      workflowVersion: 'v1',
+      expectedSnapshotVersion: upsert.book.snapshotVersion,
+      expectedChapterContentHash: upsert.chapter.chapterContentHash,
+    });
+  });
+
+  test('does not auto-submit quiz when disabled', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+    process.env.AUTO_SUBMIT_QUIZ_WORKFLOW = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const quizService = { submitQuizWorkflow: vi.fn() };
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+      { get: vi.fn(() => quizService) } as never,
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-auto-disabled',
+      chapterId: 'chapter-auto-disabled',
+      chapterIndex: 8,
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: { '0': 'Alice studies the chapter.' },
+    });
+
+    vi.spyOn(service as never, 'generateKnowledgeExtraction').mockResolvedValue({
+      title: 'Auto Disabled',
+      summary: 'Alice studies the chapter.',
+      people: [],
+      ideas: [],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [],
+    });
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-auto-disabled',
+      chapterId: 'chapter-auto-disabled',
+      chapterIndex: 8,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+    });
+
+    expect(quizService.submitQuizWorkflow).not.toHaveBeenCalled();
+  });
+
+  test('keeps knowledge extraction completed when quiz auto-submit fails', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+    process.env.AUTO_SUBMIT_QUIZ_WORKFLOW = '1';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const quizService = {
+      submitQuizWorkflow: vi.fn(() => {
+        throw new Error('synthetic quiz failure');
+      }),
+    };
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+      { get: vi.fn(() => quizService) } as never,
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-auto-fail',
+      chapterId: 'chapter-auto-fail',
+      chapterIndex: 9,
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: { '0': 'Alice studies the chapter.' },
+    });
+
+    vi.spyOn(service as never, 'generateKnowledgeExtraction').mockResolvedValue({
+      title: 'Auto Fail',
+      summary: 'Alice studies the chapter.',
+      people: [],
+      ideas: [],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [],
+    });
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-auto-fail',
+      chapterId: 'chapter-auto-fail',
+      chapterIndex: 9,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+      expect(quizService.submitQuizWorkflow).toHaveBeenCalledTimes(1);
+    });
+
+    expect(service.getWorkflowResult(submit.workflowRunId).result.title).toBe('Auto Fail');
   });
 });

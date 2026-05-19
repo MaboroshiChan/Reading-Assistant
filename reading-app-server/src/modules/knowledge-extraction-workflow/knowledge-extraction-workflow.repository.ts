@@ -40,16 +40,21 @@ const normalizeText = (value: string): string =>
 const encodeSegment = (value: string): string =>
   createHash('sha256').update(value).digest('hex').slice(0, 32);
 
+const hashText = (value: string): string =>
+  createHash('sha256').update(value).digest('hex');
+
 const randomRecordId = (prefix: string): string =>
   `${prefix}_${randomUUID().replace(/-/g, '')}`;
 
 const stableLocalId = (prefix: string, seed: string): string => `${prefix}_${encodeSegment(seed)}`;
 
 type KnowledgeNodeType = KnowledgeRelation['from_type'];
+type EvidenceOwnerTable = 'person' | 'concept' | 'theme' | 'entity' | 'event' | 'appears_in' | 'related_to';
 type PersistTable =
   | 'workflow_run'
   | 'chapter_knowledge_snapshot'
   | 'page_knowledge_extraction_cache'
+  | 'knowledge_evidence'
   | 'book'
   | 'chapter'
   | 'person'
@@ -231,6 +236,20 @@ interface PartOfGraphRecord {
   bookRecordId: string;
 }
 
+interface EvidenceRecord {
+  recordId: string;
+  bookId: string;
+  chapterId: string;
+  chapterRecordId: string;
+  ownerTable: EvidenceOwnerTable;
+  ownerRecordId: string;
+  pageIndex?: number;
+  pageNumber?: number;
+  quote: string;
+  quoteHash: string;
+  createdAt: string;
+}
+
 interface UpsertPageExtractionInput {
   bookId: string;
   chapterId: string;
@@ -260,6 +279,8 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
   private readonly relations = new Map<string, RelationGraphRecord>();
   private readonly relationIdsByChapter = new Map<string, Set<string>>();
   private readonly partOfEdges = new Map<string, PartOfGraphRecord>();
+  private readonly evidences = new Map<string, EvidenceRecord>();
+  private readonly evidenceIdsByOwner = new Map<string, Set<string>>();
 
   private pendingPersist: Promise<void> = Promise.resolve();
 
@@ -345,6 +366,17 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
 
   getRun(workflowRunId: string): KnowledgeExtractionWorkflowRunRecord | null {
     return this.runs.get(workflowRunId) ?? null;
+  }
+
+  listRecoverableRuns(): KnowledgeExtractionWorkflowRunRecord[] {
+    return Array.from(this.runs.values())
+      .filter((run) => run.status === 'queued' || run.status === 'running')
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.startedAt ?? left.createdAt);
+        const rightTime = Date.parse(right.startedAt ?? right.createdAt);
+        return leftTime - rightTime;
+      })
+      .map((run) => ({ ...run }));
   }
 
   markRunning(workflowRunId: string): KnowledgeExtractionWorkflowRunRecord | null {
@@ -463,6 +495,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       'DEFINE TABLE IF NOT EXISTS workflow_run SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS chapter_knowledge_snapshot SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS page_knowledge_extraction_cache SCHEMALESS;',
+      'DEFINE TABLE IF NOT EXISTS knowledge_evidence SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS book SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS chapter SCHEMALESS;',
       'DEFINE TABLE IF NOT EXISTS person SCHEMALESS;',
@@ -501,32 +534,32 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     const remap = this.createEmptyIdRemap();
 
     for (const person of input.extraction.people) {
-      const personRecord = this.upsertPerson(person, persistBatch);
+      const personRecord = this.upsertPerson(chapterRecord, person, persistBatch);
       remap.person.set(person.local_id, personRecord.recordId);
       this.upsertPersonAppearance(chapterRecord, personRecord, person, persistBatch);
     }
 
     for (const idea of input.extraction.ideas) {
-      const conceptRecord = this.upsertConcept(idea, persistBatch);
+      const conceptRecord = this.upsertConcept(chapterRecord, idea, persistBatch);
       remap.idea.set(idea.local_id, conceptRecord.recordId);
       this.upsertIdeaAppearance(chapterRecord, conceptRecord, idea, persistBatch);
     }
 
     for (const entity of input.extraction.entities) {
-      const entityRecord = this.upsertEntity(entity, persistBatch);
+      const entityRecord = this.upsertEntity(chapterRecord, entity, persistBatch);
       remap.entity.set(entity.local_id, entityRecord.recordId);
       this.upsertEntityAppearance(chapterRecord, entityRecord, entity, persistBatch);
     }
 
     for (const theme of input.extraction.themes) {
-      const themeRecord = this.upsertTheme(theme, persistBatch);
+      const themeRecord = this.upsertTheme(chapterRecord, theme, persistBatch);
       remap.theme.set(theme.local_id, themeRecord.recordId);
       this.upsertThemeAppearance(chapterRecord, themeRecord, theme, persistBatch);
     }
 
     for (const event of input.extraction.events) {
       const participantRecordIds = this.remapNodeIds(event.participant_local_ids, remap.person);
-      const eventRecord = this.upsertEvent(input, event, participantRecordIds, persistBatch);
+      const eventRecord = this.upsertEvent(chapterRecord, input, event, participantRecordIds, persistBatch);
       remap.event.set(event.local_id, eventRecord.recordId);
       this.upsertEventAppearance(chapterRecord, eventRecord, event, participantRecordIds, persistBatch);
     }
@@ -634,7 +667,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         description: appearance.description,
         roles: this.sortStrings(appearance.roles),
         traits: this.sortStrings(appearance.traits),
-        evidence: this.sortEvidence(appearance.evidence),
+        evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
       }))
       .sort((left, right) => this.compareStrings(left.name, right.name, left.local_id, right.local_id));
 
@@ -645,7 +678,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         label: appearance.label,
         description: appearance.description,
         kind: appearance.kind ?? 'claim',
-        evidence: this.sortEvidence(appearance.evidence),
+        evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
       }))
       .sort((left, right) => this.compareStrings(left.label, right.label, left.local_id, right.local_id));
 
@@ -660,7 +693,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         ),
         time_hint: appearance.timeHint,
         place_hint: appearance.placeHint,
-        evidence: this.sortEvidence(appearance.evidence),
+        evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
       }))
       .sort((left, right) => this.compareStrings(left.label, right.label, left.local_id, right.local_id));
 
@@ -671,7 +704,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         label: appearance.label,
         type: appearance.entityType,
         description: appearance.description,
-        evidence: this.sortEvidence(appearance.evidence),
+        evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
       }))
       .sort((left, right) => this.compareStrings(left.label, right.label, left.local_id, right.local_id));
 
@@ -682,7 +715,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         label: appearance.label,
         strength: appearance.strength,
         description: appearance.description,
-        evidence: this.sortEvidence(appearance.evidence),
+        evidence: this.getEvidenceForOwner('appears_in', appearance.recordId),
       }))
       .sort((left, right) => this.compareStrings(left.label, right.label, left.local_id, right.local_id));
 
@@ -702,7 +735,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
           relation_type: relation.relationType,
           description: relation.description,
           confidence: relation.confidence,
-          evidence: this.sortEvidence(relation.evidence),
+          evidence: this.getEvidenceForOwner('related_to', relation.recordId),
         };
       })
       .filter((relation): relation is KnowledgeRelation => relation !== null)
@@ -817,7 +850,10 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         toProjection.id,
       ].join('|');
       const existing = relationsByKey.get(relationKey);
-      const evidence = this.toBookEvidenceRefs(relation.evidence, chapter);
+      const evidence = this.toBookEvidenceRefs(
+        this.getEvidenceForOwner('related_to', relation.recordId),
+        chapter,
+      );
 
       if (!existing) {
         relationsByKey.set(relationKey, {
@@ -955,6 +991,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       workflowRuns,
       snapshots,
       pageCaches,
+      evidenceRecords,
       books,
       chapters,
       people,
@@ -969,6 +1006,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       this.surrealService.selectTable<KnowledgeExtractionWorkflowRunRecord>('workflow_run'),
       this.surrealService.selectTable<KnowledgeExtractionWorkflowStoredResult>('chapter_knowledge_snapshot'),
       this.surrealService.selectTable<PageExtractionCacheRecord>('page_knowledge_extraction_cache'),
+      this.surrealService.selectTable<EvidenceRecord>('knowledge_evidence'),
       this.surrealService.selectTable<BookGraphRecord>('book'),
       this.surrealService.selectTable<ChapterGraphRecord>('chapter'),
       this.surrealService.selectTable<PersonGraphRecord>('person'),
@@ -998,6 +1036,8 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     this.relations.clear();
     this.relationIdsByChapter.clear();
     this.partOfEdges.clear();
+    this.evidences.clear();
+    this.evidenceIdsByOwner.clear();
 
     for (const pageCache of pageCaches) {
       this.pageExtractionsByCacheKey.set(pageCache.cacheKey, pageCache);
@@ -1021,6 +1061,8 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       this.ensureSet(this.relationIdsByChapter, relation.chapterRecordId).add(relation.recordId);
     }
     for (const partOfEdge of partOfEdges) this.partOfEdges.set(partOfEdge.recordId, partOfEdge);
+    for (const evidence of evidenceRecords) this.addEvidenceToIndexes(evidence);
+    this.hydrateLegacyEvidence(people, concepts, themes, entities, events, appearances, relations);
 
     const rebuiltSnapshots = new Map<string, KnowledgeExtractionWorkflowStoredResult>();
     for (const snapshot of snapshots) {
@@ -1051,6 +1093,91 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         : run;
       this.runs.set(hydratedRun.id, hydratedRun);
       this.runIdsByIdempotencyKey.set(hydratedRun.idempotencyKey, hydratedRun.id);
+    }
+  }
+
+  private hydrateLegacyEvidence(
+    people: PersonGraphRecord[],
+    concepts: ConceptGraphRecord[],
+    themes: ThemeGraphRecord[],
+    entities: EntityGraphRecord[],
+    events: EventGraphRecord[],
+    appearances: NodeAppearanceRecord[],
+    relations: RelationGraphRecord[],
+  ): void {
+    const chapterByNodeRecordId = new Map<string, ChapterGraphRecord>();
+    for (const appearance of appearances) {
+      const chapter = this.chapters.get(appearance.chapterRecordId);
+      if (!chapter) continue;
+      if (!chapterByNodeRecordId.has(appearance.nodeRecordId)) {
+        chapterByNodeRecordId.set(appearance.nodeRecordId, chapter);
+      }
+      this.addLegacyEvidence(chapter, 'appears_in', appearance.recordId, appearance.evidence);
+    }
+
+    for (const person of people) {
+      const chapter = chapterByNodeRecordId.get(person.recordId);
+      if (!chapter) continue;
+      this.addLegacyEvidence(chapter, 'person', person.recordId, person.evidence);
+    }
+    for (const concept of concepts) {
+      const chapter = chapterByNodeRecordId.get(concept.recordId);
+      if (!chapter) continue;
+      this.addLegacyEvidence(chapter, 'concept', concept.recordId, concept.evidence);
+    }
+    for (const theme of themes) {
+      const chapter = chapterByNodeRecordId.get(theme.recordId);
+      if (!chapter) continue;
+      this.addLegacyEvidence(chapter, 'theme', theme.recordId, theme.evidence);
+    }
+    for (const entity of entities) {
+      const chapter = chapterByNodeRecordId.get(entity.recordId);
+      if (!chapter) continue;
+      this.addLegacyEvidence(chapter, 'entity', entity.recordId, entity.evidence);
+    }
+    for (const event of events) {
+      const chapter = this.findChapterByExternalIds(event.bookId, event.chapterId)
+        ?? chapterByNodeRecordId.get(event.recordId);
+      if (!chapter) continue;
+      this.addLegacyEvidence(chapter, 'event', event.recordId, event.evidence);
+    }
+
+    for (const relation of relations) {
+      const chapter = this.chapters.get(relation.chapterRecordId);
+      if (!chapter) continue;
+      this.addLegacyEvidence(chapter, 'related_to', relation.recordId, relation.evidence);
+    }
+  }
+
+  private findChapterByExternalIds(bookId: string, chapterId: string): ChapterGraphRecord | null {
+    for (const chapter of this.chapters.values()) {
+      if (chapter.bookId === bookId && chapter.chapterId === chapterId) return chapter;
+    }
+    return null;
+  }
+
+  private addLegacyEvidence(
+    chapterRecord: ChapterGraphRecord,
+    ownerTable: EvidenceOwnerTable,
+    ownerRecordId: string,
+    evidence: KnowledgeEvidence[] | undefined,
+  ): void {
+    for (const item of evidence ?? []) {
+      const normalized = this.normalizeEvidence(item);
+      if (!normalized) continue;
+      this.addEvidenceToIndexes({
+        recordId: this.makeEvidenceRecordId(ownerTable, ownerRecordId, normalized),
+        bookId: chapterRecord.bookId,
+        chapterId: chapterRecord.chapterId,
+        chapterRecordId: chapterRecord.recordId,
+        ownerTable,
+        ownerRecordId,
+        pageIndex: normalized.pageIndex,
+        pageNumber: normalized.pageNumber,
+        quote: normalized.quote,
+        quoteHash: hashText(normalized.quote),
+        createdAt: new Date().toISOString(),
+      });
     }
   }
 
@@ -1119,6 +1246,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
   }
 
   private upsertPerson(
+    chapterRecord: ChapterGraphRecord,
     person: KnowledgePerson,
     persistBatch: Map<string, { table: PersistTable; id: string; record: object }>,
   ): PersonGraphRecord {
@@ -1135,9 +1263,9 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         description: person.description,
         roles: this.mergeStringArrays(undefined, person.roles),
         traits: this.mergeStringArrays(undefined, person.traits),
-        evidence: this.mergeEvidence(undefined, person.evidence),
       };
       this.people.set(recordId, created);
+      this.upsertEvidence(chapterRecord, 'person', recordId, person.evidence, persistBatch);
       this.addToPersistBatch(persistBatch, 'person', recordId, created);
       return created;
     }
@@ -1148,14 +1276,15 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       description: existing.description ?? person.description,
       roles: this.mergeStringArrays(existing.roles, person.roles),
       traits: this.mergeStringArrays(existing.traits, person.traits),
-      evidence: this.mergeEvidence(existing.evidence, person.evidence),
     };
     this.people.set(recordId, updated);
+    this.upsertEvidence(chapterRecord, 'person', recordId, person.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'person', recordId, updated);
     return updated;
   }
 
   private upsertConcept(
+    chapterRecord: ChapterGraphRecord,
     idea: KnowledgeIdea,
     persistBatch: Map<string, { table: PersistTable; id: string; record: object }>,
   ): ConceptGraphRecord {
@@ -1170,9 +1299,9 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         normalizedLabel,
         description: idea.description,
         kind: idea.kind,
-        evidence: this.mergeEvidence(undefined, idea.evidence),
       };
       this.concepts.set(recordId, created);
+      this.upsertEvidence(chapterRecord, 'concept', recordId, idea.evidence, persistBatch);
       this.addToPersistBatch(persistBatch, 'concept', recordId, created);
       return created;
     }
@@ -1181,14 +1310,15 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       ...existing,
       description: existing.description ?? idea.description,
       kind: existing.kind ?? idea.kind,
-      evidence: this.mergeEvidence(existing.evidence, idea.evidence),
     };
     this.concepts.set(recordId, updated);
+    this.upsertEvidence(chapterRecord, 'concept', recordId, idea.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'concept', recordId, updated);
     return updated;
   }
 
   private upsertTheme(
+    chapterRecord: ChapterGraphRecord,
     theme: KnowledgeTheme,
     persistBatch: Map<string, { table: PersistTable; id: string; record: object }>,
   ): ThemeGraphRecord {
@@ -1203,9 +1333,9 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         normalizedLabel,
         description: theme.description,
         strength: theme.strength,
-        evidence: this.mergeEvidence(undefined, theme.evidence),
       };
       this.themes.set(recordId, created);
+      this.upsertEvidence(chapterRecord, 'theme', recordId, theme.evidence, persistBatch);
       this.addToPersistBatch(persistBatch, 'theme', recordId, created);
       return created;
     }
@@ -1214,14 +1344,15 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       ...existing,
       description: existing.description ?? theme.description,
       strength: this.maxNumber(existing.strength, theme.strength),
-      evidence: this.mergeEvidence(existing.evidence, theme.evidence),
     };
     this.themes.set(recordId, updated);
+    this.upsertEvidence(chapterRecord, 'theme', recordId, theme.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'theme', recordId, updated);
     return updated;
   }
 
   private upsertEntity(
+    chapterRecord: ChapterGraphRecord,
     entity: KnowledgeEntity,
     persistBatch: Map<string, { table: PersistTable; id: string; record: object }>,
   ): EntityGraphRecord {
@@ -1236,9 +1367,9 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         normalizedLabel,
         entityType: entity.type,
         description: entity.description,
-        evidence: this.mergeEvidence(undefined, entity.evidence),
       };
       this.entities.set(recordId, created);
+      this.upsertEvidence(chapterRecord, 'entity', recordId, entity.evidence, persistBatch);
       this.addToPersistBatch(persistBatch, 'entity', recordId, created);
       return created;
     }
@@ -1246,14 +1377,15 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     const updated: EntityGraphRecord = {
       ...existing,
       description: existing.description ?? entity.description,
-      evidence: this.mergeEvidence(existing.evidence, entity.evidence),
     };
     this.entities.set(recordId, updated);
+    this.upsertEvidence(chapterRecord, 'entity', recordId, entity.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'entity', recordId, updated);
     return updated;
   }
 
   private upsertEvent(
+    chapterRecord: ChapterGraphRecord,
     input: Pick<UpsertPageExtractionInput, 'bookId' | 'chapterId'>,
     event: KnowledgeEvent,
     participantRecordIds: string[] | undefined,
@@ -1274,9 +1406,9 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         participantRecordIds: this.mergeStringArrays(undefined, participantRecordIds),
         timeHint: event.time_hint,
         placeHint: event.place_hint,
-        evidence: this.mergeEvidence(undefined, event.evidence),
       };
       this.events.set(recordId, created);
+      this.upsertEvidence(chapterRecord, 'event', recordId, event.evidence, persistBatch);
       this.addToPersistBatch(persistBatch, 'event', recordId, created);
       return created;
     }
@@ -1287,9 +1419,9 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       participantRecordIds: this.mergeStringArrays(existing.participantRecordIds, participantRecordIds),
       timeHint: existing.timeHint ?? event.time_hint,
       placeHint: existing.placeHint ?? event.place_hint,
-      evidence: this.mergeEvidence(existing.evidence, event.evidence),
     };
     this.events.set(recordId, updated);
+    this.upsertEvidence(chapterRecord, 'event', recordId, event.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'event', recordId, updated);
     return updated;
   }
@@ -1309,7 +1441,6 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         description: existing.description ?? person.description,
         roles: this.mergeStringArrays(existing.roles, person.roles),
         traits: this.mergeStringArrays(existing.traits, person.traits),
-        evidence: this.mergeEvidence(existing.evidence, person.evidence),
       }
       : {
         recordId,
@@ -1324,11 +1455,11 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         description: person.description,
         roles: this.mergeStringArrays(undefined, person.roles),
         traits: this.mergeStringArrays(undefined, person.traits),
-        evidence: this.mergeEvidence(undefined, person.evidence),
       };
 
     this.appearances.set(recordId, updated);
     this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+    this.upsertEvidence(chapterRecord, 'appears_in', recordId, person.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
   }
 
@@ -1345,7 +1476,6 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         ...existing,
         description: existing.description ?? idea.description,
         kind: existing.kind ?? idea.kind,
-        evidence: this.mergeEvidence(existing.evidence, idea.evidence),
       }
       : {
         recordId,
@@ -1358,11 +1488,11 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         label: conceptRecord.label,
         description: idea.description,
         kind: idea.kind,
-        evidence: this.mergeEvidence(undefined, idea.evidence),
       };
 
     this.appearances.set(recordId, updated);
     this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+    this.upsertEvidence(chapterRecord, 'appears_in', recordId, idea.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
   }
 
@@ -1379,7 +1509,6 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         ...existing,
         description: existing.description ?? theme.description,
         strength: this.maxNumber(existing.strength, theme.strength),
-        evidence: this.mergeEvidence(existing.evidence, theme.evidence),
       }
       : {
         recordId,
@@ -1392,11 +1521,11 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         label: themeRecord.label,
         description: theme.description,
         strength: theme.strength,
-        evidence: this.mergeEvidence(undefined, theme.evidence),
       };
 
     this.appearances.set(recordId, updated);
     this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+    this.upsertEvidence(chapterRecord, 'appears_in', recordId, theme.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
   }
 
@@ -1412,7 +1541,6 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       ? {
         ...existing,
         description: existing.description ?? entity.description,
-        evidence: this.mergeEvidence(existing.evidence, entity.evidence),
       }
       : {
         recordId,
@@ -1425,11 +1553,11 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         label: entityRecord.label,
         entityType: entityRecord.entityType,
         description: entity.description,
-        evidence: this.mergeEvidence(undefined, entity.evidence),
       };
 
     this.appearances.set(recordId, updated);
     this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+    this.upsertEvidence(chapterRecord, 'appears_in', recordId, entity.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
   }
 
@@ -1449,7 +1577,6 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         participantRecordIds: this.mergeStringArrays(existing.participantRecordIds, participantRecordIds),
         timeHint: existing.timeHint ?? event.time_hint,
         placeHint: existing.placeHint ?? event.place_hint,
-        evidence: this.mergeEvidence(existing.evidence, event.evidence),
       }
       : {
         recordId,
@@ -1464,11 +1591,11 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         participantRecordIds: this.mergeStringArrays(undefined, participantRecordIds),
         timeHint: event.time_hint,
         placeHint: event.place_hint,
-        evidence: this.mergeEvidence(undefined, event.evidence),
       };
 
     this.appearances.set(recordId, updated);
     this.ensureSet(this.appearanceIdsByChapter, chapterRecord.recordId).add(recordId);
+    this.upsertEvidence(chapterRecord, 'appears_in', recordId, event.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'appears_in', recordId, updated);
   }
 
@@ -1489,7 +1616,6 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         ...existing,
         description: existing.description ?? relation.description,
         confidence: this.maxNumber(existing.confidence, relation.confidence),
-        evidence: this.mergeEvidence(existing.evidence, relation.evidence),
       }
       : {
         recordId,
@@ -1504,11 +1630,11 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         relationType: relation.relation_type,
         description: relation.description,
         confidence: relation.confidence,
-        evidence: this.mergeEvidence(undefined, relation.evidence),
       };
 
     this.relations.set(recordId, updated);
     this.ensureSet(this.relationIdsByChapter, chapterRecord.recordId).add(recordId);
+    this.upsertEvidence(chapterRecord, 'related_to', recordId, relation.evidence, persistBatch);
     this.addToPersistBatch(persistBatch, 'related_to', recordId, updated);
   }
 
@@ -1538,6 +1664,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
   private async clearChapterKnowledge(chapterRecordId: string): Promise<void> {
     const appearanceIds = Array.from(this.appearanceIdsByChapter.get(chapterRecordId) ?? []);
     const relationIds = Array.from(this.relationIdsByChapter.get(chapterRecordId) ?? []);
+    const evidenceIds = this.removeEvidenceForChapter(chapterRecordId);
 
     for (const appearanceId of appearanceIds) {
       this.appearances.delete(appearanceId);
@@ -1552,6 +1679,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     if (!this.surrealService) return;
     await this.deleteRecords('appears_in', appearanceIds);
     await this.deleteRecords('related_to', relationIds);
+    await this.deleteRecords('knowledge_evidence', evidenceIds);
   }
 
   private buildGlobalPeople(
@@ -1812,7 +1940,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       if (!chapter) continue;
       aggregated = this.mergeBookEvidenceRefs(
         aggregated,
-        this.toBookEvidenceRefs(appearance.evidence, chapter),
+        this.toBookEvidenceRefs(this.getEvidenceForOwner('appears_in', appearance.recordId), chapter),
       );
     }
     return this.sortBookEvidenceRefs(aggregated);
@@ -1977,6 +2105,83 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     return this.mergeStringArrays(undefined, ids.map((id) => remap.get(id)).filter((item): item is string => Boolean(item)));
   }
 
+  private upsertEvidence(
+    chapterRecord: ChapterGraphRecord,
+    ownerTable: EvidenceOwnerTable,
+    ownerRecordId: string,
+    evidence: KnowledgeEvidence[] | undefined,
+    persistBatch: Map<string, { table: PersistTable; id: string; record: object }>,
+  ): void {
+    for (const item of evidence ?? []) {
+      const normalized = this.normalizeEvidence(item);
+      if (!normalized) continue;
+      const recordId = this.makeEvidenceRecordId(ownerTable, ownerRecordId, normalized);
+      if (this.evidences.has(recordId)) continue;
+
+      const record: EvidenceRecord = {
+        recordId,
+        bookId: chapterRecord.bookId,
+        chapterId: chapterRecord.chapterId,
+        chapterRecordId: chapterRecord.recordId,
+        ownerTable,
+        ownerRecordId,
+        pageIndex: normalized.pageIndex,
+        pageNumber: normalized.pageNumber,
+        quote: normalized.quote,
+        quoteHash: hashText(normalized.quote),
+        createdAt: new Date().toISOString(),
+      };
+      this.addEvidenceToIndexes(record);
+      this.addToPersistBatch(persistBatch, 'knowledge_evidence', recordId, record);
+    }
+  }
+
+  private addEvidenceToIndexes(record: EvidenceRecord): void {
+    if (this.evidences.has(record.recordId)) return;
+    this.evidences.set(record.recordId, record);
+    this.ensureSet(this.evidenceIdsByOwner, this.makeEvidenceOwnerKey(record.ownerTable, record.ownerRecordId)).add(record.recordId);
+  }
+
+  private getEvidenceForOwner(ownerTable: EvidenceOwnerTable, ownerRecordId: string): KnowledgeEvidence[] | undefined {
+    const evidence = Array.from(this.evidenceIdsByOwner.get(this.makeEvidenceOwnerKey(ownerTable, ownerRecordId)) ?? [])
+      .map((recordId) => this.evidences.get(recordId))
+      .filter((record): record is EvidenceRecord => Boolean(record))
+      .map((record) => ({
+        quote: record.quote,
+        pageIndex: record.pageIndex,
+        pageNumber: record.pageNumber,
+      }));
+    return this.sortEvidence(evidence);
+  }
+
+  private removeEvidenceForChapter(chapterRecordId: string): string[] {
+    const recordIds = Array.from(this.evidences.values())
+      .filter((record) => record.chapterRecordId === chapterRecordId)
+      .map((record) => record.recordId);
+    for (const recordId of recordIds) {
+      const record = this.evidences.get(recordId);
+      if (!record) continue;
+      const ownerKey = this.makeEvidenceOwnerKey(record.ownerTable, record.ownerRecordId);
+      const ownerSet = this.evidenceIdsByOwner.get(ownerKey);
+      ownerSet?.delete(recordId);
+      if (ownerSet?.size === 0) {
+        this.evidenceIdsByOwner.delete(ownerKey);
+      }
+      this.evidences.delete(recordId);
+    }
+    return recordIds;
+  }
+
+  private normalizeEvidence(value: KnowledgeEvidence): KnowledgeEvidence | null {
+    const quote = value.quote?.trim();
+    if (!quote) return null;
+    return {
+      quote,
+      pageIndex: value.pageIndex,
+      pageNumber: value.pageNumber,
+    };
+  }
+
   private mergeStringArrays(existing: string[] | undefined, incoming: string[] | undefined): string[] | undefined {
     const values = [...(existing ?? []), ...(incoming ?? [])];
     if (values.length === 0) return undefined;
@@ -1988,30 +2193,6 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       if (!normalized || seen.has(normalized)) continue;
       seen.add(normalized);
       merged.push(value.trim());
-    }
-    return merged.length > 0 ? merged : undefined;
-  }
-
-  private mergeEvidence(
-    existing: KnowledgeEvidence[] | undefined,
-    incoming: KnowledgeEvidence[] | undefined,
-  ): KnowledgeEvidence[] | undefined {
-    const values = [...(existing ?? []), ...(incoming ?? [])];
-    if (values.length === 0) return undefined;
-
-    const merged: KnowledgeEvidence[] = [];
-    const seen = new Set<string>();
-    for (const value of values) {
-      const normalized = normalizeText(value.quote);
-      if (!normalized) continue;
-      const key = `${normalized}|${value.pageIndex ?? -1}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push({
-        quote: value.quote.trim(),
-        pageIndex: value.pageIndex,
-        pageNumber: value.pageNumber,
-      });
     }
     return merged.length > 0 ? merged : undefined;
   }
@@ -2071,6 +2252,24 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       encodeSegment(chapterContentHash),
       encodeSegment(promptVersion),
     ].join('_');
+  }
+
+  private makeEvidenceOwnerKey(ownerTable: EvidenceOwnerTable, ownerRecordId: string): string {
+    return `${ownerTable}:${ownerRecordId}`;
+  }
+
+  private makeEvidenceRecordId(
+    ownerTable: EvidenceOwnerTable,
+    ownerRecordId: string,
+    evidence: KnowledgeEvidence,
+  ): string {
+    return `evidence_${encodeSegment([
+      ownerTable,
+      ownerRecordId,
+      evidence.pageIndex ?? -1,
+      evidence.pageNumber ?? -1,
+      evidence.quote,
+    ].join('|'))}`;
   }
 
   private makeRecordRef(table: string, recordId: string): string {
@@ -2199,11 +2398,17 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       });
   }
 
+  private withoutEvidence<T extends object>(record: T): T {
+    if (!('evidence' in record)) return record;
+    const { evidence: _evidence, ...rest } = record as T & { evidence?: KnowledgeEvidence[] };
+    return rest as T;
+  }
+
   private async persistRecord(table: PersistTable, id: string, record: object): Promise<void> {
     if (!this.surrealService) return;
     if (table === 'appears_in' || table === 'related_to' || table === 'part_of') {
-      const relationRecord = record as { in: string; out: string };
-      await this.surrealService.putRelationRecord(table, id, relationRecord.in, relationRecord.out, record);
+      const relationRecord = this.withoutEvidence(record as { in: string; out: string });
+      await this.surrealService.putRelationRecord(table, id, relationRecord.in, relationRecord.out, relationRecord);
       return;
     }
     if (table === 'workflow_run') {
@@ -2220,6 +2425,16 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
         ...snapshot,
         result: this.createSlimResult(snapshot.result),
       });
+      return;
+    }
+    if (
+      table === 'person'
+      || table === 'concept'
+      || table === 'theme'
+      || table === 'entity'
+      || table === 'event'
+    ) {
+      await this.surrealService.putRecord(table, id, this.withoutEvidence(record));
       return;
     }
     await this.surrealService.putRecord(table, id, record);

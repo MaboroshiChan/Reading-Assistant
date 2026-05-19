@@ -1,4 +1,5 @@
 import type {
+  AnalyzeChapterKeywordsPayload,
   AnalyzeKnowledgeExtractionPayload,
   AnalyzeParagraphPayload,
   AnalyzeQuizPayload,
@@ -7,6 +8,7 @@ import type {
   AnalyzeSkeletonPayload,
   ErrorCode,
   RequestEnvelope,
+  RequestEnvelopeChapterKeywords,
   RequestEnvelopeParagraph,
   RequestEnvelopeQuiz,
   RequestEnvelopeKnowledgeExtraction,
@@ -23,6 +25,9 @@ const isString = (value: unknown): value is string => typeof value === 'string';
 
 const isNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
+
+const isNonNegativeInteger = (value: unknown): value is number =>
+  isNumber(value) && Number.isInteger(value) && value >= 0;
 
 const isSkeletonPayload = (
   payload: unknown,
@@ -47,6 +52,43 @@ const isParagraphPayload = (
     isString(payload.doc_id) &&
     isString(payload.paragraph_id) &&
     isString(payload.paragraph_text)
+  );
+};
+
+const isSentenceRef = (value: unknown): value is AnalyzeChapterKeywordsPayload['sentences'][number]['ref'] => {
+  if (!isRecord(value)) return false;
+  return (
+    isNonNegativeInteger(value.page_index) &&
+    isNonNegativeInteger(value.paragraph_index) &&
+    isNonNegativeInteger(value.paragraph_id) &&
+    isNonNegativeInteger(value.sentence_id)
+  );
+};
+
+const isChapterKeywordsPayload = (
+  payload: unknown,
+): payload is AnalyzeChapterKeywordsPayload => {
+  if (!isRecord(payload)) return false;
+  if (
+    !isString(payload.doc_id) ||
+    !isString(payload.chapter_id) ||
+    !isNonNegativeInteger(payload.chapter_index) ||
+    !isString(payload.chunk_id) ||
+    !isNonNegativeInteger(payload.chunk_index) ||
+    !isNonNegativeInteger(payload.total_chunks) ||
+    payload.total_chunks <= 0 ||
+    !isString(payload.chunk_text) ||
+    !Array.isArray(payload.sentences) ||
+    payload.sentences.length === 0
+  ) {
+    return false;
+  }
+
+  return payload.sentences.every(
+    (sentence) =>
+      isRecord(sentence) &&
+      isSentenceRef(sentence.ref) &&
+      isString(sentence.text),
   );
 };
 
@@ -196,6 +238,23 @@ export const validateEnvelope = (input: unknown): ValidationResult => {
       return {
         ok: true,
         envelope: input as unknown as RequestEnvelopeParagraph,
+      };
+
+    case 'analyze.chapter-keywords.v1':
+      if (!isChapterKeywordsPayload(payload)) {
+        return {
+          ok: false,
+          error: makeError(
+            requestId,
+            'E.BAD_REQUEST',
+            400,
+            'Invalid chapter keywords payload',
+          ),
+        };
+      }
+      return {
+        ok: true,
+        envelope: input as unknown as RequestEnvelopeChapterKeywords,
       };
 
     case 'analyze.sentence.v1':

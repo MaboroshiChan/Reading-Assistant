@@ -433,6 +433,161 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     });
   });
 
+  test('persists evidence as separate records and keeps graph records slim', async () => {
+    const records: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
+    const relations: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
+    const surrealStub = {
+      putRecord: async (table: string, id: string, record: Record<string, unknown>) => {
+        records.push({ table, id, record });
+      },
+      putRelationRecord: async (
+        table: string,
+        id: string,
+        _in: string,
+        _out: string,
+        record: Record<string, unknown>,
+      ) => {
+        relations.push({ table, id, record });
+      },
+      selectTable: async () => [],
+    };
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    const extraction = {
+      title: 'ignored',
+      summary: 'ignored',
+      people: [
+        {
+          local_id: 'p1',
+          name: 'Alice',
+          evidence: [{ quote: 'Alice speaks', pageIndex: 0, pageNumber: 1 }],
+        },
+      ],
+      ideas: [
+        {
+          local_id: 'i1',
+          label: 'Freedom',
+          kind: 'claim' as const,
+          evidence: [{ quote: 'Freedom matters', pageIndex: 0, pageNumber: 1 }],
+        },
+      ],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [
+        {
+          local_id: 'r1',
+          from_id: 'p1',
+          from_type: 'person' as const,
+          to_id: 'i1',
+          to_type: 'idea' as const,
+          relation_type: 'supports' as const,
+          confidence: 0.8,
+          evidence: [{ quote: 'Alice supports freedom', pageIndex: 0, pageNumber: 1 }],
+        },
+      ],
+    };
+
+    await repository.upsertPageExtraction({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Chapter One',
+      extraction,
+    });
+    await repository.upsertPageExtraction({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Chapter One',
+      extraction,
+    });
+
+    expect(records.filter((entry) => entry.table === 'knowledge_evidence')).toHaveLength(5);
+    expect(records.filter((entry) => entry.table === 'knowledge_evidence').map((entry) => entry.id)).toEqual(
+      Array.from(new Set(records.filter((entry) => entry.table === 'knowledge_evidence').map((entry) => entry.id))),
+    );
+    expect(records.find((entry) => entry.table === 'person')?.record).not.toHaveProperty('evidence');
+    expect(records.find((entry) => entry.table === 'concept')?.record).not.toHaveProperty('evidence');
+    expect(relations.find((entry) => entry.table === 'appears_in')?.record).not.toHaveProperty('evidence');
+    expect(relations.find((entry) => entry.table === 'related_to')?.record).not.toHaveProperty('evidence');
+  });
+
+  test('hydrates legacy appearance evidence arrays into split evidence indexes', async () => {
+    const legacyChapter = {
+      recordId: 'chapter_legacy',
+      bookId: 'book-legacy',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      title: 'Legacy Chapter',
+    };
+    const legacyPerson = {
+      recordId: 'person_legacy',
+      localId: 'p_legacy',
+      name: 'Alice',
+      normalizedName: 'alice',
+    };
+    const legacyAppearance = {
+      recordId: 'appears_legacy',
+      in: 'person:person_legacy',
+      out: 'chapter:chapter_legacy',
+      chapterRecordId: 'chapter_legacy',
+      nodeRecordId: 'person_legacy',
+      nodeType: 'person' as const,
+      localId: 'p_legacy',
+      name: 'Alice',
+      evidence: [{ quote: 'legacy quote', pageIndex: 4, pageNumber: 5 }],
+    };
+    const legacySnapshot = {
+      workflowRunId: 'wr_legacy',
+      bookId: 'book-legacy',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      resultVersion: 'v1',
+      producer: 'server' as const,
+      qualityTier: 'server_final' as const,
+      snapshotVersion: 1,
+      chapterContentHash: 'hash',
+      result: {
+        title: 'Legacy Chapter',
+        summary: 'Legacy summary',
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async () => {},
+      putRelationRecord: async () => {},
+      selectTable: async (table: string) => {
+        if (table === 'chapter_knowledge_snapshot') return [legacySnapshot];
+        if (table === 'chapter') return [legacyChapter];
+        if (table === 'person') return [legacyPerson];
+        if (table === 'appears_in') return [legacyAppearance];
+        return [];
+      },
+    };
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+
+    await repository.onModuleInit();
+
+    const snapshot = await repository.buildChapterSnapshot('book-legacy', 'chapter-1');
+    expect(snapshot.people[0]).toMatchObject({
+      name: 'Alice',
+      evidence: [{ quote: 'legacy quote', pageIndex: 4, pageNumber: 5 }],
+    });
+    expect(repository.getLatestResult('book-legacy', 'chapter-1')?.result.people[0]).toMatchObject({
+      name: 'Alice',
+      evidence: [{ quote: 'legacy quote', pageIndex: 4, pageNumber: 5 }],
+    });
+  });
+
   test('builds a book-level key information projection with global links and merged events', async () => {
     const repository = new KnowledgeExtractionWorkflowRepository();
 

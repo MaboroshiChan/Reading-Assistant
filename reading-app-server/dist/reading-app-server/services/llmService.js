@@ -188,7 +188,7 @@ async function callLLM(args) {
         const cachedContentName = await resolveCachedContentName(args, apiKey, useDeveloperInstruction);
         if (cachedContentName) {
             try {
-                return await callLLMWithCachedPrefix(args, apiKey, cachedContentName);
+                return await callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDeveloperInstruction);
             }
             catch (error) {
                 if (!isCachedContentError(error)) {
@@ -263,9 +263,11 @@ async function callLLMDirect(args, apiKey, useDeveloperInstruction) {
     })();
     return { data: dataStream, usage: usagePromise };
 }
-async function callLLMWithCachedPrefix(args, apiKey, cachedContentName) {
+async function callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDeveloperInstruction) {
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
+    const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
+    const shouldSendSystemPrompt = useDeveloperInstruction && args.prefixCache?.systemPromptMode === 'request';
     let resolveUsage;
     let rejectUsage;
     const usagePromise = new Promise((resolve, reject) => {
@@ -274,9 +276,10 @@ async function callLLMWithCachedPrefix(args, apiKey, cachedContentName) {
     });
     const stream = await ai.models.generateContentStream({
         model: args.model,
-        contents: args.userPrompt,
+        contents: requestPrompt,
         config: {
             cachedContent: cachedContentName,
+            ...(shouldSendSystemPrompt ? { systemInstruction: args.systemPrompt } : {}),
             maxOutputTokens: args.maxOutputTokens,
             temperature: args.temperature,
             responseMimeType: args.responseAs === 'json' ? 'application/json' : 'text/plain',
@@ -344,22 +347,29 @@ async function createCachedContentName(args, apiKey, useDeveloperInstruction) {
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
     const ttlSeconds = Math.max(60, prefixCache.ttlSeconds ?? Math.floor(config_1.config.cacheTtlMs / 1000));
-    const cachedPrefixText = useDeveloperInstruction
-        ? prefixCache.prefix
-        : [
+    const systemPromptMode = prefixCache.systemPromptMode ?? 'cached';
+    const cachedPrefixText = (() => {
+        if (systemPromptMode === 'request') {
+            return prefixCache.prefix;
+        }
+        if (useDeveloperInstruction) {
+            return prefixCache.prefix;
+        }
+        return [
             '[System Instructions]',
             args.systemPrompt,
             '',
             '[Cached Prefix]',
             prefixCache.prefix,
         ].join('\n');
+    })();
     const cachedContent = await ai.caches.create({
         model: args.model,
         config: {
             contents: cachedPrefixText,
             displayName: prefixCache.displayName ?? prefixCache.cacheKey.slice(0, 128),
             ttl: `${ttlSeconds}s`,
-            systemInstruction: useDeveloperInstruction ? args.systemPrompt : undefined,
+            systemInstruction: useDeveloperInstruction && systemPromptMode === 'cached' ? args.systemPrompt : undefined,
         },
     });
     return typeof cachedContent.name === 'string' && cachedContent.name.trim().length > 0

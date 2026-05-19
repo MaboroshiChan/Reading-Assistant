@@ -1,0 +1,37 @@
+# Chapter Key Sentences Prompt (v1)
+
+You analyze one chunk of a book chapter for a reading interface.
+
+Return a single strict JSON object with this shape:
+
+```json
+{
+  "key_sentences": [
+    {
+      "sentence_ref": {
+        "page_index": 0,
+        "paragraph_index": 0,
+        "paragraph_id": 0,
+        "sentence_id": 0
+      },
+      "sentence_text": "exact source sentence text",
+      "importance": 0.0,
+      "reason": "short explanation"
+    }
+  ],
+  "sentence_keywords": []
+}
+```
+
+Rules:
+- Return JSON only. Do not include markdown or explanations.
+- Use only sentences from `Payload JSON.sentences`.
+- `sentence_ref` must be copied exactly from the source sentence object.
+- `sentence_text` must be copied exactly from the source sentence object. Do not rewrite it.
+- Do not lemmatize, paraphrase, summarize, or change capitalization.
+- Select key sentences that carry the chunk's main claims, definitions, contrasts, causes, conclusions, or examples.
+- Prefer 2 to 5 key sentences per chunk, fewer for short chunks.
+- `importance` must be a number between 0 and 1.
+- `reason` must be a short explanation in plain English, ideally 4 to 12 words.
+- `reason` should explain why the sentence matters, not restate the whole sentence.
+- `sentence_keywords` must always be an empty array.

@@ -4,8 +4,11 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  OnApplicationBootstrap,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import fs from 'node:fs/promises';
 import type {
   AnalyzeKnowledgeExtractionData,
@@ -20,6 +23,7 @@ import type {
 } from '../../../../packages/contracts/src';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
 import { config } from '../../config/runtime-config';
+import { buildSharedChapterPrefixCache } from '../../utils/chapter-prefix-cache';
 import { resolvePromptPath } from '../../utils/prompt-path';
 import { BookContextService } from '../book-ingestion/book-context.service';
 import type {
@@ -29,6 +33,7 @@ import type {
 } from '../book-ingestion/book-context.types';
 import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
 import type { CanonicalChapterRecord } from '../book-ingestion/book-ingestion.types';
+import { QuizWorkflowService } from '../quiz-workflow/quiz-workflow.service';
 import { workflowLog } from '../workflow.logger';
 import type {
   GetKnowledgeExtractionWorkflowResultResponseDto,
@@ -118,11 +123,12 @@ const CONTEXT_HEAVY_IDEA_TOKENS = [
 let cachedSystemPrompt: string | null = null;
 
 @Injectable()
-export class KnowledgeExtractionWorkflowService {
+export class KnowledgeExtractionWorkflowService implements OnApplicationBootstrap {
   private readonly bookIngestionRepository: BookIngestionRepository;
   private readonly bookContextService: BookContextService;
   private readonly knowledgeExtractionWorkflowRepository: KnowledgeExtractionWorkflowRepository;
   private readonly workflowQueueService: WorkflowQueueService;
+  private readonly moduleRef?: ModuleRef;
 
   constructor(
     @Inject(forwardRef(() => BookIngestionRepository))
@@ -133,11 +139,30 @@ export class KnowledgeExtractionWorkflowService {
     knowledgeExtractionWorkflowRepository: KnowledgeExtractionWorkflowRepository,
     @Inject(WorkflowQueueService)
     workflowQueueService: WorkflowQueueService,
+    @Optional()
+    @Inject(ModuleRef)
+    moduleRef?: ModuleRef,
   ) {
     this.bookIngestionRepository = bookIngestionRepository;
     this.bookContextService = bookContextService;
     this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
     this.workflowQueueService = workflowQueueService;
+    this.moduleRef = moduleRef;
+  }
+
+  onApplicationBootstrap(): void {
+    for (const run of this.knowledgeExtractionWorkflowRepository.listRecoverableRuns()) {
+      workflowLog('run.recovered', {
+        workflowKind: run.kind,
+        workflowRunId: run.id,
+        bookId: run.bookId,
+        chapterId: run.chapterId,
+        chapterIndex: run.chapterIndex,
+        workflowVersion: run.workflowVersion,
+        status: run.status,
+      });
+      this.workflowQueueService.enqueue(() => this.executeRun(run.id));
+    }
   }
 
   parseSubmitRequest(rawBody: string | undefined): SubmitKnowledgeExtractionWorkflowRequestDto {
@@ -494,12 +519,91 @@ export class KnowledgeExtractionWorkflowService {
         relationCount: result.relations?.length ?? 0,
         completedAt: completedRun?.completedAt,
       });
+
+      if (completedRun) {
+        this.autoSubmitQuizWorkflowAfterKnowledgeExtraction(completedRun);
+      }
     } catch (error) {
       this.knowledgeExtractionWorkflowRepository.failRun(
         workflowRunId,
         'KNOWLEDGE_EXTRACTION_GENERATION_FAILED',
         error instanceof Error ? error.message : String(error),
       );
+    }
+  }
+
+  private autoSubmitQuizWorkflowAfterKnowledgeExtraction(
+    completedRun: KnowledgeExtractionWorkflowRunRecord,
+  ): void {
+    if (!config.autoSubmitQuizWorkflow) {
+      workflowLog('quiz.auto_submit_skipped', {
+        workflowKind: completedRun.kind,
+        workflowRunId: completedRun.id,
+        bookId: completedRun.bookId,
+        chapterId: completedRun.chapterId,
+        chapterIndex: completedRun.chapterIndex,
+        workflowVersion: completedRun.workflowVersion,
+        reason: 'disabled',
+      });
+      return;
+    }
+
+    const quizWorkflowService = this.resolveQuizWorkflowService();
+    if (!quizWorkflowService) {
+      workflowLog('quiz.auto_submit_skipped', {
+        workflowKind: completedRun.kind,
+        workflowRunId: completedRun.id,
+        bookId: completedRun.bookId,
+        chapterId: completedRun.chapterId,
+        chapterIndex: completedRun.chapterIndex,
+        workflowVersion: completedRun.workflowVersion,
+        reason: 'quiz_service_unavailable',
+      });
+      return;
+    }
+
+    try {
+      const response = quizWorkflowService.submitQuizWorkflow({
+        bookId: completedRun.bookId,
+        chapterId: completedRun.chapterId,
+        chapterIndex: completedRun.chapterIndex,
+        workflowVersion: 'v1',
+        expectedSnapshotVersion: completedRun.snapshotVersion,
+        expectedChapterContentHash: completedRun.chapterContentHash,
+      });
+
+      workflowLog('quiz.auto_submitted', {
+        workflowKind: completedRun.kind,
+        workflowRunId: completedRun.id,
+        bookId: completedRun.bookId,
+        chapterId: completedRun.chapterId,
+        chapterIndex: completedRun.chapterIndex,
+        workflowVersion: completedRun.workflowVersion,
+        snapshotVersion: completedRun.snapshotVersion,
+        chapterContentHash: completedRun.chapterContentHash,
+        quizWorkflowRunId: response.workflowRunId,
+        deduped: response.deduped,
+      });
+    } catch (error) {
+      workflowLog('quiz.auto_submit_failed', {
+        workflowKind: completedRun.kind,
+        workflowRunId: completedRun.id,
+        bookId: completedRun.bookId,
+        chapterId: completedRun.chapterId,
+        chapterIndex: completedRun.chapterIndex,
+        workflowVersion: completedRun.workflowVersion,
+        snapshotVersion: completedRun.snapshotVersion,
+        chapterContentHash: completedRun.chapterContentHash,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private resolveQuizWorkflowService(): QuizWorkflowService | undefined {
+    try {
+      return this.moduleRef?.get(QuizWorkflowService, { strict: false });
+    } catch {
+      return undefined;
     }
   }
 
@@ -651,13 +755,23 @@ export class KnowledgeExtractionWorkflowService {
       this.loadPrompt(),
       Promise.resolve(this.buildPieceSuffixPrompt(input)),
     ]);
+    const book = this.bookIngestionRepository.getBook(input.bookId);
+    const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
     const llmClient = createLLMClient({
       systemPrompt,
-      prefixCache: {
-        cacheKey: `knowledge_extraction.chapter_prefix:${PROMPT_VERSION}:${input.bookId}:${input.chapterId}:${input.chapterContentHash}`,
-        displayName: `ke-${input.bookId}-${input.chapterId}`,
-        prefix: this.buildChapterCachedPrefix(input),
-      },
+      prefixCache: buildSharedChapterPrefixCache({
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        chapterIndex: input.chapterIndex,
+        chapterTitle: input.chapterTitle,
+        chapterContentHash: input.chapterContentHash,
+        chapterText: input.chapterText,
+        bookMetadata: {
+          title: asString(metadataRecord.title),
+          author: asString(metadataRecord.author),
+          language: asString(metadataRecord.language),
+        },
+      }),
     });
     const response = await llmClient.json(userPrompt);
 
@@ -677,47 +791,6 @@ export class KnowledgeExtractionWorkflowService {
     } catch {
       return this.createEmptyKnowledgeExtraction(input.chapterId, input.chapterTitle);
     }
-  }
-
-  private buildChapterCachedPrefix(input: {
-    bookId: string;
-    chapterId: string;
-    chapterIndex: number;
-    chapterTitle?: string;
-    chapterText: string;
-    chapterContentHash: string;
-  }): string {
-    const book = this.bookIngestionRepository.getBook(input.bookId);
-    const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
-    const stableBookMetadata = {
-      bookId: input.bookId,
-      title: asString(metadataRecord.title),
-      author: asString(metadataRecord.author),
-      language: asString(metadataRecord.language),
-    };
-
-    return [
-      `Document ID: ${input.bookId}`,
-      `Chapter ID: ${input.chapterId}`,
-      `Chapter Title: ${input.chapterTitle ?? ''}`,
-      `Chapter Content Hash: ${input.chapterContentHash}`,
-      `Prompt Version: ${PROMPT_VERSION}`,
-      '',
-      'Stable book metadata:',
-      '```json',
-      JSON.stringify(stableBookMetadata, null, 2),
-      '```',
-      '',
-      'Canonical chapter text:',
-      '```text',
-      input.chapterText,
-      '```',
-      '',
-      'Fixed extraction rules:',
-      '- The canonical chapter text is background context for this chapter only.',
-      '- Primary evidence must come from the current page supplied in the request suffix.',
-      '- Use cached chapter context only to resolve references and maintain continuity.',
-    ].join('\n');
   }
 
   private buildPieceSuffixPrompt(input: {

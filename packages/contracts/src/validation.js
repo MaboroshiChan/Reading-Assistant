@@ -4,6 +4,7 @@ exports.errorResponse = exports.validateEnvelope = void 0;
 const isRecord = (value) => typeof value === 'object' && value !== null;
 const isString = (value) => typeof value === 'string';
 const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+const isNonNegativeInteger = (value) => isNumber(value) && Number.isInteger(value) && value >= 0;
 const isSkeletonPayload = (payload) => {
     if (!isRecord(payload))
         return false;
@@ -23,6 +24,33 @@ const isParagraphPayload = (payload) => {
     return (isString(payload.doc_id) &&
         isString(payload.paragraph_id) &&
         isString(payload.paragraph_text));
+};
+const isSentenceRef = (value) => {
+    if (!isRecord(value))
+        return false;
+    return (isNonNegativeInteger(value.page_index) &&
+        isNonNegativeInteger(value.paragraph_index) &&
+        isNonNegativeInteger(value.paragraph_id) &&
+        isNonNegativeInteger(value.sentence_id));
+};
+const isChapterKeywordsPayload = (payload) => {
+    if (!isRecord(payload))
+        return false;
+    if (!isString(payload.doc_id) ||
+        !isString(payload.chapter_id) ||
+        !isNonNegativeInteger(payload.chapter_index) ||
+        !isString(payload.chunk_id) ||
+        !isNonNegativeInteger(payload.chunk_index) ||
+        !isNonNegativeInteger(payload.total_chunks) ||
+        payload.total_chunks <= 0 ||
+        !isString(payload.chunk_text) ||
+        !Array.isArray(payload.sentences) ||
+        payload.sentences.length === 0) {
+        return false;
+    }
+    return payload.sentences.every((sentence) => isRecord(sentence) &&
+        isSentenceRef(sentence.ref) &&
+        isString(sentence.text));
 };
 const isSentencePayload = (payload) => {
     if (!isRecord(payload))
@@ -46,6 +74,13 @@ const isQuizPayload = (payload) => {
         return false;
     return (isString(payload.doc_id) &&
         isString(payload.article_text));
+};
+const isKnowledgeExtractionPayload = (payload) => {
+    if (!isRecord(payload))
+        return false;
+    return (isString(payload.doc_id) &&
+        isString(payload.chapter_id) &&
+        isString(payload.chapter_text));
 };
 const makeError = (requestId, code, http, message) => ({
     request_id: requestId,
@@ -105,6 +140,17 @@ const validateEnvelope = (input) => {
                 ok: true,
                 envelope: input,
             };
+        case 'analyze.chapter-keywords.v1':
+            if (!isChapterKeywordsPayload(payload)) {
+                return {
+                    ok: false,
+                    error: makeError(requestId, 'E.BAD_REQUEST', 400, 'Invalid chapter keywords payload'),
+                };
+            }
+            return {
+                ok: true,
+                envelope: input,
+            };
         case 'analyze.sentence.v1':
             if (!isSentencePayload(payload)) {
                 return {
@@ -132,6 +178,17 @@ const validateEnvelope = (input) => {
                 return {
                     ok: false,
                     error: makeError(requestId, 'E.BAD_REQUEST', 400, 'Invalid quiz payload'),
+                };
+            }
+            return {
+                ok: true,
+                envelope: input,
+            };
+        case 'analyze.knowledge-extraction.v1':
+            if (!isKnowledgeExtractionPayload(payload)) {
+                return {
+                    ok: false,
+                    error: makeError(requestId, 'E.BAD_REQUEST', 400, 'Invalid knowledge extraction payload'),
                 };
             }
             return {

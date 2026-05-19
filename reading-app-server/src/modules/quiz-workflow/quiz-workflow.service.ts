@@ -37,6 +37,7 @@ import type {
   SubmitQuizWorkflowInput,
 } from './quiz-workflow.types';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
+import { buildSharedChapterPrefixCache } from '../../utils/chapter-prefix-cache';
 import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
 const PROMPT_VERSION = 'quiz.v3.1';
@@ -481,13 +482,22 @@ export class QuizWorkflowService {
       this.loadPrompt(),
       Promise.resolve(this.buildUnitsSuffixPrompt(input)),
     ]);
+    const book = this.bookIngestionRepository.getBook(input.bookId);
+    const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
     const llmClient = createLLMClient({
       systemPrompt,
-      prefixCache: {
-        cacheKey: `quiz.chapter_prefix:${PROMPT_VERSION}:${input.bookId}:${input.chapterId}:${input.chapterContentHash}`,
-        displayName: `quiz-${input.bookId}-${input.chapterId}`,
-        prefix: this.buildChapterCachedPrefix(input),
-      },
+      prefixCache: buildSharedChapterPrefixCache({
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        chapterTitle: input.chapterTitle,
+        chapterContentHash: input.chapterContentHash,
+        chapterText: input.chapterText,
+        bookMetadata: {
+          title: asString(metadataRecord.title),
+          author: asString(metadataRecord.author),
+          language: asString(metadataRecord.language),
+        },
+      }),
     });
     const response = await llmClient.json(userPrompt);
 
@@ -498,46 +508,6 @@ export class QuizWorkflowService {
 
     const parsed = extractJsonFromText(text);
     return this.coerceQuizQuestions(parsed, input.units);
-  }
-
-  private buildChapterCachedPrefix(input: {
-    bookId: string;
-    chapterId: string;
-    chapterTitle?: string;
-    chapterText: string;
-    chapterContentHash: string;
-  }): string {
-    const book = this.bookIngestionRepository.getBook(input.bookId);
-    const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
-    const stableBookMetadata = {
-      bookId: input.bookId,
-      title: asString(metadataRecord.title),
-      author: asString(metadataRecord.author),
-      language: asString(metadataRecord.language),
-    };
-
-    return [
-      `Book ID: ${input.bookId}`,
-      `Chapter ID: ${input.chapterId}`,
-      `Chapter Title: ${input.chapterTitle ?? ''}`,
-      `Chapter Content Hash: ${input.chapterContentHash}`,
-      `Prompt Version: ${PROMPT_VERSION}`,
-      '',
-      'Stable book metadata:',
-      '```json',
-      JSON.stringify(stableBookMetadata, null, 2),
-      '```',
-      '',
-      'Canonical chapter text:',
-      '```text',
-      input.chapterText,
-      '```',
-      '',
-      'Fixed quiz rules:',
-      '- The canonical chapter text is background context for the chapter.',
-      '- Each generated question must still be grounded in exactly one source knowledge unit supplied in the request suffix.',
-      '- Do not introduce facts that cannot be supported by the source units and the anchor page window.',
-    ].join('\n');
   }
 
   private buildUnitsSuffixPrompt(input: {
