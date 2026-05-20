@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { KnowledgeExtractionWorkflowRepository } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.repository';
 
+const recordProgressPercent = (record: Record<string, unknown>): number | undefined => {
+  const progress = record.progress;
+  return typeof progress === 'object'
+    && progress !== null
+    && typeof (progress as { percent?: unknown }).percent === 'number'
+    ? (progress as { percent: number }).percent
+    : undefined;
+};
+
 describe('KnowledgeExtractionWorkflowRepository', () => {
   test('persists slim workflow and snapshot records while keeping full results in memory', async () => {
     const persisted: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
@@ -80,6 +89,124 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       themes: [],
       relations: [],
     });
+  });
+
+  test('persists in-flight progress updates and clears progress on terminal states', async () => {
+    const persisted: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async (table: string, id: string, record: Record<string, unknown>) => {
+        persisted.push({ table, id, record });
+      },
+      putRelationRecord: async () => {},
+      selectTable: async () => [],
+    };
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    const created = repository.createOrReuseRun({
+      bookId: 'book-progress',
+      chapterId: 'chapter-progress',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge-extraction:v1:book-progress:chapter-progress:hash-1',
+      expectedSnapshotVersion: 1,
+      expectedChapterContentHash: 'hash-1',
+      requestedByUserId: undefined,
+    });
+
+    repository.markRunning(created.run.id);
+    repository.updateRunProgress(created.run.id, {
+      percent: 42.4,
+      stage: 'extract_chunk_knowledge',
+      message: 'Extracting knowledge from chunk 2 of 5',
+    });
+    repository.failRun(created.run.id, 'TEST_FAILURE', 'failure');
+    await (repository as never).pendingPersist;
+
+    expect(repository.getRun(created.run.id)?.progress).toBeUndefined();
+
+    const progressPersist = persisted.find(
+      (entry) => entry.table === 'workflow_run'
+        && entry.id === created.run.id
+        && recordProgressPercent(entry.record) === 42,
+    );
+    const terminalPersist = persisted.find(
+      (entry) => entry.table === 'workflow_run'
+        && entry.id === created.run.id
+        && entry.record.status === 'failed',
+    );
+
+    expect(progressPersist?.record.progress).toMatchObject({
+      percent: 42,
+      stage: 'extract_chunk_knowledge',
+      message: 'Extracting knowledge from chunk 2 of 5',
+    });
+    expect(terminalPersist?.record.progress).toBeUndefined();
+  });
+
+  test('loads persisted runs without progress for backward compatibility', async () => {
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async () => {},
+      putRelationRecord: async () => {},
+      selectTable: async (table: string) => {
+        if (table === 'workflow_run') {
+          return [{
+            id: 'wr_legacy',
+            kind: 'knowledge_extraction',
+            status: 'completed',
+            bookId: 'book-legacy',
+            chapterId: 'chapter-legacy',
+            chapterIndex: 1,
+            workflowVersion: 'v1',
+            idempotencyKey: 'knowledge-extraction:v1:book-legacy:chapter-legacy:hash-legacy',
+            producer: 'server',
+            qualityTier: 'server_final',
+            deduped: false,
+            resultVersion: 'v1',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            completedAt: '2026-01-01T00:01:00.000Z',
+            snapshotVersion: 1,
+            chapterContentHash: 'hash-legacy',
+          }];
+        }
+        if (table === 'chapter_knowledge_snapshot') {
+          return [{
+            workflowRunId: 'wr_legacy',
+            bookId: 'book-legacy',
+            chapterId: 'chapter-legacy',
+            chapterIndex: 1,
+            workflowVersion: 'v1',
+            resultVersion: 'v1',
+            producer: 'server',
+            qualityTier: 'server_final',
+            snapshotVersion: 1,
+            chapterContentHash: 'hash-legacy',
+            result: {
+              title: 'Legacy Chapter',
+              summary: 'Legacy summary',
+              people: [],
+              ideas: [],
+              events: [],
+              entities: [],
+              themes: [],
+              relations: [],
+            },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:01:00.000Z',
+          }];
+        }
+        return [];
+      },
+    };
+
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    await repository.onModuleInit();
+
+    const run = repository.getRun('wr_legacy');
+    expect(run?.progress).toBeUndefined();
+    expect(run?.output?.title).toBe('Legacy Chapter');
+    expect(repository.getLatestResult('book-legacy', 'chapter-legacy')?.result.summary).toBe('Legacy summary');
   });
 
   test('creates a fresh run when the previous idempotent run failed or went stale', () => {

@@ -1,5 +1,6 @@
 import type {
   KnowledgeExtractionWorkflowErrorInfo,
+  KnowledgeExtractionWorkflowProgress,
   KnowledgeExtractionWorkflowQualityTier,
   KnowledgeExtractionWorkflowResultPayload,
   KnowledgeExtractionWorkflowStatus,
@@ -55,6 +56,7 @@ export interface GetKnowledgeExtractionWorkflowStatusResponseDto {
   completedAt?: string;
   resultAvailable: boolean;
   error?: KnowledgeExtractionWorkflowErrorInfo;
+  progress?: KnowledgeExtractionWorkflowProgress;
 }
 
 export interface GetKnowledgeExtractionWorkflowResultResponseDto {

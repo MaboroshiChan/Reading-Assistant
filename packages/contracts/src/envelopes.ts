@@ -374,6 +374,31 @@ export interface AnalyzeQuizPayload {
   article_text: string;
 }
 
+export interface QuizSourcePageRef {
+  pageIndex: number;
+  pageNumber?: number;
+}
+
+export interface QuizSourceEvidence {
+  quote: string;
+  pageIndex?: number;
+  pageNumber?: number;
+}
+
+export interface QuizSourceInsight {
+  unitId: string;
+  unitType: 'idea' | 'event' | 'theme' | 'person' | 'entity';
+  label: string;
+  description?: string;
+  skill: 'Facts' | 'Inference' | 'Tone' | 'Argument';
+  aliases?: string[];
+  relationHints?: string[];
+  anchorPageIndex: number;
+  anchorPageNumber?: number;
+  sourcePageRefs: QuizSourcePageRef[];
+  sourceEvidence: QuizSourceEvidence[];
+}
+
 export interface QuizQuestion {
   id: string;
   type: 'multiple_choice';
@@ -382,6 +407,7 @@ export interface QuizQuestion {
   correctAnswerIndex: number;
   explanation: string;
   skill: 'Facts' | 'Inference' | 'Tone' | 'Argument';
+  sourceInsight?: QuizSourceInsight;
 }
 
 export interface AnalyzeQuizData {

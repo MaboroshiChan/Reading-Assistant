@@ -44,6 +44,7 @@ import type {
 } from './knowledge-extraction-workflow.dto';
 import { KnowledgeExtractionWorkflowRepository } from './knowledge-extraction-workflow.repository';
 import type {
+  KnowledgeExtractionWorkflowProgress,
   KnowledgeExtractionWorkflowResultPayload,
   KnowledgeExtractionWorkflowRunRecord,
   SubmitKnowledgeExtractionWorkflowInput,
@@ -68,6 +69,8 @@ const RELATION_TYPES = new Set([
   'related_to',
 ]);
 const IDEA_KINDS = new Set(['claim', 'belief', 'question', 'principle', 'conflict']);
+const INITIAL_RUNNING_PROGRESS_PERCENT = 5;
+const FINALIZING_PROGRESS_PERCENT = 100;
 
 type KnowledgePiece = {
   pageIndex: number;
@@ -105,6 +108,9 @@ const asString = (value: unknown): string | undefined =>
 
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const clampProgressPercent = (value: number): number =>
+  Math.min(100, Math.max(0, Math.round(value)));
 
 const CONTEXT_HEAVY_IDEA_TOKENS = [
   'book',
@@ -485,6 +491,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
     try {
       const result = await this.generateKnowledgeExtraction({
+        workflowRunId,
         bookId: runningRun.bookId,
         chapterId: runningRun.chapterId,
         chapterIndex: runningRun.chapterIndex,
@@ -626,6 +633,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   }
 
   private async generateKnowledgeExtraction(input: {
+    workflowRunId: string;
     bookId: string;
     chapterId: string;
     chapterIndex: number;
@@ -637,6 +645,12 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     const bookContext = this.bookContextService.buildBookContextBundle(input.bookId, input.chapterId);
     const chapterContext = this.bookContextService.buildChapterContextBundle(input.bookId, input.chapterId);
     const incrementalRepository = new KnowledgeExtractionWorkflowRepository();
+
+    this.publishWorkflowProgress(input.workflowRunId, {
+      percent: INITIAL_RUNNING_PROGRESS_PERCENT,
+      stage: 'extract_chunk_knowledge',
+      message: '正在抽取关键人物与关系',
+    });
 
     for (const piece of input.pieces) {
       const memorySnapshot = await incrementalRepository.buildChapterSnapshot(
@@ -700,8 +714,18 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         accumulatedThemeCount: chapterCounts.themeCount,
         accumulatedRelationCount: chapterCounts.relationCount,
       });
+      this.publishWorkflowProgress(input.workflowRunId, {
+        percent: this.progressPercentForProcessedPieces(piece.pieceIndex + 1, input.pieces.length),
+        stage: 'extract_chunk_knowledge',
+        message: '正在抽取关键人物与关系',
+      });
     }
 
+    this.publishWorkflowProgress(input.workflowRunId, {
+      percent: FINALIZING_PROGRESS_PERCENT,
+      stage: 'finalize_chapter_knowledge',
+      message: '正在保存结果',
+    });
     const knowledge = await incrementalRepository.buildChapterSnapshot(
       input.bookId,
       input.chapterId,
@@ -1313,7 +1337,40 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       completedAt: run.completedAt,
       resultAvailable: Boolean(run.output),
       error: run.error,
+      progress: this.visibleProgressForStatus(run),
     };
+  }
+
+  private visibleProgressForStatus(
+    run: KnowledgeExtractionWorkflowRunRecord,
+  ): KnowledgeExtractionWorkflowProgress | undefined {
+    if (run.status !== 'queued' && run.status !== 'running') {
+      return undefined;
+    }
+    if (!run.progress) return undefined;
+    return {
+      percent: clampProgressPercent(run.progress.percent),
+      stage: run.progress.stage,
+      message: run.progress.message,
+    };
+  }
+
+  private publishWorkflowProgress(
+    workflowRunId: string,
+    progress: KnowledgeExtractionWorkflowProgress,
+  ): void {
+    this.knowledgeExtractionWorkflowRepository.updateRunProgress(workflowRunId, {
+      percent: clampProgressPercent(progress.percent),
+      stage: progress.stage,
+      message: progress.message,
+    });
+  }
+
+  private progressPercentForProcessedPieces(processedPieces: number, totalPieces: number): number {
+    if (totalPieces <= 0) return INITIAL_RUNNING_PROGRESS_PERCENT;
+    const boundedProcessedPieces = Math.min(Math.max(processedPieces, 0), totalPieces);
+    const percent = INITIAL_RUNNING_PROGRESS_PERCENT + (boundedProcessedPieces / totalPieces) * 90;
+    return clampProgressPercent(Math.min(percent, 99));
   }
 
   private requireRun(workflowRunId: string): KnowledgeExtractionWorkflowRunRecord {

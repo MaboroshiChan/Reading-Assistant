@@ -33,6 +33,7 @@ import type {
   QuizWorkflowQuestionType,
   QuizWorkflowResultPayload,
   QuizWorkflowRunRecord,
+  QuizWorkflowSourceInsight,
   QuizWorkflowSourceUnitType,
   SubmitQuizWorkflowInput,
 } from './quiz-workflow.types';
@@ -610,6 +611,7 @@ export class QuizWorkflowService {
       sourceUnitType: sourceUnit?.type,
       sourcePageRefs: sourceUnit?.sourcePageRefs,
       sourceEvidence: sourceUnit?.sourceEvidence,
+      sourceInsight: sourceUnit ? this.toSourceInsight(sourceUnit) : undefined,
     } as const;
 
     if (type === 'multiple_choice') {
@@ -800,18 +802,49 @@ export class QuizWorkflowService {
       if (unit) units.push(unit);
     }
 
-    return units.sort((left, right) => {
-      const priorityDelta = this.unitPriority(left.type) - this.unitPriority(right.type);
-      if (priorityDelta !== 0) return priorityDelta;
-      const pageDelta = left.anchorPageIndex - right.anchorPageIndex;
-      if (pageDelta !== 0) return pageDelta;
-      return left.unitId.localeCompare(right.unitId);
-    });
+    return units.sort((left, right) => this.compareKnowledgeUnits(left, right));
   }
 
   private selectKnowledgeUnits(units: KnowledgeUnit[]): KnowledgeUnit[] {
     const targetCount = units.length < 3 ? units.length : Math.min(5, units.length);
-    return units.slice(0, targetCount);
+    if (units.length <= targetCount) return units;
+
+    const selected = new Map<string, KnowledgeUnit>();
+    const unitsByQuestionType = new Map<QuizWorkflowQuestionType, KnowledgeUnit[]>();
+
+    for (const unit of units) {
+      const questionType = this.selectQuestionType(unit);
+      const existing = unitsByQuestionType.get(questionType);
+      if (existing) {
+        existing.push(unit);
+      } else {
+        unitsByQuestionType.set(questionType, [unit]);
+      }
+    }
+
+    const typeSelectionOrder: QuizWorkflowQuestionType[] = [
+      'multiple_choice',
+      'true_false_not_given',
+      'fill_in_blank',
+      'short_answer',
+    ];
+
+    for (const questionType of typeSelectionOrder) {
+      if (selected.size >= targetCount) break;
+      const candidate = unitsByQuestionType.get(questionType)?.[0];
+      if (candidate) {
+        selected.set(candidate.unitId, candidate);
+      }
+    }
+
+    for (const unit of units) {
+      if (selected.size >= targetCount) break;
+      if (!selected.has(unit.unitId)) {
+        selected.set(unit.unitId, unit);
+      }
+    }
+
+    return Array.from(selected.values()).sort((left, right) => this.compareKnowledgeUnits(left, right));
   }
 
   private planQuestionUnits(units: KnowledgeUnit[]): PlannedKnowledgeUnit[] {
@@ -913,6 +946,22 @@ export class QuizWorkflowService {
     return Array.from(unique.values()).sort((left, right) => left.pageIndex - right.pageIndex);
   }
 
+  private toSourceInsight(unit: PlannedKnowledgeUnit): QuizWorkflowSourceInsight {
+    return {
+      unitId: unit.unitId,
+      unitType: unit.type,
+      label: unit.label,
+      description: unit.description,
+      skill: unit.skill,
+      aliases: unit.aliases,
+      relationHints: unit.relationHints,
+      anchorPageIndex: unit.anchorPageIndex,
+      anchorPageNumber: unit.anchorPageNumber,
+      sourcePageRefs: unit.sourcePageRefs,
+      sourceEvidence: unit.sourceEvidence,
+    };
+  }
+
   private addRelationHint(target: Map<string, string[]>, nodeId: string, hint: string): void {
     const existing = target.get(nodeId);
     if (existing) {
@@ -935,6 +984,14 @@ export class QuizWorkflowService {
       case 'entity':
         return 4;
     }
+  }
+
+  private compareKnowledgeUnits(left: KnowledgeUnit, right: KnowledgeUnit): number {
+    const priorityDelta = this.unitPriority(left.type) - this.unitPriority(right.type);
+    if (priorityDelta !== 0) return priorityDelta;
+    const pageDelta = left.anchorPageIndex - right.anchorPageIndex;
+    if (pageDelta !== 0) return pageDelta;
+    return left.unitId.localeCompare(right.unitId);
   }
 
   private findMatchingKnowledgeExtractionResult(

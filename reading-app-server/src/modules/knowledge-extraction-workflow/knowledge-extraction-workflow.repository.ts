@@ -26,6 +26,7 @@ import { workflowLog } from '../workflow.logger';
 import { SurrealService } from '../surrealDB/surrealdb.service';
 import type {
   PageExtractionCacheRecord,
+  KnowledgeExtractionWorkflowProgress,
   KnowledgeExtractionWorkflowResultPayload,
   KnowledgeExtractionWorkflowRunRecord,
   KnowledgeExtractionWorkflowStoredResult,
@@ -47,6 +48,9 @@ const randomRecordId = (prefix: string): string =>
   `${prefix}_${randomUUID().replace(/-/g, '')}`;
 
 const stableLocalId = (prefix: string, seed: string): string => `${prefix}_${encodeSegment(seed)}`;
+
+const clampProgressPercent = (value: number): number =>
+  Math.min(100, Math.max(0, Math.round(value)));
 
 type KnowledgeNodeType = KnowledgeRelation['from_type'];
 type EvidenceOwnerTable = 'person' | 'concept' | 'theme' | 'entity' | 'event' | 'appears_in' | 'related_to';
@@ -343,6 +347,11 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       expectedChapterContentHash: input.expectedChapterContentHash,
       deduped: false,
       resultVersion: input.workflowVersion,
+      progress: {
+        percent: 0,
+        stage: 'queued',
+        message: '正在排队',
+      },
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -406,6 +415,40 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     return updated;
   }
 
+  updateRunProgress(
+    workflowRunId: string,
+    progress: KnowledgeExtractionWorkflowProgress,
+  ): KnowledgeExtractionWorkflowRunRecord | null {
+    const run = this.runs.get(workflowRunId);
+    if (!run || (run.status !== 'queued' && run.status !== 'running')) return null;
+
+    const timestamp = new Date().toISOString();
+    const updated: KnowledgeExtractionWorkflowRunRecord = {
+      ...run,
+      progress: {
+        percent: clampProgressPercent(progress.percent),
+        stage: progress.stage?.trim() || undefined,
+        message: progress.message?.trim() || undefined,
+      },
+      updatedAt: timestamp,
+    };
+
+    this.runs.set(workflowRunId, updated);
+    this.schedulePersist(() => this.persistRecord('workflow_run', updated.id, updated));
+    workflowLog('run.progress', {
+      workflowKind: updated.kind,
+      workflowRunId: updated.id,
+      bookId: updated.bookId,
+      chapterId: updated.chapterId,
+      chapterIndex: updated.chapterIndex,
+      workflowVersion: updated.workflowVersion,
+      percent: updated.progress?.percent,
+      stage: updated.progress?.stage,
+      message: updated.progress?.message,
+    });
+    return updated;
+  }
+
   completeRun(args: {
     workflowRunId: string;
     snapshotVersion: number;
@@ -423,6 +466,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       chapterContentHash: args.chapterContentHash,
       output: args.result,
       error: undefined,
+      progress: undefined,
       updatedAt: timestamp,
       completedAt: timestamp,
       deduped: false,
@@ -964,6 +1008,7 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       ...run,
       status,
       error: { code, message },
+      progress: undefined,
       updatedAt: timestamp,
       completedAt: timestamp,
       deduped: false,

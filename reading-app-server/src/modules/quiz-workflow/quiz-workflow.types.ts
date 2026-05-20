@@ -28,6 +28,20 @@ export interface QuizWorkflowEvidence {
   pageNumber?: number;
 }
 
+export interface QuizWorkflowSourceInsight {
+  unitId: string;
+  unitType: QuizWorkflowSourceUnitType;
+  label: string;
+  description?: string;
+  skill: QuizWorkflowSkill;
+  aliases?: string[];
+  relationHints?: string[];
+  anchorPageIndex: number;
+  anchorPageNumber?: number;
+  sourcePageRefs: QuizWorkflowPageRef[];
+  sourceEvidence: QuizWorkflowEvidence[];
+}
+
 export interface QuizWorkflowQuestionBase {
   id: string;
   type: QuizWorkflowQuestionType;
@@ -38,6 +52,7 @@ export interface QuizWorkflowQuestionBase {
   sourceUnitType?: QuizWorkflowSourceUnitType;
   sourcePageRefs?: QuizWorkflowPageRef[];
   sourceEvidence?: QuizWorkflowEvidence[];
+  sourceInsight?: QuizWorkflowSourceInsight;
 }
 
 export interface QuizWorkflowMultipleChoiceQuestion extends QuizWorkflowQuestionBase {

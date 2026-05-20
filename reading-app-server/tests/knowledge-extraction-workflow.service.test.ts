@@ -15,6 +15,14 @@ const createBookRepository = async (): Promise<BookIngestionRepository> => {
   return new BookIngestionRepository(dataDir);
 };
 
+const createDeferred = <T = void>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+};
+
 describe('KnowledgeExtractionWorkflowService', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -275,6 +283,165 @@ describe('KnowledgeExtractionWorkflowService', () => {
         expect.objectContaining({ pageIndex: 2, pageNumber: 3 })
       ])
     );
+    expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
+  });
+
+  test('returns queued progress for a newly submitted workflow before execution starts', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const queueService = new WorkflowQueueService();
+    vi.spyOn(queueService, 'enqueue').mockImplementation(() => undefined);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      queueService,
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-queued-progress',
+      chapterId: 'chapter-queued-progress',
+      chapterIndex: 1,
+      chapterTitle: 'Queued Progress',
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: {
+        '0': 'Alice waits in the queue.',
+      },
+    });
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-queued-progress',
+      chapterId: 'chapter-queued-progress',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+    });
+
+    expect(submit.status).toBe('queued');
+    expect(service.getWorkflowStatus(submit.workflowRunId)).toMatchObject({
+      status: 'queued',
+      progress: {
+        percent: 0,
+        stage: 'queued',
+        message: '正在排队',
+      },
+    });
+  });
+
+  test('publishes running progress while processing pieces and omits it after completion', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const queueService = new WorkflowQueueService();
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      queueService,
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-progress',
+      chapterId: 'chapter-progress',
+      chapterIndex: 1,
+      chapterTitle: 'Progress Chapter',
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: {
+        '0': 'Alice appears on the first page.',
+      },
+    });
+    bookRepository.upsertPageFragment({
+      bookId: 'book-progress',
+      chapterId: 'chapter-progress',
+      chapterIndex: 1,
+      chapterTitle: 'Progress Chapter',
+      pageIndex: 1,
+      sourceHash: 'hash-page-1',
+      pageParagraphs: {
+        '0': 'Bob appears on the second page.',
+      },
+    });
+
+    const firstPieceStarted = createDeferred<void>();
+    const releaseFirstPiece = createDeferred<void>();
+    const secondPieceStarted = createDeferred<void>();
+    const releaseSecondPiece = createDeferred<void>();
+
+    vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockImplementation(
+      async (input: { piece: { pageIndex: number; pageNumber: number } }) => {
+        if (input.piece.pageIndex === 0) {
+          firstPieceStarted.resolve();
+          await releaseFirstPiece.promise;
+        } else {
+          secondPieceStarted.resolve();
+          await releaseSecondPiece.promise;
+        }
+
+        return {
+          title: 'ignored',
+          summary: 'ignored',
+          people: [
+            {
+              local_id: `p${input.piece.pageIndex + 1}`,
+              name: input.piece.pageIndex === 0 ? 'Alice' : 'Bob',
+              evidence: [{
+                quote: input.piece.pageIndex === 0 ? 'Alice appears' : 'Bob appears',
+                pageIndex: input.piece.pageIndex,
+                pageNumber: input.piece.pageNumber,
+              }],
+            },
+          ],
+          ideas: [],
+          events: [],
+          entities: [],
+          themes: [],
+          relations: [],
+        };
+      },
+    );
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-progress',
+      chapterId: 'chapter-progress',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+    });
+
+    await firstPieceStarted.promise;
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId)).toMatchObject({
+        status: 'running',
+        progress: {
+          percent: 5,
+          stage: 'extract_chunk_knowledge',
+          message: '正在抽取关键人物与关系',
+        },
+      });
+    });
+
+    releaseFirstPiece.resolve();
+    await secondPieceStarted.promise;
+    await vi.waitFor(() => {
+      const status = service.getWorkflowStatus(submit.workflowRunId);
+      expect(status.status).toBe('running');
+      expect(status.progress).toMatchObject({
+        percent: 50,
+        stage: 'extract_chunk_knowledge',
+        message: '正在抽取关键人物与关系',
+      });
+    });
+
+    releaseSecondPiece.resolve();
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+    });
+    expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
   });
 
   test('rejects workflow submission when canonical chapter text is empty', async () => {
@@ -533,6 +700,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
     await vi.waitFor(() => {
       expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('failed');
     });
+    expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
 
     expect(workflowRepository.getLatestResult('book-fail-1', 'chapter-fail-1')).toBeNull();
     expect(() => service.getWorkflowResult(submit.workflowRunId)).toThrowError(ConflictException);
@@ -826,6 +994,64 @@ describe('KnowledgeExtractionWorkflowService', () => {
     });
 
     expect(prompts).toHaveLength(1);
+  });
+
+  test('omits progress when a running workflow becomes stale', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const queueService = new WorkflowQueueService();
+    let queuedTask: (() => Promise<void>) | undefined;
+    vi.spyOn(queueService, 'enqueue').mockImplementation((task) => {
+      queuedTask = task as () => Promise<void>;
+    });
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      queueService,
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-stale-progress',
+      chapterId: 'chapter-stale-progress',
+      chapterIndex: 1,
+      chapterTitle: 'Stale Progress',
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: {
+        '0': 'Alice sees stale data.',
+      },
+    });
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-stale-progress',
+      chapterId: 'chapter-stale-progress',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      expectedSnapshotVersion: 1,
+    });
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-stale-progress',
+      chapterId: 'chapter-stale-progress',
+      chapterIndex: 1,
+      chapterTitle: 'Stale Progress',
+      pageIndex: 1,
+      sourceHash: 'hash-page-1',
+      pageParagraphs: {
+        '0': 'The canonical chapter changes before execution.',
+      },
+    });
+    await queuedTask?.();
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('stale');
+    });
+
+    expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
   });
 
   test('auto-submits quiz after knowledge extraction completes', async () => {

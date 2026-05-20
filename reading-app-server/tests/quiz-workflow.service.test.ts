@@ -302,6 +302,21 @@ describe('QuizWorkflowService', () => {
         acceptableAnswers: ['Freedom', 'Freedom answer'],
         sourceUnitId: 'i_freedom',
         sourceUnitType: 'idea',
+        sourceInsight: {
+          unitId: 'i_freedom',
+          unitType: 'idea',
+          label: 'Freedom',
+          description: 'A central political ideal.',
+          skill: 'Argument',
+          aliases: undefined,
+          relationHints: ['supports:person:p_alice'],
+          anchorPageIndex: 0,
+          anchorPageNumber: 1,
+          sourcePageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+          sourceEvidence: [
+            { quote: 'freedom is essential', pageIndex: 0, pageNumber: 1 },
+          ],
+        },
         sourceEvidence: [
           { quote: 'freedom is essential', pageIndex: 0, pageNumber: 1 },
         ],
@@ -313,6 +328,25 @@ describe('QuizWorkflowService', () => {
         correctAnswerIndex: 0,
         sourceUnitId: 'p_alice',
         sourceUnitType: 'person',
+        sourceInsight: {
+          unitId: 'p_alice',
+          unitType: 'person',
+          label: 'Alice',
+          description: undefined,
+          skill: 'Facts',
+          aliases: ['Al'],
+          relationHints: ['participates_in:event:e_speech', 'supports:idea:i_freedom'],
+          anchorPageIndex: 0,
+          anchorPageNumber: 1,
+          sourcePageRefs: [
+            { pageIndex: 0, pageNumber: 1 },
+            { pageIndex: 1, pageNumber: 2 },
+          ],
+          sourceEvidence: [
+            { quote: 'Alice arrives', pageIndex: 0, pageNumber: 1 },
+            { quote: 'Alice speaks', pageIndex: 1, pageNumber: 2 },
+          ],
+        },
         sourceEvidence: [
           { quote: 'Alice arrives', pageIndex: 0, pageNumber: 1 },
           { quote: 'Alice speaks', pageIndex: 1, pageNumber: 2 },
@@ -328,6 +362,21 @@ describe('QuizWorkflowService', () => {
         correctAnswerIndex: 0,
         sourceUnitId: 'e_speech',
         sourceUnitType: 'event',
+        sourceInsight: {
+          unitId: 'e_speech',
+          unitType: 'event',
+          label: 'Public Speech',
+          description: 'Alice addresses the crowd.',
+          skill: 'Inference',
+          aliases: undefined,
+          relationHints: ['participates_in:person:p_alice'],
+          anchorPageIndex: 1,
+          anchorPageNumber: 2,
+          sourcePageRefs: [{ pageIndex: 1, pageNumber: 2 }],
+          sourceEvidence: [
+            { quote: 'Alice speaks to the crowd', pageIndex: 1, pageNumber: 2 },
+          ],
+        },
         sourceEvidence: [
           { quote: 'Alice speaks to the crowd', pageIndex: 1, pageNumber: 2 },
         ],
@@ -339,6 +388,21 @@ describe('QuizWorkflowService', () => {
         correctAnswerIndex: 0,
         sourceUnitId: 't_resistance',
         sourceUnitType: 'theme',
+        sourceInsight: {
+          unitId: 't_resistance',
+          unitType: 'theme',
+          label: 'Resistance',
+          description: 'The chapter emphasizes collective resistance.',
+          skill: 'Tone',
+          aliases: undefined,
+          relationHints: undefined,
+          anchorPageIndex: 2,
+          anchorPageNumber: 3,
+          sourcePageRefs: [{ pageIndex: 2, pageNumber: 3 }],
+          sourceEvidence: [
+            { quote: 'the resistance grows', pageIndex: 2, pageNumber: 3 },
+          ],
+        },
         sourceEvidence: [
           { quote: 'the resistance grows', pageIndex: 2, pageNumber: 3 },
         ],
@@ -356,5 +420,82 @@ describe('QuizWorkflowService', () => {
         systemPromptMode: 'request',
       }),
     }));
+  });
+
+  test('selects mixed question types when idea units would otherwise dominate', async () => {
+    const bookRepository = await createBookRepository();
+    const knowledgeRepository = new KnowledgeExtractionWorkflowRepository();
+    const service = new QuizWorkflowService(
+      bookRepository,
+      new BookContextService(bookRepository, knowledgeRepository),
+      knowledgeRepository,
+      new QuizWorkflowRepository(),
+      new WorkflowQueueService(),
+    );
+
+    const knowledgeResult = {
+      ...createKnowledgeResult(),
+      ideas: [
+        {
+          local_id: 'i_freedom',
+          label: 'Freedom',
+          description: 'A central political ideal.',
+          kind: 'claim' as const,
+          evidence: [{ quote: 'freedom is essential', pageIndex: 0, pageNumber: 1 }],
+        },
+        {
+          local_id: 'i_justice',
+          label: 'Justice',
+          description: 'The crowd demands justice.',
+          kind: 'claim' as const,
+          evidence: [{ quote: 'justice must prevail', pageIndex: 0, pageNumber: 1 }],
+        },
+        {
+          local_id: 'i_unity',
+          label: 'Unity',
+          description: 'The chapter links resistance with unity.',
+          kind: 'claim' as const,
+          evidence: [{ quote: 'unity strengthens resistance', pageIndex: 1, pageNumber: 2 }],
+        },
+      ],
+    };
+
+    const derivedUnits = (service as never).deriveKnowledgeUnits(knowledgeResult) as Array<{
+      unitId: string;
+      type: string;
+    }>;
+    expect(derivedUnits.map((unit) => unit.type)).toEqual([
+      'idea',
+      'idea',
+      'idea',
+      'event',
+      'theme',
+      'person',
+    ]);
+
+    const selectedUnits = (service as never).selectKnowledgeUnits(derivedUnits) as Array<{
+      unitId: string;
+      type: string;
+    }>;
+    expect(selectedUnits).toHaveLength(5);
+    expect(selectedUnits.map((unit) => unit.unitId)).toEqual([
+      'i_freedom',
+      'i_justice',
+      'e_speech',
+      't_resistance',
+      'p_alice',
+    ]);
+
+    const plannedUnits = (service as never).planQuestionUnits(selectedUnits) as Array<{
+      unitId: string;
+      targetQuestionType: string;
+    }>;
+    expect(plannedUnits.map((unit) => unit.targetQuestionType)).toEqual([
+      'short_answer',
+      'short_answer',
+      'true_false_not_given',
+      'multiple_choice',
+      'fill_in_blank',
+    ]);
   });
 });

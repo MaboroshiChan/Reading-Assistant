@@ -23,6 +23,7 @@ const encodeSegment = (value) => (0, node_crypto_1.createHash)('sha256').update(
 const hashText = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('hex');
 const randomRecordId = (prefix) => `${prefix}_${(0, node_crypto_1.randomUUID)().replace(/-/g, '')}`;
 const stableLocalId = (prefix, seed) => `${prefix}_${encodeSegment(seed)}`;
+const clampProgressPercent = (value) => Math.min(100, Math.max(0, Math.round(value)));
 let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRepository {
     surrealService;
     runs = new Map();
@@ -98,6 +99,11 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             expectedChapterContentHash: input.expectedChapterContentHash,
             deduped: false,
             resultVersion: input.workflowVersion,
+            progress: {
+                percent: 0,
+                stage: 'queued',
+                message: '正在排队',
+            },
             createdAt: timestamp,
             updatedAt: timestamp,
         };
@@ -154,6 +160,35 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         });
         return updated;
     }
+    updateRunProgress(workflowRunId, progress) {
+        const run = this.runs.get(workflowRunId);
+        if (!run || (run.status !== 'queued' && run.status !== 'running'))
+            return null;
+        const timestamp = new Date().toISOString();
+        const updated = {
+            ...run,
+            progress: {
+                percent: clampProgressPercent(progress.percent),
+                stage: progress.stage?.trim() || undefined,
+                message: progress.message?.trim() || undefined,
+            },
+            updatedAt: timestamp,
+        };
+        this.runs.set(workflowRunId, updated);
+        this.schedulePersist(() => this.persistRecord('workflow_run', updated.id, updated));
+        (0, workflow_logger_1.workflowLog)('run.progress', {
+            workflowKind: updated.kind,
+            workflowRunId: updated.id,
+            bookId: updated.bookId,
+            chapterId: updated.chapterId,
+            chapterIndex: updated.chapterIndex,
+            workflowVersion: updated.workflowVersion,
+            percent: updated.progress?.percent,
+            stage: updated.progress?.stage,
+            message: updated.progress?.message,
+        });
+        return updated;
+    }
     completeRun(args) {
         const run = this.runs.get(args.workflowRunId);
         if (!run)
@@ -166,6 +201,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             chapterContentHash: args.chapterContentHash,
             output: args.result,
             error: undefined,
+            progress: undefined,
             updatedAt: timestamp,
             completedAt: timestamp,
             deduped: false,
@@ -600,6 +636,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             ...run,
             status,
             error: { code, message },
+            progress: undefined,
             updatedAt: timestamp,
             completedAt: timestamp,
             deduped: false,

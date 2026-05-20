@@ -29,6 +29,12 @@ export interface KnowledgeExtractionWorkflowErrorInfo {
   message: string;
 }
 
+export interface KnowledgeExtractionWorkflowProgress {
+  percent: number;
+  stage?: string;
+  message?: string;
+}
+
 export interface KnowledgeExtractionWorkflowRunRecord {
   id: string;
   kind: KnowledgeExtractionWorkflowKind;
@@ -47,6 +53,7 @@ export interface KnowledgeExtractionWorkflowRunRecord {
   resultVersion: string;
   output?: KnowledgeExtractionWorkflowResultPayload;
   error?: KnowledgeExtractionWorkflowErrorInfo;
+  progress?: KnowledgeExtractionWorkflowProgress;
   createdAt: string;
   updatedAt: string;
   startedAt?: string;
