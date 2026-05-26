@@ -91,6 +91,57 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     });
   });
 
+  test('truncates oversized persisted summaries while keeping the full result in memory', async () => {
+    const persisted: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
+    const surrealStub = {
+      putRecord: async (table: string, id: string, record: Record<string, unknown>) => {
+        persisted.push({ table, id, record });
+      },
+      putRelationRecord: async () => {},
+      selectTable: async () => [],
+    };
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    const created = repository.createOrReuseRun({
+      bookId: 'book-long',
+      chapterId: 'chapter-long',
+      chapterIndex: 2,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge-extraction:v1:book-long:chapter-long:hash-long',
+      expectedSnapshotVersion: 1,
+      expectedChapterContentHash: 'hash-long',
+      requestedByUserId: undefined,
+    });
+    const longSummary = 'S'.repeat(50_000);
+
+    repository.completeRun({
+      workflowRunId: created.run.id,
+      snapshotVersion: 1,
+      chapterContentHash: 'hash-long',
+      result: {
+        title: 'Long Chapter',
+        summary: longSummary,
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+    });
+    await (repository as never).pendingPersist;
+
+    expect(repository.getRun(created.run.id)?.output?.summary).toBe(longSummary);
+
+    const workflowPersist = persisted.find(
+      (entry) => entry.table === 'workflow_run'
+        && entry.id === created.run.id
+        && entry.record.status === 'completed',
+    );
+    const persistedOutput = workflowPersist?.record.output as { summary?: string } | undefined;
+    expect(persistedOutput?.summary?.length).toBeLessThan(longSummary.length);
+    expect(persistedOutput?.summary).toContain('[truncated]');
+  });
+
   test('persists in-flight progress updates and clears progress on terminal states', async () => {
     const persisted: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
     const surrealStub = {
@@ -207,6 +258,148 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     expect(run?.progress).toBeUndefined();
     expect(run?.output?.title).toBe('Legacy Chapter');
     expect(repository.getLatestResult('book-legacy', 'chapter-legacy')?.result.summary).toBe('Legacy summary');
+  });
+
+  test('normalizes persisted Surreal record ids after reload', async () => {
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async () => {},
+      putRelationRecord: async () => {},
+      selectTable: async (table: string) => {
+        if (table === 'workflow_run') {
+          return [{
+            id: 'workflow_run:wr_restart_case',
+            kind: 'knowledge_extraction',
+            status: 'running',
+            bookId: 'book-restart',
+            chapterId: 'chapter-restart',
+            chapterIndex: 6,
+            workflowVersion: 'v1',
+            idempotencyKey: 'knowledge-extraction:v1:book-restart:chapter-restart:hash-restart',
+            producer: 'server',
+            qualityTier: 'server_final',
+            deduped: false,
+            resultVersion: 'v1',
+            progress: {
+              percent: 7,
+              stage: 'extract_chunk_knowledge',
+              message: '正在抽取关键人物与关系',
+            },
+            createdAt: '2026-05-20T21:18:27.603Z',
+            updatedAt: '2026-05-20T21:21:02.770Z',
+            startedAt: '2026-05-20T21:18:27.603Z',
+          }];
+        }
+        if (table === 'chapter_knowledge_snapshot') {
+          return [{
+            workflowRunId: 'workflow_run:wr_restart_case',
+            bookId: 'book-restart',
+            chapterId: 'chapter-restart',
+            chapterIndex: 6,
+            workflowVersion: 'v1',
+            resultVersion: 'v1',
+            producer: 'server',
+            qualityTier: 'server_final',
+            snapshotVersion: 2,
+            chapterContentHash: 'hash-restart',
+            result: {
+              title: 'Restart Chapter',
+              summary: 'Restart summary',
+              people: [],
+              ideas: [],
+              events: [],
+              entities: [],
+              themes: [],
+              relations: [],
+            },
+            createdAt: '2026-05-20T21:18:27.603Z',
+            updatedAt: '2026-05-20T21:21:02.770Z',
+          }];
+        }
+        return [];
+      },
+    };
+
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    await repository.onModuleInit();
+
+    expect(repository.getRun('wr_restart_case')?.id).toBe('wr_restart_case');
+    expect(repository.getRun('workflow_run:wr_restart_case')?.id).toBe('wr_restart_case');
+  });
+
+  test('skips Surreal persistence for oversized page cache records', async () => {
+    const persisted: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
+    const repository = new KnowledgeExtractionWorkflowRepository({
+      query: async () => [],
+      putRecord: async (table: string, id: string, record: Record<string, unknown>) => {
+        persisted.push({ table, id, record });
+      },
+      putRelationRecord: async () => {},
+      selectTable: async () => [],
+    } as never);
+
+    repository.setCachedPageExtraction({
+      bookId: 'book-cache',
+      chapterId: 'chapter-cache',
+      pageIndex: 0,
+      sourceHash: 'source-hash',
+      chapterContentHash: 'chapter-hash',
+      promptVersion: 'v1',
+      extraction: {
+        title: 'Cache Chapter',
+        summary: 'X'.repeat(950_000),
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+    });
+    await (repository as never).pendingPersist;
+
+    expect(persisted).toEqual([]);
+    expect(repository.getCachedPageExtraction(
+      'book-cache',
+      'chapter-cache',
+      0,
+      'source-hash',
+      'chapter-hash',
+      'v1',
+    )?.summary).toHaveLength(950_000);
+  });
+
+  test('stores evidence quotes as a bounded prefix', async () => {
+    const repository = new KnowledgeExtractionWorkflowRepository();
+    const longQuote = 'Q'.repeat(400);
+
+    await repository.replaceChapterExtraction({
+      bookId: 'book-evidence-limit',
+      chapterId: 'chapter-evidence-limit',
+      chapterIndex: 1,
+      chapterContentHash: 'hash-evidence-limit',
+      extraction: {
+        title: 'Evidence Limit',
+        summary: '',
+        people: [{
+          local_id: 'p1',
+          name: 'Alice',
+          evidence: [{ quote: longQuote, pageIndex: 0, pageNumber: 1 }],
+        }],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+      promptVersion: 'v1',
+    });
+
+    const snapshot = await repository.buildChapterSnapshot('book-evidence-limit', 'chapter-evidence-limit');
+
+    expect(snapshot.people[0]?.evidence).toEqual([
+      { quote: 'Q'.repeat(280), pageIndex: 0, pageNumber: 1 },
+    ]);
   });
 
   test('creates a fresh run when the previous idempotent run failed or went stale', () => {

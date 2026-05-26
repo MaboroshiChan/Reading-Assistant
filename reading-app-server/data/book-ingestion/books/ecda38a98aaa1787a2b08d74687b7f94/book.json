@@ -1,0 +1,13 @@
+{
+  "bookId": "book-1",
+  "bookMetadata": {
+    "title": "Persistent Book"
+  },
+  "snapshotVersion": 7,
+  "createdAt": "2026-05-01T09:40:49.387Z",
+  "updatedAt": "2026-05-12T08:08:40.902Z",
+  "chapterIds": [
+    "ch-1",
+    "chapter-1"
+  ]
+}

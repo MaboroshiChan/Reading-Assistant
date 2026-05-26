@@ -1,0 +1,27 @@
+{
+  "bookId": "92092CBA-B2BB-4C4B-BA2B-8092C7F1FD54",
+  "chapterId": "29",
+  "chapterIndex": 29,
+  "chapterTitle": "Chapter 30",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "aadf253ade0169e0fb5fe30dd7e0e74ae5a39c1ee3953e16d8e92f91a94c1015",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "* Madison almost certainly came from the 1984 movie Splash, starring Daryl Hannah as a mermaid who comes ashore in New York City and takes her name from the street sign for Madison Avenue. For humans, the name soon progressed from exceedingly rare to a perennial top five choice."
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\n* Madison almost certainly came from the 1984 movie Splash, starring Daryl Hannah as a mermaid who comes ashore in New York City and takes her name from the street sign for Madison Avenue. For humans, the name soon progressed from exceedingly rare to a perennial top five choice.",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "63fdae6a03362d56fa9612b830c909575b72b3f6cce0f3845af4320b7f1af98e"
+      },
+      "createdAt": "2026-05-08T06:23:20.014Z",
+      "updatedAt": "2026-05-08T06:23:20.014Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\n* Madison almost certainly came from the 1984 movie Splash, starring Daryl Hannah as a mermaid who comes ashore in New York City and takes her name from the street sign for Madison Avenue. For humans, the name soon progressed from exceedingly rare to a perennial top five choice.",
+  "chapterContentHash": "aadf253ade0169e0fb5fe30dd7e0e74ae5a39c1ee3953e16d8e92f91a94c1015",
+  "createdAt": "2026-05-08T06:23:20.014Z",
+  "updatedAt": "2026-05-08T06:23:20.014Z"
+}

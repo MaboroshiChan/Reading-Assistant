@@ -1,0 +1,31 @@
+{
+  "bookId": "92092CBA-B2BB-4C4B-BA2B-8092C7F1FD54",
+  "chapterId": "20",
+  "chapterIndex": 20,
+  "chapterTitle": "Credits",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "7b409f85e4a58d21a1ca54a97bc95199ddc2265306902e74c83738f11f710a0d",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "Credits",
+        "2": "Jacket design by Chika Azuma",
+        "3": "Jacket photograph collage by James Meyer/Getty Images; inside orange slice by Jan Cobb"
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\nCredits\n\nJacket design by Chika Azuma\n\nJacket photograph collage by James Meyer/Getty Images; inside orange slice by Jan Cobb",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "2a6b24ad287220345e96eb8021fe29d42b0785766c8df658827e7251da2d36dc",
+        "2": "21849a10aad4b6f513ee118e690ab70c4a0b68fdd16b8e0a6bd4fd4c17d5d58c",
+        "3": "32a97b736938a0dc1f0d8954ae02b5f75c70936f5cbf9765ecaa8c4593daf442"
+      },
+      "createdAt": "2026-05-08T06:23:19.839Z",
+      "updatedAt": "2026-05-08T06:23:19.839Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\nCredits\n\nJacket design by Chika Azuma\n\nJacket photograph collage by James Meyer/Getty Images; inside orange slice by Jan Cobb",
+  "chapterContentHash": "7b409f85e4a58d21a1ca54a97bc95199ddc2265306902e74c83738f11f710a0d",
+  "createdAt": "2026-05-08T06:23:19.839Z",
+  "updatedAt": "2026-05-08T06:23:19.839Z"
+}

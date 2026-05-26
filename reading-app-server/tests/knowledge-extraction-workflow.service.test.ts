@@ -286,6 +286,71 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
   });
 
+  test('builds pieces from consecutive pages in pairs', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-build-pieces',
+      chapterId: 'chapter-build-pieces',
+      chapterIndex: 1,
+      chapterTitle: 'Chunking',
+      pageIndex: 0,
+      sourceHash: 'hash-0',
+      pageParagraphs: { '0': 'Page zero.' },
+    });
+    bookRepository.upsertPageFragment({
+      bookId: 'book-build-pieces',
+      chapterId: 'chapter-build-pieces',
+      chapterIndex: 1,
+      chapterTitle: 'Chunking',
+      pageIndex: 1,
+      sourceHash: 'hash-1',
+      pageParagraphs: { '0': 'Page one.' },
+    });
+    bookRepository.upsertPageFragment({
+      bookId: 'book-build-pieces',
+      chapterId: 'chapter-build-pieces',
+      chapterIndex: 1,
+      chapterTitle: 'Chunking',
+      pageIndex: 3,
+      sourceHash: 'hash-3',
+      pageParagraphs: { '0': 'Page three.' },
+    });
+
+    const chapter = bookRepository.getChapter('book-build-pieces', 'chapter-build-pieces');
+    expect(chapter).toBeTruthy();
+
+    const pieces = (service as never).buildPieces(chapter);
+    expect(pieces).toHaveLength(2);
+    expect(pieces[0]).toMatchObject({
+      pageIndex: 0,
+      pageNumber: 1,
+      pieceIndex: 0,
+      totalPieces: 2,
+      pageRefs: [
+        { pageIndex: 0, pageNumber: 1 },
+        { pageIndex: 1, pageNumber: 2 },
+      ],
+    });
+    expect(pieces[0].rawText).toContain('Page zero.');
+    expect(pieces[0].rawText).toContain('Page one.');
+    expect(pieces[1]).toMatchObject({
+      pageIndex: 3,
+      pageNumber: 4,
+      pieceIndex: 1,
+      totalPieces: 2,
+      pageRefs: [{ pageIndex: 3, pageNumber: 4 }],
+    });
+  });
+
   test('returns queued progress for a newly submitted workflow before execution starts', async () => {
     process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
 
@@ -361,10 +426,10 @@ describe('KnowledgeExtractionWorkflowService', () => {
       chapterId: 'chapter-progress',
       chapterIndex: 1,
       chapterTitle: 'Progress Chapter',
-      pageIndex: 1,
-      sourceHash: 'hash-page-1',
+      pageIndex: 2,
+      sourceHash: 'hash-page-2',
       pageParagraphs: {
-        '0': 'Bob appears on the second page.',
+        '0': 'Bob appears on the third page.',
       },
     });
 
@@ -659,10 +724,10 @@ describe('KnowledgeExtractionWorkflowService', () => {
       chapterId: 'chapter-fail-1',
       chapterIndex: 1,
       chapterTitle: 'Failure Chapter',
-      pageIndex: 1,
-      sourceHash: 'hash-page-1',
+      pageIndex: 2,
+      sourceHash: 'hash-page-2',
       pageParagraphs: {
-        '0': 'The second page will fail.',
+        '0': 'The third page will fail.',
       },
     });
 
@@ -835,6 +900,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
         sourceHash: 'hash-1',
         pieceIndex: 1,
         totalPieces: 3,
+        pageRefs: [{ pageIndex: 1, pageNumber: 2 }],
       },
       bookContext: bookContextService.buildBookContextBundle('book-5', 'chapter-5'),
       chapterContext: bookContextService.buildChapterContextBundle('book-5', 'chapter-5'),
@@ -870,6 +936,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
         sourceHash: 'hash-1',
         pieceIndex: 1,
         totalPieces: 3,
+        pageRefs: [{ pageIndex: 1, pageNumber: 2 }],
       },
       bookContext: bookContextService.buildBookContextBundle('book-5', 'chapter-5'),
       chapterContext: bookContextService.buildChapterContextBundle('book-5', 'chapter-5'),
@@ -889,7 +956,8 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(prompts[0]).toContain('Current chapter context:');
     expect(prompts[0]).toContain('Page window:');
     expect(prompts[0]).toContain('Memory continuity:');
-    expect(prompts[0]).toContain('Use the primary evidence page as the only source of evidence quotes.');
+    expect(prompts[0]).toContain('Use the primary evidence pages as the only source of evidence quotes.');
+    expect(prompts[0]).toContain('Every evidence item must include quote, pageIndex, and pageNumber');
     expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
       prefixCache: expect.objectContaining({
         cacheKey: 'chapter_context.v1:book-5:chapter-5:chapter-hash-5',
@@ -976,6 +1044,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
         sourceHash: 'hash-1',
         pieceIndex: 0,
         totalPieces: 1,
+        pageRefs: [{ pageIndex: 1, pageNumber: 2 }],
       },
       bookContext: bookContextService.buildBookContextBundle('book-6', 'chapter-6'),
       chapterContext: bookContextService.buildChapterContextBundle('book-6', 'chapter-6'),
@@ -994,6 +1063,231 @@ describe('KnowledgeExtractionWorkflowService', () => {
     });
 
     expect(prompts).toHaveLength(1);
+  });
+
+  test('retries transient 503 errors for a piece and eventually succeeds', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-retry-503',
+      chapterId: 'chapter-retry-503',
+      chapterIndex: 7,
+      chapterTitle: 'Retry Chapter',
+      pageIndex: 1,
+      sourceHash: 'retry-hash-1',
+      pageParagraphs: { '0': 'Alice returns to the square.' },
+    });
+
+    const sleepSpy = vi.spyOn(service as never, 'sleep').mockResolvedValue(undefined);
+    let attempts = 0;
+    vi.spyOn(llmService, 'createLLMClient').mockReturnValue({
+      complete: vi.fn(),
+      json: vi.fn(async () => {
+        attempts += 1;
+        if (attempts < 3) {
+          throw new Error(JSON.stringify({
+            error: {
+              message: '{\n  "error": {\n    "code": 503,\n    "message": "The service is currently unavailable.",\n    "status": "UNAVAILABLE"\n  }\n}\n',
+              code: 503,
+              status: 'Service Unavailable',
+            },
+          }));
+        }
+        const json = JSON.stringify({
+          title: 'Retry Chapter',
+          summary: 'Alice returns.',
+          people: [
+            {
+              local_id: 'p1',
+              name: 'Alice',
+              evidence: [{ quote: 'Alice returns to the square.', pageIndex: 1, pageNumber: 2 }],
+            },
+          ],
+          ideas: [],
+          events: [],
+          entities: [],
+          themes: [],
+          relations: [],
+        });
+        return {
+          data: (async function* () {
+            yield json;
+          })(),
+          usage: Promise.resolve({}),
+        };
+      }),
+    } as never);
+
+    const result = await (service as never).generateKnowledgeExtractionForPiece({
+      bookId: 'book-retry-503',
+      chapterId: 'chapter-retry-503',
+      chapterIndex: 7,
+      chapterTitle: 'Retry Chapter',
+      chapterText: 'Alice returns to the square.',
+      chapterContentHash: 'retry-chapter-hash',
+      piece: {
+        pageIndex: 1,
+        pageNumber: 2,
+        rawText: 'Alice returns to the square.',
+        sourceHash: 'retry-hash-1',
+        pieceIndex: 0,
+        totalPieces: 1,
+        pageRefs: [{ pageIndex: 1, pageNumber: 2 }],
+      },
+      bookContext: bookContextService.buildBookContextBundle('book-retry-503', 'chapter-retry-503'),
+      chapterContext: bookContextService.buildChapterContextBundle('book-retry-503', 'chapter-retry-503'),
+      pageWindow: {
+        previous: undefined,
+        current: { pageIndex: 1, sourceHash: 'retry-hash-1', text: 'Alice returns to the square.' },
+        next: undefined,
+      },
+      memoryContext: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    });
+
+    expect(result.people[0]).toMatchObject({
+      name: 'Alice',
+      evidence: [{ quote: 'Alice returns to the square.', pageIndex: 1, pageNumber: 2 }],
+    });
+    expect(attempts).toBe(3);
+    expect(sleepSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not retry non-transient piece failures', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-no-retry',
+      chapterId: 'chapter-no-retry',
+      chapterIndex: 8,
+      chapterTitle: 'No Retry Chapter',
+      pageIndex: 0,
+      sourceHash: 'no-retry-hash',
+      pageParagraphs: { '0': 'This should fail once.' },
+    });
+
+    const sleepSpy = vi.spyOn(service as never, 'sleep').mockResolvedValue(undefined);
+    let attempts = 0;
+    vi.spyOn(llmService, 'createLLMClient').mockReturnValue({
+      complete: vi.fn(),
+      json: vi.fn(async () => {
+        attempts += 1;
+        throw new Error('Malformed request');
+      }),
+    } as never);
+
+    await expect((service as never).generateKnowledgeExtractionForPiece({
+      bookId: 'book-no-retry',
+      chapterId: 'chapter-no-retry',
+      chapterIndex: 8,
+      chapterTitle: 'No Retry Chapter',
+      chapterText: 'This should fail once.',
+      chapterContentHash: 'no-retry-chapter-hash',
+      piece: {
+        pageIndex: 0,
+        pageNumber: 1,
+        rawText: 'This should fail once.',
+        sourceHash: 'no-retry-hash',
+        pieceIndex: 0,
+        totalPieces: 1,
+        pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      },
+      bookContext: bookContextService.buildBookContextBundle('book-no-retry', 'chapter-no-retry'),
+      chapterContext: bookContextService.buildChapterContextBundle('book-no-retry', 'chapter-no-retry'),
+      pageWindow: {
+        previous: undefined,
+        current: { pageIndex: 0, sourceHash: 'no-retry-hash', text: 'This should fail once.' },
+        next: undefined,
+      },
+      memoryContext: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    })).rejects.toThrow('Malformed request');
+
+    expect(attempts).toBe(1);
+    expect(sleepSpy).not.toHaveBeenCalled();
+  });
+
+  test('restarts a knowledge extraction workflow after a transient llm failure', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-run-retry',
+      chapterId: 'chapter-run-retry',
+      chapterIndex: 9,
+      chapterTitle: 'Workflow Retry Chapter',
+      pageIndex: 0,
+      sourceHash: 'workflow-retry-hash',
+      pageParagraphs: { '0': 'Alice waits for the model service to recover.' },
+    });
+
+    const sleepSpy = vi.spyOn(service as never, 'sleep').mockResolvedValue(undefined);
+    let attempts = 0;
+    vi.spyOn(service as never, 'generateKnowledgeExtraction').mockImplementation(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error('503 Service Unavailable: This model is currently experiencing high demand. Please try again later.');
+      }
+      return {
+        title: 'Workflow Retry Chapter',
+        summary: 'Recovered after a transient retry.',
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      };
+    });
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-run-retry',
+      chapterId: 'chapter-run-retry',
+      chapterIndex: 9,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+    });
+
+    expect(attempts).toBe(2);
+    expect(sleepSpy).toHaveBeenCalledTimes(1);
   });
 
   test('omits progress when a running workflow becomes stale', async () => {
@@ -1052,6 +1346,45 @@ describe('KnowledgeExtractionWorkflowService', () => {
     });
 
     expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
+  });
+
+  test('keeps only evidence anchored to pages inside the chunk', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Chunked Chapter',
+      summary: 'summary',
+      people: [
+        {
+          local_id: 'p1',
+          name: 'Alice',
+          evidence: [
+            { quote: 'Alice on page one', pageIndex: 0, pageNumber: 1 },
+            { quote: 'Alice on page four', pageIndex: 3, pageNumber: 4 },
+          ],
+        },
+      ],
+    }, {
+      chapterId: 'chapter-1',
+      chapterTitle: 'Chunked Chapter',
+      chapterText: 'Page one text.\n\nPage two text.',
+      allowedPageRefs: [
+        { pageIndex: 0, pageNumber: 1 },
+        { pageIndex: 1, pageNumber: 2 },
+      ],
+    });
+
+    expect(result.people[0]?.evidence).toEqual([
+      { quote: 'Alice on page one', pageIndex: 0, pageNumber: 1 },
+    ]);
   });
 
   test('auto-submits quiz after knowledge extraction completes', async () => {

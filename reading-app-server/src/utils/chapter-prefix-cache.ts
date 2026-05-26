@@ -1,6 +1,7 @@
 import type { LLMPrefixCacheOptions } from '../../services/llmService';
 
 export const SHARED_CHAPTER_PREFIX_VERSION = 'chapter_context.v1';
+const GEMINI_CACHE_TTL_SECONDS = 3600;
 
 export type SharedChapterPrefixMetadata = {
   title?: string;
@@ -79,6 +80,7 @@ export const buildSharedChapterPrefixCache = (
     clean(input.chapterId) || 'chapter',
   ].join('-').slice(0, 128),
   prefix: buildSharedChapterPrefix(input),
+  ttlSeconds: GEMINI_CACHE_TTL_SECONDS,
   systemPromptMode: 'request',
 });
 
@@ -117,5 +119,6 @@ export const buildChunkPrefixCache = (input: {
     input.chunkText,
     '```',
   ].filter((line): line is string => line !== undefined).join('\n'),
+  ttlSeconds: GEMINI_CACHE_TTL_SECONDS,
   systemPromptMode: 'request',
 });

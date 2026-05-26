@@ -18,9 +18,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.KnowledgeExtractionWorkflowService = void 0;
 const common_1 = require("@nestjs/common");
 const core_1 = require("@nestjs/core");
+const node_crypto_1 = require("node:crypto");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const llmService_1 = require("../../../services/llmService");
 const runtime_config_1 = require("../../config/runtime-config");
+const llm_retry_1 = require("../../utils/llm-retry");
 const chapter_prefix_cache_1 = require("../../utils/chapter-prefix-cache");
 const prompt_path_1 = require("../../utils/prompt-path");
 const book_context_service_1 = require("../book-ingestion/book-context.service");
@@ -48,6 +50,13 @@ const RELATION_TYPES = new Set([
 const IDEA_KINDS = new Set(['claim', 'belief', 'question', 'principle', 'conflict']);
 const INITIAL_RUNNING_PROGRESS_PERCENT = 5;
 const FINALIZING_PROGRESS_PERCENT = 100;
+const MAX_CONSECUTIVE_PAGES_PER_PIECE = 2;
+const MAX_TRANSIENT_LLM_RETRIES = 2;
+const DEFAULT_TRANSIENT_LLM_RETRY_DELAY_MS = 2_000;
+const MAX_TRANSIENT_LLM_RETRY_DELAY_MS = 12_000;
+const MAX_WORKFLOW_LLM_RETRIES = 2;
+const DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS = 5_000;
+const MAX_WORKFLOW_LLM_RETRY_DELAY_MS = 30_000;
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 const asString = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
@@ -271,11 +280,6 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
     getLatestChapterKnowledgeExtraction(bookId, chapterId) {
         const result = this.knowledgeExtractionWorkflowRepository.getLatestResult(bookId, chapterId);
         if (!result) {
-            (0, workflow_logger_1.workflowLog)('latest_result.read_miss', {
-                workflowKind: 'knowledge_extraction',
-                bookId,
-                chapterId,
-            });
             throw new common_1.NotFoundException('No completed knowledge extraction workflow result found for chapter');
         }
         (0, workflow_logger_1.workflowLog)('latest_result.read_hit', {
@@ -332,15 +336,42 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             return;
         }
         try {
-            const result = await this.generateKnowledgeExtraction({
-                workflowRunId,
-                bookId: runningRun.bookId,
-                chapterId: runningRun.chapterId,
-                chapterIndex: runningRun.chapterIndex,
-                chapterTitle: chapter.chapterTitle,
-                chapterText: chapter.chapterTextMaterialized,
-                chapterContentHash: chapter.chapterContentHash,
-                pieces,
+            const result = await (0, llm_retry_1.retryLLMOperation)({
+                operation: () => this.generateKnowledgeExtraction({
+                    workflowRunId,
+                    bookId: runningRun.bookId,
+                    chapterId: runningRun.chapterId,
+                    chapterIndex: runningRun.chapterIndex,
+                    chapterTitle: chapter.chapterTitle,
+                    chapterText: chapter.chapterTextMaterialized,
+                    chapterContentHash: chapter.chapterContentHash,
+                    pieces,
+                }),
+                maxRetries: MAX_WORKFLOW_LLM_RETRIES,
+                defaultDelayMs: DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS,
+                maxDelayMs: MAX_WORKFLOW_LLM_RETRY_DELAY_MS,
+                onRetry: async ({ attempt, delayMs, error, classification }) => {
+                    this.publishWorkflowProgress(workflowRunId, {
+                        percent: INITIAL_RUNNING_PROGRESS_PERCENT,
+                        stage: 'await_llm_retry',
+                        message: '模型服务繁忙，正在自动重试',
+                    });
+                    (0, workflow_logger_1.workflowLog)('run.retry_scheduled', {
+                        workflowKind: runningRun.kind,
+                        workflowRunId: runningRun.id,
+                        bookId: runningRun.bookId,
+                        chapterId: runningRun.chapterId,
+                        chapterIndex: runningRun.chapterIndex,
+                        workflowVersion: runningRun.workflowVersion,
+                        retryAttempt: attempt,
+                        retryDelayMs: delayMs,
+                        llmProvider: classification.provider,
+                        llmReason: classification.reason,
+                        llmStatusCode: classification.statusCode,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                },
+                sleep: (ms) => this.sleep(ms),
             });
             const completedRun = this.knowledgeExtractionWorkflowRepository.completeRun({
                 workflowRunId,
@@ -445,7 +476,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         }
     }
     buildPieces(chapter) {
-        const pieces = Array.from(chapter.pages.entries())
+        const pages = Array.from(chapter.pages.entries())
             .sort(([leftIndex], [rightIndex]) => leftIndex - rightIndex)
             .map(([pageIndex, page]) => ({
             pageIndex,
@@ -454,6 +485,25 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             sourceHash: page.sourceHash,
         }))
             .filter((piece) => piece.rawText.trim().length > 0);
+        const pieces = [];
+        for (const page of pages) {
+            const previous = pieces[pieces.length - 1];
+            const canExtendPrevious = previous
+                && previous.pageRefs.length < MAX_CONSECUTIVE_PAGES_PER_PIECE
+                && previous.pageRefs[previous.pageRefs.length - 1]?.pageIndex === page.pageIndex - 1;
+            if (canExtendPrevious) {
+                previous.pageRefs.push(this.createPageRef(page.pageIndex, page.pageNumber));
+                previous.rawText = `${previous.rawText.trimEnd()}\n\n${page.rawText.trimStart()}`;
+                previous.sourceHash = this.combinePieceSourceHashes(previous.sourceHash, page.sourceHash);
+                continue;
+            }
+            pieces.push({
+                ...page,
+                pieceIndex: pieces.length,
+                totalPieces: 0,
+                pageRefs: [this.createPageRef(page.pageIndex, page.pageNumber)],
+            });
+        }
         return pieces.map((piece, index) => ({
             ...piece,
             pieceIndex: index,
@@ -560,6 +610,35 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             });
             return cached;
         }
+        return this.retryTransientPieceGeneration(input);
+    }
+    async retryTransientPieceGeneration(input) {
+        return (0, llm_retry_1.retryLLMOperation)({
+            operation: () => this.generateKnowledgeExtractionForPieceOnce(input),
+            maxRetries: MAX_TRANSIENT_LLM_RETRIES,
+            defaultDelayMs: DEFAULT_TRANSIENT_LLM_RETRY_DELAY_MS,
+            maxDelayMs: MAX_TRANSIENT_LLM_RETRY_DELAY_MS,
+            onRetry: ({ attempt, delayMs, error, classification }) => {
+                (0, workflow_logger_1.workflowLog)('piece.retry_scheduled', {
+                    workflowKind: 'knowledge_extraction',
+                    bookId: input.bookId,
+                    chapterId: input.chapterId,
+                    pageIndex: input.piece.pageIndex,
+                    pageNumber: input.piece.pageNumber,
+                    pieceIndex: input.piece.pieceIndex,
+                    totalPieces: input.piece.totalPieces,
+                    retryAttempt: attempt,
+                    retryDelayMs: delayMs,
+                    llmProvider: classification.provider,
+                    llmReason: classification.reason,
+                    llmStatusCode: classification.statusCode,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            },
+            sleep: (ms) => this.sleep(ms),
+        });
+    }
+    async generateKnowledgeExtractionForPieceOnce(input) {
         const [systemPrompt, userPrompt] = await Promise.all([
             this.loadPrompt(),
             Promise.resolve(this.buildPieceSuffixPrompt(input)),
@@ -593,25 +672,33 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 chapterId: input.chapterId,
                 chapterTitle: input.chapterTitle,
                 chapterText: input.piece.rawText,
-                pageRef: this.createPageRef(input.piece.pageIndex, input.piece.pageNumber),
+                allowedPageRefs: input.piece.pageRefs,
             });
         }
         catch {
             return this.createEmptyKnowledgeExtraction(input.chapterId, input.chapterTitle);
         }
     }
+    async sleep(ms) {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+    }
     buildPieceSuffixPrompt(input) {
         const sections = [
             `Document ID: ${input.bookId}`,
             `Chapter ID: ${input.chapterId}`,
             `Chapter Title: ${input.chapterTitle ?? ''}`,
-            `Chunk ID: page-${input.piece.pageIndex}`,
+            `Chunk ID: page-${input.piece.pageIndex}-${input.piece.pageRefs[input.piece.pageRefs.length - 1]?.pageIndex ?? input.piece.pageIndex}`,
             `Chunk Index: ${input.piece.pieceIndex + 1}`,
             `Total Chunks: ${input.piece.totalPieces}`,
-            `Page Index: ${input.piece.pageIndex}`,
-            `Page Number: ${input.piece.pageNumber}`,
+            `Primary Page Index: ${input.piece.pageIndex}`,
+            `Primary Page Number: ${input.piece.pageNumber}`,
             `Source Hash: ${input.piece.sourceHash}`,
             `Prompt Version: ${PROMPT_VERSION}`,
+            '',
+            'Chunk pages:',
+            '```json',
+            JSON.stringify(input.piece.pageRefs, null, 2),
+            '```',
             '',
             'Book context:',
             '```json',
@@ -633,17 +720,17 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             JSON.stringify(input.memoryContext, null, 2),
             '```',
             '',
-            'Primary evidence page:',
+            'Primary evidence pages:',
             '```text',
             input.piece.rawText,
             '```',
             '',
-            'Use the primary evidence page as the only source of evidence quotes.',
+            'Use the primary evidence pages as the only source of evidence quotes.',
             'Use the cached chapter prefix, book context, chapter context, page window, and memory continuity only for reference resolution and continuity.',
             'Do not cite or import evidence from previous pages, next pages, summaries, or memory continuity.',
             'Reuse an existing local_id from memory continuity only when the current page clearly refers to the same item.',
             'local_id values only need to be unique within this chapter workflow response state.',
-            `Every returned knowledge item must include evidence anchored to pageIndex=${input.piece.pageIndex} and pageNumber=${input.piece.pageNumber}.`,
+            `Every evidence item must include quote, pageIndex, and pageNumber, and pageIndex/pageNumber must match one of: ${input.piece.pageRefs.map((pageRef) => `${pageRef.pageIndex}/${pageRef.pageNumber}`).join(', ')}.`,
             'Respond with JSON only. Do not wrap the JSON in markdown fences.',
         ];
         return sections.join('\n');
@@ -671,12 +758,12 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         return {
             title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
             summary: asString(record.summary) ?? this.summarize(input.chapterText, 240),
-            people: this.sanitizePeople(record.people, input.pageRef) ?? [],
-            ideas: this.sanitizeIdeas(record.ideas, input.pageRef) ?? [],
-            events: this.sanitizeEvents(record.events, input.pageRef) ?? [],
-            entities: this.sanitizeEntities(record.entities, input.pageRef) ?? [],
-            themes: this.sanitizeThemes(record.themes, input.pageRef) ?? [],
-            relations: this.sanitizeRelations(record.relations, input.pageRef) ?? [],
+            people: this.sanitizePeople(record.people, input.allowedPageRefs) ?? [],
+            ideas: this.sanitizeIdeas(record.ideas, input.allowedPageRefs) ?? [],
+            events: this.sanitizeEvents(record.events, input.allowedPageRefs) ?? [],
+            entities: this.sanitizeEntities(record.entities, input.allowedPageRefs) ?? [],
+            themes: this.sanitizeThemes(record.themes, input.allowedPageRefs) ?? [],
+            relations: this.sanitizeRelations(record.relations, input.allowedPageRefs) ?? [],
         };
     }
     sanitizeStringArray(value) {
@@ -690,9 +777,11 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             return undefined;
         return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
     }
-    sanitizeEvidence(value, currentPageRef) {
+    sanitizeEvidence(value, allowedPageRefs) {
         if (!Array.isArray(value))
             return undefined;
+        const allowedPageMap = new Map(allowedPageRefs.map((pageRef) => [pageRef.pageIndex, pageRef.pageNumber]));
+        const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
         const evidence = value
             .map((item) => {
             if (!isPlainObject(item))
@@ -700,10 +789,16 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             const quote = asString(item.quote);
             if (!quote)
                 return null;
+            const pageIndex = asNumber(item.pageIndex) ?? singleAllowedPage?.pageIndex;
+            const pageNumber = asNumber(item.pageNumber) ?? singleAllowedPage?.pageNumber;
+            if (pageIndex === undefined || pageNumber === undefined)
+                return null;
+            if (allowedPageMap.get(pageIndex) !== pageNumber)
+                return null;
             return {
                 quote,
-                pageIndex: currentPageRef.pageIndex,
-                pageNumber: currentPageRef.pageNumber,
+                pageIndex,
+                pageNumber,
             };
         })
             .filter((item) => item !== null);
@@ -776,7 +871,11 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                     pageIndex: input.piece.pageIndex,
                     pageNumber: input.piece.pageNumber,
                     sourceHash: input.piece.sourceHash,
-                }],
+                }, ...input.piece.pageRefs.slice(1).map((pageRef) => ({
+                    pageIndex: pageRef.pageIndex,
+                    pageNumber: pageRef.pageNumber,
+                    sourceHash: input.piece.sourceHash,
+                }))],
         };
     }
     createFallbackChapterContext(input) {
@@ -784,11 +883,11 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             chapterId: input.chapterId,
             chapterIndex: input.chapterIndex,
             chapterTitle: input.chapterTitle,
-            pages: [{
-                    pageIndex: input.piece.pageIndex,
-                    pageNumber: input.piece.pageNumber,
-                    sourceHash: input.piece.sourceHash,
-                }],
+            pages: input.piece.pageRefs.map((pageRef) => ({
+                pageIndex: pageRef.pageIndex,
+                pageNumber: pageRef.pageNumber,
+                sourceHash: input.piece.sourceHash,
+            })),
         };
     }
     createFallbackPageWindow(piece) {
@@ -802,7 +901,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             },
         };
     }
-    sanitizePeople(value, currentPageRef) {
+    sanitizePeople(value, allowedPageRefs) {
         if (!Array.isArray(value))
             return undefined;
         const people = value
@@ -819,13 +918,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 description: asString(item.description),
                 roles: this.sanitizeStringArray(item.roles),
                 traits: this.sanitizeStringArray(item.traits),
-                evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
             };
         })
             .filter((item) => item !== null);
         return people.length ? people : undefined;
     }
-    sanitizeIdeas(value, currentPageRef) {
+    sanitizeIdeas(value, allowedPageRefs) {
         if (!Array.isArray(value))
             return undefined;
         const ideas = value
@@ -842,7 +941,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 label,
                 description: asString(item.description),
                 kind: normalizedKind,
-                evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
             };
             if (!this.shouldKeepIdea(idea))
                 return null;
@@ -874,7 +973,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         }
         return true;
     }
-    sanitizeEvents(value, currentPageRef) {
+    sanitizeEvents(value, allowedPageRefs) {
         if (!Array.isArray(value))
             return undefined;
         const events = value
@@ -891,13 +990,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 participant_local_ids: this.sanitizeStringArray(item.participant_local_ids),
                 time_hint: asString(item.time_hint),
                 place_hint: asString(item.place_hint),
-                evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
             };
         })
             .filter((item) => item !== null);
         return events.length ? events : undefined;
     }
-    sanitizeEntities(value, currentPageRef) {
+    sanitizeEntities(value, allowedPageRefs) {
         if (!Array.isArray(value))
             return undefined;
         const entities = value
@@ -913,13 +1012,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 label,
                 type: type,
                 description: asString(item.description),
-                evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
             };
         })
             .filter((item) => item !== null);
         return entities.length ? entities : undefined;
     }
-    sanitizeThemes(value, currentPageRef) {
+    sanitizeThemes(value, allowedPageRefs) {
         if (!Array.isArray(value))
             return undefined;
         const themes = value
@@ -935,13 +1034,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 label,
                 strength: typeof strength === 'number' ? Math.max(0, Math.min(1, strength)) : undefined,
                 description: asString(item.description),
-                evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
             };
         })
             .filter((item) => item !== null);
         return themes.length ? themes : undefined;
     }
-    sanitizeRelations(value, currentPageRef) {
+    sanitizeRelations(value, allowedPageRefs) {
         if (!Array.isArray(value))
             return undefined;
         const relations = value
@@ -973,7 +1072,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                     : 'related_to',
                 description: asString(item.description),
                 confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
-                evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
             };
         })
             .filter((item) => item !== null);
@@ -981,6 +1080,9 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
     }
     createPageRef(pageIndex, pageNumber) {
         return { pageIndex, pageNumber };
+    }
+    combinePieceSourceHashes(left, right) {
+        return (0, node_crypto_1.createHash)('sha256').update(`${left}\n${right}`).digest('hex');
     }
     summarize(text, maxLength) {
         const trimmed = text.trim().replace(/\s+/g, ' ');

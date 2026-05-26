@@ -498,4 +498,85 @@ describe('QuizWorkflowService', () => {
       'fill_in_blank',
     ]);
   });
+
+  test('retries quiz workflow generation after a transient llm failure', async () => {
+    const bookRepository = await createBookRepository();
+    const knowledgeRepository = new KnowledgeExtractionWorkflowRepository();
+    const quizRepository = new QuizWorkflowRepository();
+    const service = new QuizWorkflowService(
+      bookRepository,
+      new BookContextService(bookRepository, knowledgeRepository),
+      knowledgeRepository,
+      quizRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-quiz-retry',
+      chapterId: 'chapter-quiz-retry',
+      chapterIndex: 1,
+      chapterTitle: 'Retry Quiz Chapter',
+      pageIndex: 0,
+      sourceHash: 'quiz-retry-hash',
+      pageParagraphs: { '0': 'Alice speaks again.' },
+    });
+
+    const book = bookRepository.getBook('book-quiz-retry');
+    const chapter = bookRepository.getChapter('book-quiz-retry', 'chapter-quiz-retry');
+    if (!book || !chapter) {
+      throw new Error('expected canonical quiz retry chapter state');
+    }
+
+    const knowledgeRun = knowledgeRepository.createOrReuseRun({
+      bookId: 'book-quiz-retry',
+      chapterId: 'chapter-quiz-retry',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge:quiz-retry',
+      expectedSnapshotVersion: book.snapshotVersion,
+      expectedChapterContentHash: chapter.chapterContentHash,
+    });
+    knowledgeRepository.completeRun({
+      workflowRunId: knowledgeRun.run.id,
+      snapshotVersion: book.snapshotVersion,
+      chapterContentHash: chapter.chapterContentHash,
+      result: createKnowledgeResult(),
+    });
+
+    const sleepSpy = vi.spyOn(service as never, 'sleep').mockResolvedValue(undefined);
+    let attempts = 0;
+    vi.spyOn(service as never, 'generateQuiz').mockImplementation(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error('429 Too Many Requests: quota exceeded, retry in 1s');
+      }
+      return {
+        questions: [
+          {
+            id: 'q-retry',
+            type: 'multiple_choice',
+            question: 'What does Alice support?',
+            options: ['Freedom', 'Silence', 'Confusion', 'Distance'],
+            correctAnswerIndex: 0,
+            explanation: 'The extraction summary centers on freedom.',
+            skill: 'Facts',
+          },
+        ],
+      };
+    });
+
+    const submit = service.submitQuizWorkflow({
+      bookId: 'book-quiz-retry',
+      chapterId: 'chapter-quiz-retry',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+    });
+
+    expect(attempts).toBe(2);
+    expect(sleepSpy).toHaveBeenCalledTimes(1);
+  });
 });

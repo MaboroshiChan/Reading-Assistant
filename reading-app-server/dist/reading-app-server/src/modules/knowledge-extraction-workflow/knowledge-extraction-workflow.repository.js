@@ -22,8 +22,43 @@ const normalizeText = (value) => value.trim().replace(/\s+/g, ' ').toLowerCase()
 const encodeSegment = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('hex').slice(0, 32);
 const hashText = (value) => (0, node_crypto_1.createHash)('sha256').update(value).digest('hex');
 const randomRecordId = (prefix) => `${prefix}_${(0, node_crypto_1.randomUUID)().replace(/-/g, '')}`;
+const normalizeWorkflowRunId = (value) => value.startsWith('workflow_run:') ? value.slice('workflow_run:'.length) : value;
 const stableLocalId = (prefix, seed) => `${prefix}_${encodeSegment(seed)}`;
 const clampProgressPercent = (value) => Math.min(100, Math.max(0, Math.round(value)));
+const SURREAL_RECORD_SOFT_LIMIT_BYTES = 900_000;
+const PERSISTED_RESULT_TITLE_LIMIT_BYTES = 2_000;
+const PERSISTED_RESULT_SUMMARY_LIMIT_BYTES = 16_000;
+const EVIDENCE_QUOTE_PREFIX_LIMIT_CHARS = 280;
+const TRUNCATION_SUFFIX = '... [truncated]';
+const jsonByteSize = (value) => Buffer.byteLength(JSON.stringify(value), 'utf8');
+const truncateUtf8 = (value, maxBytes) => {
+    if (maxBytes <= 0)
+        return '';
+    if (Buffer.byteLength(value, 'utf8') <= maxBytes)
+        return value;
+    const suffix = Buffer.byteLength(TRUNCATION_SUFFIX, 'utf8') < maxBytes
+        ? TRUNCATION_SUFFIX
+        : '';
+    const budget = maxBytes - Buffer.byteLength(suffix, 'utf8');
+    if (budget <= 0)
+        return suffix;
+    let low = 0;
+    let high = value.length;
+    let best = '';
+    while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const candidate = value.slice(0, mid);
+        if (Buffer.byteLength(candidate, 'utf8') <= budget) {
+            best = candidate;
+            low = mid + 1;
+        }
+        else {
+            high = mid - 1;
+        }
+    }
+    return `${best}${suffix}`;
+};
+const truncatePrefix = (value, maxChars) => value.length <= maxChars ? value : value.slice(0, maxChars);
 let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRepository {
     surrealService;
     runs = new Map();
@@ -123,7 +158,7 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         return { run, deduped: false };
     }
     getRun(workflowRunId) {
-        return this.runs.get(workflowRunId) ?? null;
+        return this.runs.get(normalizeWorkflowRunId(workflowRunId)) ?? null;
     }
     listRecoverableRuns() {
         return Array.from(this.runs.values())
@@ -465,8 +500,8 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     }
     createSlimResult(result) {
         return {
-            title: result.title,
-            summary: result.summary,
+            title: truncateUtf8(result.title, PERSISTED_RESULT_TITLE_LIMIT_BYTES),
+            summary: truncateUtf8(result.summary, PERSISTED_RESULT_SUMMARY_LIMIT_BYTES),
             people: [],
             ideas: [],
             events: [],
@@ -736,12 +771,14 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 rebuiltResult.summary = persistedResult.summary;
             const hydratedSnapshot = {
                 ...snapshot,
+                workflowRunId: normalizeWorkflowRunId(snapshot.workflowRunId),
                 result: rebuiltResult,
             };
             rebuiltSnapshots.set(chapterKey(snapshot.bookId, snapshot.chapterId), hydratedSnapshot);
             this.latestResultsByChapter.set(chapterKey(snapshot.bookId, snapshot.chapterId), hydratedSnapshot);
         }
         for (const run of workflowRuns) {
+            const normalizedRunId = normalizeWorkflowRunId(run.id);
             const rebuiltSnapshot = rebuiltSnapshots.get(chapterKey(run.bookId, run.chapterId));
             const hydratedRun = (run.status === 'completed'
                 && rebuiltSnapshot
@@ -749,9 +786,13 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
                 && run.chapterContentHash === rebuiltSnapshot.chapterContentHash)
                 ? {
                     ...run,
+                    id: normalizedRunId,
                     output: rebuiltSnapshot.result,
                 }
-                : run;
+                : {
+                    ...run,
+                    id: normalizedRunId,
+                };
             this.runs.set(hydratedRun.id, hydratedRun);
             this.runIdsByIdempotencyKey.set(hydratedRun.idempotencyKey, hydratedRun.id);
         }
@@ -1657,10 +1698,13 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
         if (!quote)
             return null;
         return {
-            quote,
+            quote: truncatePrefix(quote, EVIDENCE_QUOTE_PREFIX_LIMIT_CHARS),
             pageIndex: value.pageIndex,
             pageNumber: value.pageNumber,
         };
+    }
+    isOversizedForSurreal(record) {
+        return jsonByteSize(record) > SURREAL_RECORD_SOFT_LIMIT_BYTES;
     }
     mergeStringArrays(existing, incoming) {
         const values = [...(existing ?? []), ...(incoming ?? [])];
@@ -1867,6 +1911,10 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
             || table === 'entity'
             || table === 'event') {
             await this.surrealService.putRecord(table, id, this.withoutEvidence(record));
+            return;
+        }
+        if (table === 'page_knowledge_extraction_cache' && this.isOversizedForSurreal(record)) {
+            console.warn(`[knowledge-extraction] skipping Surreal persist for oversized ${table}:${id} (${jsonByteSize(record)} bytes)`);
             return;
         }
         await this.surrealService.putRecord(table, id, record);

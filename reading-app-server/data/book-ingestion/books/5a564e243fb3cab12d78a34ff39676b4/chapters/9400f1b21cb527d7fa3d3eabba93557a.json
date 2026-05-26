@@ -1,0 +1,35 @@
+{
+  "bookId": "92092CBA-B2BB-4C4B-BA2B-8092C7F1FD54",
+  "chapterId": "19",
+  "chapterIndex": 19,
+  "chapterTitle": "About the Authors",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "762a3689ee00b709fc717a41e842bcd1544ac9e76a5952b64c77a01847475523",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "About the Authors",
+        "2": "S TEVEN D. L EVITT teaches economics at the University of Chicago; he recently received the John Bates Clark Medal, awarded every two years to the best American economist under forty.",
+        "3": "S TEPHEN J. D UBNER lives in New York City; he writes for the New York Times and The New Yorker and is the national bestselling author of Turbulent Souls and Confessions of a Hero-Worshiper .",
+        "4": "www.freakonomics.com",
+        "5": "Visit www.AuthorTracker.com for exclusive information on your favorite HarperCollins author."
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\nAbout the Authors\n\nS TEVEN D. L EVITT teaches economics at the University of Chicago; he recently received the John Bates Clark Medal, awarded every two years to the best American economist under forty.\n\nS TEPHEN J. D UBNER lives in New York City; he writes for the New York Times and The New Yorker and is the national bestselling author of Turbulent Souls and Confessions of a Hero-Worshiper .\n\nwww.freakonomics.com\n\nVisit www.AuthorTracker.com for exclusive information on your favorite HarperCollins author.",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "8657aaa1c17db726c15f3992099d4678046abb257180799f5b6a252dbd5186fd",
+        "2": "4e303810c839e4d7d188e568dfcdc8392dad9448ac96bde888c988439e1b361e",
+        "3": "53b919ff8c68427692a8ff1908f1b6db26a4bde5f3573fa6410a3aed37d8c350",
+        "4": "149dc75b345ff3bd1e6f96b16db8a50ceb7a9ebc9c4db7d4bab371e26a4d130c",
+        "5": "baeb6f4c6462fece02508101ace7f60316c5767a7cf58d2ef42bc4d686cf5f81"
+      },
+      "createdAt": "2026-05-08T06:23:19.819Z",
+      "updatedAt": "2026-05-08T06:23:19.819Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\nAbout the Authors\n\nS TEVEN D. L EVITT teaches economics at the University of Chicago; he recently received the John Bates Clark Medal, awarded every two years to the best American economist under forty.\n\nS TEPHEN J. D UBNER lives in New York City; he writes for the New York Times and The New Yorker and is the national bestselling author of Turbulent Souls and Confessions of a Hero-Worshiper .\n\nwww.freakonomics.com\n\nVisit www.AuthorTracker.com for exclusive information on your favorite HarperCollins author.",
+  "chapterContentHash": "762a3689ee00b709fc717a41e842bcd1544ac9e76a5952b64c77a01847475523",
+  "createdAt": "2026-05-08T06:23:19.819Z",
+  "updatedAt": "2026-05-08T06:23:19.819Z"
+}

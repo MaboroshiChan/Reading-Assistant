@@ -10,6 +10,9 @@ const node_path_1 = __importDefault(require("node:path"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const config_1 = require("@nestjs/config");
 const loadEnvFiles = () => {
+    if (process.env.RAILWAY_ENVIRONMENT_ID) {
+        return;
+    }
     const envPaths = [
         process.env.NODE_ENV === 'test'
             ? node_path_1.default.resolve(process.cwd(), 'reading-app-server/.env.test')
@@ -26,7 +29,7 @@ const loadEnvFiles = () => {
 loadEnvFiles();
 const createAppConfig = () => ({
     port: Number(process.env.PORT ?? 8787),
-    model: process.env.MODEL_ID ?? 'gemini-2.5-flash',
+    model: process.env.MODEL_ID ?? 'gemini-flash-lite-latest',
     timeoutMs: 50_000,
     cacheMax: 500,
     cacheTtlMs: 7 * 24 * 3600_000,

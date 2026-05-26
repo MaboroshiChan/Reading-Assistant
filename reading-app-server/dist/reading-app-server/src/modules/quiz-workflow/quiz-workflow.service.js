@@ -26,9 +26,13 @@ const prompt_path_1 = require("../../utils/prompt-path");
 const quiz_workflow_repository_1 = require("./quiz-workflow.repository");
 const llmService_1 = require("../../../services/llmService");
 const chapter_prefix_cache_1 = require("../../utils/chapter-prefix-cache");
+const llm_retry_1 = require("../../utils/llm-retry");
 const workflow_queue_service_1 = require("../workflow-queue/workflow-queue.service");
 const PROMPT_VERSION = 'quiz.v3.1';
 const PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('quiz.txt');
+const MAX_WORKFLOW_LLM_RETRIES = 2;
+const DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS = 5_000;
+const MAX_WORKFLOW_LLM_RETRY_DELAY_MS = 30_000;
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 const asString = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
@@ -202,11 +206,6 @@ let QuizWorkflowService = class QuizWorkflowService {
     getLatestChapterQuiz(bookId, chapterId) {
         const result = this.quizWorkflowRepository.getLatestResult(bookId, chapterId);
         if (!result) {
-            (0, workflow_logger_1.workflowLog)('latest_result.read_miss', {
-                workflowKind: 'quiz_generation',
-                bookId,
-                chapterId,
-            });
             throw new common_1.NotFoundException('No completed quiz workflow result found for chapter');
         }
         (0, workflow_logger_1.workflowLog)('latest_result.read_hit', {
@@ -263,14 +262,36 @@ let QuizWorkflowService = class QuizWorkflowService {
             return;
         }
         try {
-            const result = await this.generateQuiz({
-                bookId: runningRun.bookId,
-                chapterId: runningRun.chapterId,
-                chapterTitle: chapter.chapterTitle,
-                chapterText: chapter.chapterTextMaterialized,
-                chapterContentHash: chapter.chapterContentHash,
-                chapterSummary: matchingKnowledgeExtraction.result.summary,
-                knowledge: matchingKnowledgeExtraction.result,
+            const result = await (0, llm_retry_1.retryLLMOperation)({
+                operation: () => this.generateQuiz({
+                    bookId: runningRun.bookId,
+                    chapterId: runningRun.chapterId,
+                    chapterTitle: chapter.chapterTitle,
+                    chapterText: chapter.chapterTextMaterialized,
+                    chapterContentHash: chapter.chapterContentHash,
+                    chapterSummary: matchingKnowledgeExtraction.result.summary,
+                    knowledge: matchingKnowledgeExtraction.result,
+                }),
+                maxRetries: MAX_WORKFLOW_LLM_RETRIES,
+                defaultDelayMs: DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS,
+                maxDelayMs: MAX_WORKFLOW_LLM_RETRY_DELAY_MS,
+                onRetry: ({ attempt, delayMs, error, classification }) => {
+                    (0, workflow_logger_1.workflowLog)('run.retry_scheduled', {
+                        workflowKind: runningRun.kind,
+                        workflowRunId: runningRun.id,
+                        bookId: runningRun.bookId,
+                        chapterId: runningRun.chapterId,
+                        chapterIndex: runningRun.chapterIndex,
+                        workflowVersion: runningRun.workflowVersion,
+                        retryAttempt: attempt,
+                        retryDelayMs: delayMs,
+                        llmProvider: classification.provider,
+                        llmReason: classification.reason,
+                        llmStatusCode: classification.statusCode,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                },
+                sleep: (ms) => this.sleep(ms),
             });
             this.quizWorkflowRepository.completeRun({
                 workflowRunId,
@@ -389,6 +410,9 @@ let QuizWorkflowService = class QuizWorkflowService {
         ];
         return sections.join('\n');
     }
+    async sleep(ms) {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+    }
     async loadPrompt() {
         if (cachedQuizSystemPrompt)
             return cachedQuizSystemPrompt;
@@ -427,6 +451,7 @@ let QuizWorkflowService = class QuizWorkflowService {
             sourceUnitType: sourceUnit?.type,
             sourcePageRefs: sourceUnit?.sourcePageRefs,
             sourceEvidence: sourceUnit?.sourceEvidence,
+            sourceInsight: sourceUnit ? this.toSourceInsight(sourceUnit) : undefined,
         };
         if (type === 'multiple_choice') {
             const options = Array.isArray(value.options)
@@ -569,19 +594,46 @@ let QuizWorkflowService = class QuizWorkflowService {
             if (unit)
                 units.push(unit);
         }
-        return units.sort((left, right) => {
-            const priorityDelta = this.unitPriority(left.type) - this.unitPriority(right.type);
-            if (priorityDelta !== 0)
-                return priorityDelta;
-            const pageDelta = left.anchorPageIndex - right.anchorPageIndex;
-            if (pageDelta !== 0)
-                return pageDelta;
-            return left.unitId.localeCompare(right.unitId);
-        });
+        return units.sort((left, right) => this.compareKnowledgeUnits(left, right));
     }
     selectKnowledgeUnits(units) {
         const targetCount = units.length < 3 ? units.length : Math.min(5, units.length);
-        return units.slice(0, targetCount);
+        if (units.length <= targetCount)
+            return units;
+        const selected = new Map();
+        const unitsByQuestionType = new Map();
+        for (const unit of units) {
+            const questionType = this.selectQuestionType(unit);
+            const existing = unitsByQuestionType.get(questionType);
+            if (existing) {
+                existing.push(unit);
+            }
+            else {
+                unitsByQuestionType.set(questionType, [unit]);
+            }
+        }
+        const typeSelectionOrder = [
+            'multiple_choice',
+            'true_false_not_given',
+            'fill_in_blank',
+            'short_answer',
+        ];
+        for (const questionType of typeSelectionOrder) {
+            if (selected.size >= targetCount)
+                break;
+            const candidate = unitsByQuestionType.get(questionType)?.[0];
+            if (candidate) {
+                selected.set(candidate.unitId, candidate);
+            }
+        }
+        for (const unit of units) {
+            if (selected.size >= targetCount)
+                break;
+            if (!selected.has(unit.unitId)) {
+                selected.set(unit.unitId, unit);
+            }
+        }
+        return Array.from(selected.values()).sort((left, right) => this.compareKnowledgeUnits(left, right));
     }
     planQuestionUnits(units) {
         return units.map((unit) => ({
@@ -674,6 +726,21 @@ let QuizWorkflowService = class QuizWorkflowService {
         }
         return Array.from(unique.values()).sort((left, right) => left.pageIndex - right.pageIndex);
     }
+    toSourceInsight(unit) {
+        return {
+            unitId: unit.unitId,
+            unitType: unit.type,
+            label: unit.label,
+            description: unit.description,
+            skill: unit.skill,
+            aliases: unit.aliases,
+            relationHints: unit.relationHints,
+            anchorPageIndex: unit.anchorPageIndex,
+            anchorPageNumber: unit.anchorPageNumber,
+            sourcePageRefs: unit.sourcePageRefs,
+            sourceEvidence: unit.sourceEvidence,
+        };
+    }
     addRelationHint(target, nodeId, hint) {
         const existing = target.get(nodeId);
         if (existing) {
@@ -696,6 +763,15 @@ let QuizWorkflowService = class QuizWorkflowService {
             case 'entity':
                 return 4;
         }
+    }
+    compareKnowledgeUnits(left, right) {
+        const priorityDelta = this.unitPriority(left.type) - this.unitPriority(right.type);
+        if (priorityDelta !== 0)
+            return priorityDelta;
+        const pageDelta = left.anchorPageIndex - right.anchorPageIndex;
+        if (pageDelta !== 0)
+            return pageDelta;
+        return left.unitId.localeCompare(right.unitId);
     }
     findMatchingKnowledgeExtractionResult(bookId, chapterId, snapshotVersion, chapterContentHash) {
         const latestResult = this.knowledgeExtractionWorkflowRepository.getLatestResult(bookId, chapterId);

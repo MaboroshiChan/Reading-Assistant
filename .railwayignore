@@ -1,0 +1,12 @@
+.git
+node_modules
+reading-app/node_modules
+reading-app-server/node_modules
+reading-app/dist
+reading-app-server/dist
+reading-app-server/data
+reading-app-server/log
+reading-app/.env
+reading-app-server/.env
+reading-app-server/.env.test
+resource/LLM_response

@@ -1,0 +1,33 @@
+{
+  "bookId": "7F06D639-5F68-4EAC-9719-509F4ADA1B83",
+  "chapterId": "12",
+  "chapterIndex": 12,
+  "chapterTitle": "Bonus Material Added to the Revised and Expanded 2006 Edition",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "3cc3d3fe71dc2bcbde4df60a67fa88ec125be824e7ebbb2b09b3bdb103145d6c",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "BONUS MATERIAL ADDED TO THE REVISED AND EXPANDED 2006 EDITION",
+        "2": "• The original New York Times Magazine article about Steven D. Levitt by Stephen J. Dubner, which led to the creation of this book.",
+        "3": "• Seven “Freakonomics” columns written for the New York Times Magazine, published between August 2005 and April 2006.",
+        "4": "• Selected entries from the Freakonomics blog, posted between April 2005 and May 2006 at http://www.freakonomics.com/blog/."
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\nBONUS MATERIAL ADDED TO THE REVISED AND EXPANDED 2006 EDITION\n\n• The original New York Times Magazine article about Steven D. Levitt by Stephen J. Dubner, which led to the creation of this book.\n\n• Seven “Freakonomics” columns written for the New York Times Magazine, published between August 2005 and April 2006.\n\n• Selected entries from the Freakonomics blog, posted between April 2005 and May 2006 at http://www.freakonomics.com/blog/.",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "44a26c0bde036f5fd9cb2bcd511adf364ae662e964519247eb670f15d1bce9f3",
+        "2": "af66753f2af18c2a3da24ad861e77161c424f2073f50442f35a127fd5249551f",
+        "3": "e3aa9663da40fb1ca661703ea1e7c9f536a0151d981fdb4d390732c765bd40c8",
+        "4": "7af12aeab2dd5d018af4e417667e9cd19deccffb45c9d95a9d9abd9e2372625f"
+      },
+      "createdAt": "2026-05-01T09:33:45.894Z",
+      "updatedAt": "2026-05-01T09:33:45.894Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\nBONUS MATERIAL ADDED TO THE REVISED AND EXPANDED 2006 EDITION\n\n• The original New York Times Magazine article about Steven D. Levitt by Stephen J. Dubner, which led to the creation of this book.\n\n• Seven “Freakonomics” columns written for the New York Times Magazine, published between August 2005 and April 2006.\n\n• Selected entries from the Freakonomics blog, posted between April 2005 and May 2006 at http://www.freakonomics.com/blog/.",
+  "chapterContentHash": "3cc3d3fe71dc2bcbde4df60a67fa88ec125be824e7ebbb2b09b3bdb103145d6c",
+  "createdAt": "2026-05-01T09:33:45.894Z",
+  "updatedAt": "2026-05-01T09:33:45.894Z"
+}

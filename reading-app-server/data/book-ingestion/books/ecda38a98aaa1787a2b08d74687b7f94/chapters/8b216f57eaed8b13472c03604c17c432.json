@@ -1,0 +1,42 @@
+{
+  "bookId": "book-1",
+  "chapterId": "ch-1",
+  "chapterIndex": 3,
+  "chapterTitle": "Chapter Three",
+  "pages": {
+    "2": {
+      "pageIndex": 2,
+      "sourceHash": "hash-page-2-v1",
+      "pageParagraphs": {
+        "2": "second paragraph",
+        "10": "tenth paragraph",
+        "appendix": "appendix paragraph"
+      },
+      "pageTextMaterialized": "second paragraph\n\ntenth paragraph\n\nappendix paragraph",
+      "paragraphHashes": {
+        "2": "e75eaf9cf64ab9a68fd6afe05c7d50f3f65d3706da5f0bf8a02461c44bfdd64a",
+        "10": "1f3043f35a0b170d121808d20881d5088e18a67f95d8866be873051a857e58fc",
+        "appendix": "952f56bd160df7e77ddc292e63a03201a88316ebdcd61422b6ed3d8b1dbf35e9"
+      },
+      "createdAt": "2026-05-01T09:40:49.387Z",
+      "updatedAt": "2026-05-09T12:37:52.304Z"
+    },
+    "4": {
+      "pageIndex": 4,
+      "sourceHash": "hash-page-4-v1",
+      "pageParagraphs": {
+        "1": "later page paragraph"
+      },
+      "pageTextMaterialized": "later page paragraph",
+      "paragraphHashes": {
+        "1": "c2030669d3cdbe400d7ce64505c0b2f86edd498dd850e31c512a9d7e902ff9ad"
+      },
+      "createdAt": "2026-05-01T09:40:49.406Z",
+      "updatedAt": "2026-05-01T09:40:49.406Z"
+    }
+  },
+  "chapterTextMaterialized": "second paragraph\n\ntenth paragraph\n\nappendix paragraph\n\nlater page paragraph",
+  "chapterContentHash": "134178651576ff19b9345f06c1486653d92a3241e49d2c92e6158cb0404d50db",
+  "createdAt": "2026-05-01T09:40:49.387Z",
+  "updatedAt": "2026-05-09T12:37:52.304Z"
+}

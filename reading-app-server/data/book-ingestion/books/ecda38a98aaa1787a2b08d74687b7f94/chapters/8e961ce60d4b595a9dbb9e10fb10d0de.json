@@ -1,0 +1,57 @@
+{
+  "bookId": "book-1",
+  "chapterId": "chapter-1",
+  "chapterIndex": 1,
+  "chapterTitle": "Persisted Chapter",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "hash-1",
+      "pageParagraphs": {
+        "0": "paragraph one",
+        "1": "paragraph two"
+      },
+      "pageTextMaterialized": "paragraph one\n\nparagraph two",
+      "paragraphHashes": {
+        "0": "afef4525660fccb0ad82af74d02231089529af979cd0b6e979681f5624510f9c",
+        "1": "19a24fded3a242021fd2a98b528fa143d7c20234bad8b19a084c296a064d9a01"
+      },
+      "createdAt": "2026-05-02T11:44:10.743Z",
+      "updatedAt": "2026-05-02T11:44:10.743Z"
+    },
+    "1": {
+      "pageIndex": 1,
+      "sourceHash": "hash-1",
+      "pageParagraphs": {
+        "0": "paragraph one",
+        "1": "paragraph two"
+      },
+      "pageTextMaterialized": "paragraph one\n\nparagraph two",
+      "paragraphHashes": {
+        "0": "afef4525660fccb0ad82af74d02231089529af979cd0b6e979681f5624510f9c",
+        "1": "19a24fded3a242021fd2a98b528fa143d7c20234bad8b19a084c296a064d9a01"
+      },
+      "createdAt": "2026-05-09T12:37:51.610Z",
+      "updatedAt": "2026-05-09T12:37:51.610Z"
+    },
+    "2": {
+      "pageIndex": 2,
+      "sourceHash": "hash-page-2-v1",
+      "pageParagraphs": {
+        "0": "persisted paragraph one",
+        "1": "persisted paragraph two"
+      },
+      "pageTextMaterialized": "persisted paragraph one\n\npersisted paragraph two",
+      "paragraphHashes": {
+        "0": "a051f6699710628d21113891e44bb5494abdea57665056161ff349ce59baff25",
+        "1": "4e185d07c8dd3558687cda11df4fe46321ce4083239a6ad3c02863c95ffbef14"
+      },
+      "createdAt": "2026-05-12T08:08:40.902Z",
+      "updatedAt": "2026-05-12T08:08:40.902Z"
+    }
+  },
+  "chapterTextMaterialized": "paragraph one\n\nparagraph two\n\nparagraph one\n\nparagraph two\n\npersisted paragraph one\n\npersisted paragraph two",
+  "chapterContentHash": "6a728393e97c5bbf1977408e7c9bf7965cfe39493fcf50ce0196737896cb11b1",
+  "createdAt": "2026-05-02T11:44:10.743Z",
+  "updatedAt": "2026-05-12T08:08:40.902Z"
+}

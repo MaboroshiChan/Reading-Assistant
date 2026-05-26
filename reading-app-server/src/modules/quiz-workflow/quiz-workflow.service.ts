@@ -39,10 +39,14 @@ import type {
 } from './quiz-workflow.types';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
 import { buildSharedChapterPrefixCache } from '../../utils/chapter-prefix-cache';
+import { retryLLMOperation } from '../../utils/llm-retry';
 import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
 const PROMPT_VERSION = 'quiz.v3.1';
 const PROMPT_PATH = resolvePromptPath('quiz.txt');
+const MAX_WORKFLOW_LLM_RETRIES = 2;
+const DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS = 5_000;
+const MAX_WORKFLOW_LLM_RETRY_DELAY_MS = 30_000;
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
@@ -294,11 +298,6 @@ export class QuizWorkflowService {
   getLatestChapterQuiz(bookId: string, chapterId: string): GetLatestChapterQuizResponseDto {
     const result = this.quizWorkflowRepository.getLatestResult(bookId, chapterId);
     if (!result) {
-      workflowLog('latest_result.read_miss', {
-        workflowKind: 'quiz_generation',
-        bookId,
-        chapterId,
-      });
       throw new NotFoundException('No completed quiz workflow result found for chapter');
     }
 
@@ -393,14 +392,36 @@ export class QuizWorkflowService {
     }
 
     try {
-      const result = await this.generateQuiz({
-        bookId: runningRun.bookId,
-        chapterId: runningRun.chapterId,
-        chapterTitle: chapter.chapterTitle,
-        chapterText: chapter.chapterTextMaterialized,
-        chapterContentHash: chapter.chapterContentHash,
-        chapterSummary: matchingKnowledgeExtraction.result.summary,
-        knowledge: matchingKnowledgeExtraction.result,
+      const result = await retryLLMOperation({
+        operation: () => this.generateQuiz({
+          bookId: runningRun.bookId,
+          chapterId: runningRun.chapterId,
+          chapterTitle: chapter.chapterTitle,
+          chapterText: chapter.chapterTextMaterialized,
+          chapterContentHash: chapter.chapterContentHash,
+          chapterSummary: matchingKnowledgeExtraction.result.summary,
+          knowledge: matchingKnowledgeExtraction.result,
+        }),
+        maxRetries: MAX_WORKFLOW_LLM_RETRIES,
+        defaultDelayMs: DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS,
+        maxDelayMs: MAX_WORKFLOW_LLM_RETRY_DELAY_MS,
+        onRetry: ({ attempt, delayMs, error, classification }) => {
+          workflowLog('run.retry_scheduled', {
+            workflowKind: runningRun.kind,
+            workflowRunId: runningRun.id,
+            bookId: runningRun.bookId,
+            chapterId: runningRun.chapterId,
+            chapterIndex: runningRun.chapterIndex,
+            workflowVersion: runningRun.workflowVersion,
+            retryAttempt: attempt,
+            retryDelayMs: delayMs,
+            llmProvider: classification.provider,
+            llmReason: classification.reason,
+            llmStatusCode: classification.statusCode,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+        sleep: (ms) => this.sleep(ms),
       });
 
       this.quizWorkflowRepository.completeRun({
@@ -564,6 +585,10 @@ export class QuizWorkflowService {
       'Respond with JSON only. Do not wrap the JSON in markdown fences.',
     ];
     return sections.join('\n');
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async loadPrompt(): Promise<string> {

@@ -1,0 +1,33 @@
+{
+  "bookId": "7F06D639-5F68-4EAC-9719-509F4ADA1B83",
+  "chapterId": "0",
+  "chapterIndex": 0,
+  "chapterTitle": "Title Page",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "b5bd7ac9c3506e4e48ea28415cfa65c76f66ca547e237223a6cac69585e8f72c",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "Freakonomics",
+        "2": "A Rogue Economist Explores the Hidden Side of Everything",
+        "3": "Revised and Expanded Edition",
+        "4": "Steven D. Levitt \nand \nStephen J. Dubner"
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\nFreakonomics\n\nA Rogue Economist Explores the Hidden Side of Everything\n\nRevised and Expanded Edition\n\nSteven D. Levitt \nand \nStephen J. Dubner",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "2ae65d8e96f58451907fc11eb807cb36cebbde616805c0f9196a8501b396e08c",
+        "2": "0ed0207b9f3afab9060345138297276ed36a1f8fc1b3a9a94c485fcd28fdd518",
+        "3": "a048de672e6375e9559d6f72045801ad776ce0e9833ed8c9cd5cb85157f120ac",
+        "4": "eadcff8564b71072e749396125230c6b355d204996bfddff003e0940ae1dcf9f"
+      },
+      "createdAt": "2026-05-01T09:33:43.405Z",
+      "updatedAt": "2026-05-01T09:33:43.405Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\nFreakonomics\n\nA Rogue Economist Explores the Hidden Side of Everything\n\nRevised and Expanded Edition\n\nSteven D. Levitt \nand \nStephen J. Dubner",
+  "chapterContentHash": "b5bd7ac9c3506e4e48ea28415cfa65c76f66ca547e237223a6cac69585e8f72c",
+  "createdAt": "2026-05-01T09:33:43.405Z",
+  "updatedAt": "2026-05-01T09:33:43.405Z"
+}

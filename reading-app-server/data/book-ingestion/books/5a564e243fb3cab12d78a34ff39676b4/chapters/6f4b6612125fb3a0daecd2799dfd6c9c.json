@@ -1,0 +1,33 @@
+{
+  "bookId": "92092CBA-B2BB-4C4B-BA2B-8092C7F1FD54",
+  "chapterId": "21",
+  "chapterIndex": 21,
+  "chapterTitle": "Copyright",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "5907332d54e5386d9d4c99f10a21287af81da1071875e5b3055433138131f2c8",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "Copyright",
+        "2": "FREAKONOMICS (REVISED AND EXPANDED EDITION) . Copyright © 2005, 2006 by Steven D. Levitt and Stephen J. Dubner. All rights reserved under International and Pan-American Copyright Conventions. By payment of the required fees, you have been granted the non-exclusive, non-transferable right to access and read the text of this e-book on-screen. No part of this text may be reproduced, transmitted, down-loaded, decompiled, reverse engineered, or stored in or introduced into any information storage and retrieval system, in any form or by any means, whether electronic or mechanical, now known or hereinafter invented, without the express written permission of HarperCollins e-books.",
+        "3": "Adobe Digital Edition September 2009 ISBN 978-0-06-179280-9",
+        "4": "10 9 8 7 6 5 4 3 2 1"
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\nCopyright\n\nFREAKONOMICS (REVISED AND EXPANDED EDITION) . Copyright © 2005, 2006 by Steven D. Levitt and Stephen J. Dubner. All rights reserved under International and Pan-American Copyright Conventions. By payment of the required fees, you have been granted the non-exclusive, non-transferable right to access and read the text of this e-book on-screen. No part of this text may be reproduced, transmitted, down-loaded, decompiled, reverse engineered, or stored in or introduced into any information storage and retrieval system, in any form or by any means, whether electronic or mechanical, now known or hereinafter invented, without the express written permission of HarperCollins e-books.\n\nAdobe Digital Edition September 2009 ISBN 978-0-06-179280-9\n\n10 9 8 7 6 5 4 3 2 1",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "8dfc77ab4089e09d4397e12306086c19767ffd4bbf6e239240bde83fe537a4a7",
+        "2": "735384a22e4c059576cc9efb96a25a88e940f7b8f364a75cc53245c23b6b19d9",
+        "3": "4ad0c48df893a1420255fce6ec60cc55de2f6a9178a523cbec5d8683f3ecaf26",
+        "4": "498cab76a561483f40c2fbf50301c0afb97c32a0a6a33bd90bfaa2802390d26b"
+      },
+      "createdAt": "2026-05-08T06:23:19.857Z",
+      "updatedAt": "2026-05-08T06:23:19.857Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\nCopyright\n\nFREAKONOMICS (REVISED AND EXPANDED EDITION) . Copyright © 2005, 2006 by Steven D. Levitt and Stephen J. Dubner. All rights reserved under International and Pan-American Copyright Conventions. By payment of the required fees, you have been granted the non-exclusive, non-transferable right to access and read the text of this e-book on-screen. No part of this text may be reproduced, transmitted, down-loaded, decompiled, reverse engineered, or stored in or introduced into any information storage and retrieval system, in any form or by any means, whether electronic or mechanical, now known or hereinafter invented, without the express written permission of HarperCollins e-books.\n\nAdobe Digital Edition September 2009 ISBN 978-0-06-179280-9\n\n10 9 8 7 6 5 4 3 2 1",
+  "chapterContentHash": "5907332d54e5386d9d4c99f10a21287af81da1071875e5b3055433138131f2c8",
+  "createdAt": "2026-05-08T06:23:19.857Z",
+  "updatedAt": "2026-05-08T06:23:19.857Z"
+}

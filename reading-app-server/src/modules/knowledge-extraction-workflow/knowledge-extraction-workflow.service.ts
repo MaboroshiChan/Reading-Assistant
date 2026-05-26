@@ -9,6 +9,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import type {
   AnalyzeKnowledgeExtractionData,
@@ -23,6 +24,7 @@ import type {
 } from '../../../../packages/contracts/src';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
 import { config } from '../../config/runtime-config';
+import { retryLLMOperation } from '../../utils/llm-retry';
 import { buildSharedChapterPrefixCache } from '../../utils/chapter-prefix-cache';
 import { resolvePromptPath } from '../../utils/prompt-path';
 import { BookContextService } from '../book-ingestion/book-context.service';
@@ -71,6 +73,13 @@ const RELATION_TYPES = new Set([
 const IDEA_KINDS = new Set(['claim', 'belief', 'question', 'principle', 'conflict']);
 const INITIAL_RUNNING_PROGRESS_PERCENT = 5;
 const FINALIZING_PROGRESS_PERCENT = 100;
+const MAX_CONSECUTIVE_PAGES_PER_PIECE = 2;
+const MAX_TRANSIENT_LLM_RETRIES = 2;
+const DEFAULT_TRANSIENT_LLM_RETRY_DELAY_MS = 2_000;
+const MAX_TRANSIENT_LLM_RETRY_DELAY_MS = 12_000;
+const MAX_WORKFLOW_LLM_RETRIES = 2;
+const DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS = 5_000;
+const MAX_WORKFLOW_LLM_RETRY_DELAY_MS = 30_000;
 
 type KnowledgePiece = {
   pageIndex: number;
@@ -79,6 +88,7 @@ type KnowledgePiece = {
   sourceHash: string;
   pieceIndex: number;
   totalPieces: number;
+  pageRefs: KnowledgePageRef[];
 };
 
 type KnowledgeMemoryItem = {
@@ -396,11 +406,6 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   ): GetLatestChapterKnowledgeExtractionResponseDto {
     const result = this.knowledgeExtractionWorkflowRepository.getLatestResult(bookId, chapterId);
     if (!result) {
-      workflowLog('latest_result.read_miss', {
-        workflowKind: 'knowledge_extraction',
-        bookId,
-        chapterId,
-      });
       throw new NotFoundException('No completed knowledge extraction workflow result found for chapter');
     }
 
@@ -490,15 +495,42 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     }
 
     try {
-      const result = await this.generateKnowledgeExtraction({
-        workflowRunId,
-        bookId: runningRun.bookId,
-        chapterId: runningRun.chapterId,
-        chapterIndex: runningRun.chapterIndex,
-        chapterTitle: chapter.chapterTitle,
-        chapterText: chapter.chapterTextMaterialized,
-        chapterContentHash: chapter.chapterContentHash,
-        pieces,
+      const result = await retryLLMOperation({
+        operation: () => this.generateKnowledgeExtraction({
+          workflowRunId,
+          bookId: runningRun.bookId,
+          chapterId: runningRun.chapterId,
+          chapterIndex: runningRun.chapterIndex,
+          chapterTitle: chapter.chapterTitle,
+          chapterText: chapter.chapterTextMaterialized,
+          chapterContentHash: chapter.chapterContentHash,
+          pieces,
+        }),
+        maxRetries: MAX_WORKFLOW_LLM_RETRIES,
+        defaultDelayMs: DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS,
+        maxDelayMs: MAX_WORKFLOW_LLM_RETRY_DELAY_MS,
+        onRetry: async ({ attempt, delayMs, error, classification }) => {
+          this.publishWorkflowProgress(workflowRunId, {
+            percent: INITIAL_RUNNING_PROGRESS_PERCENT,
+            stage: 'await_llm_retry',
+            message: '模型服务繁忙，正在自动重试',
+          });
+          workflowLog('run.retry_scheduled', {
+            workflowKind: runningRun.kind,
+            workflowRunId: runningRun.id,
+            bookId: runningRun.bookId,
+            chapterId: runningRun.chapterId,
+            chapterIndex: runningRun.chapterIndex,
+            workflowVersion: runningRun.workflowVersion,
+            retryAttempt: attempt,
+            retryDelayMs: delayMs,
+            llmProvider: classification.provider,
+            llmReason: classification.reason,
+            llmStatusCode: classification.statusCode,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+        sleep: (ms) => this.sleep(ms),
       });
 
       const completedRun = this.knowledgeExtractionWorkflowRepository.completeRun({
@@ -615,7 +647,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   }
 
   private buildPieces(chapter: CanonicalChapterRecord): KnowledgePiece[] {
-    const pieces = Array.from(chapter.pages.entries())
+    const pages = Array.from(chapter.pages.entries())
       .sort(([leftIndex], [rightIndex]) => leftIndex - rightIndex)
       .map(([pageIndex, page]) => ({
         pageIndex,
@@ -624,6 +656,29 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         sourceHash: page.sourceHash,
       }))
       .filter((piece) => piece.rawText.trim().length > 0);
+
+    const pieces: KnowledgePiece[] = [];
+
+    for (const page of pages) {
+      const previous = pieces[pieces.length - 1];
+      const canExtendPrevious = previous
+        && previous.pageRefs.length < MAX_CONSECUTIVE_PAGES_PER_PIECE
+        && previous.pageRefs[previous.pageRefs.length - 1]?.pageIndex === page.pageIndex - 1;
+
+      if (canExtendPrevious) {
+        previous.pageRefs.push(this.createPageRef(page.pageIndex, page.pageNumber));
+        previous.rawText = `${previous.rawText.trimEnd()}\n\n${page.rawText.trimStart()}`;
+        previous.sourceHash = this.combinePieceSourceHashes(previous.sourceHash, page.sourceHash);
+        continue;
+      }
+
+      pieces.push({
+        ...page,
+        pieceIndex: pieces.length,
+        totalPieces: 0,
+        pageRefs: [this.createPageRef(page.pageIndex, page.pageNumber)],
+      });
+    }
 
     return pieces.map((piece, index) => ({
       ...piece,
@@ -775,6 +830,61 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       return cached;
     }
 
+    return this.retryTransientPieceGeneration(input);
+  }
+
+  private async retryTransientPieceGeneration(input: {
+    bookId: string;
+    chapterId: string;
+    chapterIndex: number;
+    chapterTitle?: string;
+    chapterText: string;
+    chapterContentHash: string;
+    piece: KnowledgePiece;
+    bookContext: BookContextBundle | null;
+    chapterContext: ChapterContextBundle | null;
+    pageWindow: PageWindowContext;
+    memoryContext: KnowledgeMemoryContext;
+  }): Promise<AnalyzeKnowledgeExtractionData> {
+    return retryLLMOperation({
+      operation: () => this.generateKnowledgeExtractionForPieceOnce(input),
+      maxRetries: MAX_TRANSIENT_LLM_RETRIES,
+      defaultDelayMs: DEFAULT_TRANSIENT_LLM_RETRY_DELAY_MS,
+      maxDelayMs: MAX_TRANSIENT_LLM_RETRY_DELAY_MS,
+      onRetry: ({ attempt, delayMs, error, classification }) => {
+        workflowLog('piece.retry_scheduled', {
+          workflowKind: 'knowledge_extraction',
+          bookId: input.bookId,
+          chapterId: input.chapterId,
+          pageIndex: input.piece.pageIndex,
+          pageNumber: input.piece.pageNumber,
+          pieceIndex: input.piece.pieceIndex,
+          totalPieces: input.piece.totalPieces,
+          retryAttempt: attempt,
+          retryDelayMs: delayMs,
+          llmProvider: classification.provider,
+          llmReason: classification.reason,
+          llmStatusCode: classification.statusCode,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+      sleep: (ms) => this.sleep(ms),
+    });
+  }
+
+  private async generateKnowledgeExtractionForPieceOnce(input: {
+    bookId: string;
+    chapterId: string;
+    chapterIndex: number;
+    chapterTitle?: string;
+    chapterText: string;
+    chapterContentHash: string;
+    piece: KnowledgePiece;
+    bookContext: BookContextBundle | null;
+    chapterContext: ChapterContextBundle | null;
+    pageWindow: PageWindowContext;
+    memoryContext: KnowledgeMemoryContext;
+  }): Promise<AnalyzeKnowledgeExtractionData> {
     const [systemPrompt, userPrompt] = await Promise.all([
       this.loadPrompt(),
       Promise.resolve(this.buildPieceSuffixPrompt(input)),
@@ -810,11 +920,15 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         chapterId: input.chapterId,
         chapterTitle: input.chapterTitle,
         chapterText: input.piece.rawText,
-        pageRef: this.createPageRef(input.piece.pageIndex, input.piece.pageNumber),
+        allowedPageRefs: input.piece.pageRefs,
       });
     } catch {
       return this.createEmptyKnowledgeExtraction(input.chapterId, input.chapterTitle);
     }
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private buildPieceSuffixPrompt(input: {
@@ -834,13 +948,18 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       `Document ID: ${input.bookId}`,
       `Chapter ID: ${input.chapterId}`,
       `Chapter Title: ${input.chapterTitle ?? ''}`,
-      `Chunk ID: page-${input.piece.pageIndex}`,
+      `Chunk ID: page-${input.piece.pageIndex}-${input.piece.pageRefs[input.piece.pageRefs.length - 1]?.pageIndex ?? input.piece.pageIndex}`,
       `Chunk Index: ${input.piece.pieceIndex + 1}`,
       `Total Chunks: ${input.piece.totalPieces}`,
-      `Page Index: ${input.piece.pageIndex}`,
-      `Page Number: ${input.piece.pageNumber}`,
+      `Primary Page Index: ${input.piece.pageIndex}`,
+      `Primary Page Number: ${input.piece.pageNumber}`,
       `Source Hash: ${input.piece.sourceHash}`,
       `Prompt Version: ${PROMPT_VERSION}`,
+      '',
+      'Chunk pages:',
+      '```json',
+      JSON.stringify(input.piece.pageRefs, null, 2),
+      '```',
       '',
       'Book context:',
       '```json',
@@ -862,17 +981,17 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       JSON.stringify(input.memoryContext, null, 2),
       '```',
       '',
-      'Primary evidence page:',
+      'Primary evidence pages:',
       '```text',
       input.piece.rawText,
       '```',
       '',
-      'Use the primary evidence page as the only source of evidence quotes.',
+      'Use the primary evidence pages as the only source of evidence quotes.',
       'Use the cached chapter prefix, book context, chapter context, page window, and memory continuity only for reference resolution and continuity.',
       'Do not cite or import evidence from previous pages, next pages, summaries, or memory continuity.',
       'Reuse an existing local_id from memory continuity only when the current page clearly refers to the same item.',
       'local_id values only need to be unique within this chapter workflow response state.',
-      `Every returned knowledge item must include evidence anchored to pageIndex=${input.piece.pageIndex} and pageNumber=${input.piece.pageNumber}.`,
+      `Every evidence item must include quote, pageIndex, and pageNumber, and pageIndex/pageNumber must match one of: ${input.piece.pageRefs.map((pageRef) => `${pageRef.pageIndex}/${pageRef.pageNumber}`).join(', ')}.`,
       'Respond with JSON only. Do not wrap the JSON in markdown fences.',
     ];
     return sections.join('\n');
@@ -906,7 +1025,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       chapterId: string;
       chapterTitle?: string;
       chapterText: string;
-      pageRef: KnowledgePageRef;
+      allowedPageRefs: KnowledgePageRef[];
     },
   ): AnalyzeKnowledgeExtractionData {
     const record = isPlainObject(raw) ? raw : {};
@@ -914,12 +1033,12 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     return {
       title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
       summary: asString(record.summary) ?? this.summarize(input.chapterText, 240),
-      people: this.sanitizePeople(record.people, input.pageRef) ?? [],
-      ideas: this.sanitizeIdeas(record.ideas, input.pageRef) ?? [],
-      events: this.sanitizeEvents(record.events, input.pageRef) ?? [],
-      entities: this.sanitizeEntities(record.entities, input.pageRef) ?? [],
-      themes: this.sanitizeThemes(record.themes, input.pageRef) ?? [],
-      relations: this.sanitizeRelations(record.relations, input.pageRef) ?? [],
+      people: this.sanitizePeople(record.people, input.allowedPageRefs) ?? [],
+      ideas: this.sanitizeIdeas(record.ideas, input.allowedPageRefs) ?? [],
+      events: this.sanitizeEvents(record.events, input.allowedPageRefs) ?? [],
+      entities: this.sanitizeEntities(record.entities, input.allowedPageRefs) ?? [],
+      themes: this.sanitizeThemes(record.themes, input.allowedPageRefs) ?? [],
+      relations: this.sanitizeRelations(record.relations, input.allowedPageRefs) ?? [],
     };
   }
 
@@ -934,17 +1053,25 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
   }
 
-  private sanitizeEvidence(value: unknown, currentPageRef: KnowledgePageRef): KnowledgeEvidence[] | undefined {
+  private sanitizeEvidence(value: unknown, allowedPageRefs: KnowledgePageRef[]): KnowledgeEvidence[] | undefined {
     if (!Array.isArray(value)) return undefined;
+    const allowedPageMap = new Map(
+      allowedPageRefs.map((pageRef) => [pageRef.pageIndex, pageRef.pageNumber]),
+    );
+    const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
     const evidence = value
       .map((item): KnowledgeEvidence | null => {
         if (!isPlainObject(item)) return null;
         const quote = asString(item.quote);
         if (!quote) return null;
+        const pageIndex = asNumber(item.pageIndex) ?? singleAllowedPage?.pageIndex;
+        const pageNumber = asNumber(item.pageNumber) ?? singleAllowedPage?.pageNumber;
+        if (pageIndex === undefined || pageNumber === undefined) return null;
+        if (allowedPageMap.get(pageIndex) !== pageNumber) return null;
         return {
           quote,
-          pageIndex: currentPageRef.pageIndex,
-          pageNumber: currentPageRef.pageNumber,
+          pageIndex,
+          pageNumber,
         };
       })
       .filter((item): item is KnowledgeEvidence => item !== null);
@@ -1028,7 +1155,11 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         pageIndex: input.piece.pageIndex,
         pageNumber: input.piece.pageNumber,
         sourceHash: input.piece.sourceHash,
-      }],
+      }, ...input.piece.pageRefs.slice(1).map((pageRef) => ({
+        pageIndex: pageRef.pageIndex,
+        pageNumber: pageRef.pageNumber,
+        sourceHash: input.piece.sourceHash,
+      }))],
     };
   }
 
@@ -1042,11 +1173,11 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       chapterId: input.chapterId,
       chapterIndex: input.chapterIndex,
       chapterTitle: input.chapterTitle,
-      pages: [{
-        pageIndex: input.piece.pageIndex,
-        pageNumber: input.piece.pageNumber,
+      pages: input.piece.pageRefs.map((pageRef) => ({
+        pageIndex: pageRef.pageIndex,
+        pageNumber: pageRef.pageNumber,
         sourceHash: input.piece.sourceHash,
-      }],
+      })),
     };
   }
 
@@ -1064,7 +1195,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private sanitizePeople(
     value: unknown,
-    currentPageRef: KnowledgePageRef,
+    allowedPageRefs: KnowledgePageRef[],
   ): KnowledgePerson[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const people = value
@@ -1079,7 +1210,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           description: asString(item.description),
           roles: this.sanitizeStringArray(item.roles),
           traits: this.sanitizeStringArray(item.traits),
-          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
         };
       })
       .filter((item): item is KnowledgePerson => item !== null);
@@ -1088,7 +1219,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private sanitizeIdeas(
     value: unknown,
-    currentPageRef: KnowledgePageRef,
+    allowedPageRefs: KnowledgePageRef[],
   ): KnowledgeIdea[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const ideas = value
@@ -1103,7 +1234,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           label,
           description: asString(item.description),
           kind: normalizedKind,
-          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
         };
         if (!this.shouldKeepIdea(idea)) return null;
         return idea;
@@ -1135,7 +1266,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private sanitizeEvents(
     value: unknown,
-    currentPageRef: KnowledgePageRef,
+    allowedPageRefs: KnowledgePageRef[],
   ): KnowledgeEvent[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const events = value
@@ -1150,7 +1281,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           participant_local_ids: this.sanitizeStringArray(item.participant_local_ids),
           time_hint: asString(item.time_hint),
           place_hint: asString(item.place_hint),
-          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
         };
       })
       .filter((item): item is KnowledgeEvent => item !== null);
@@ -1159,7 +1290,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private sanitizeEntities(
     value: unknown,
-    currentPageRef: KnowledgePageRef,
+    allowedPageRefs: KnowledgePageRef[],
   ): KnowledgeEntity[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const entities = value
@@ -1173,7 +1304,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           label,
           type: type as KnowledgeEntity['type'],
           description: asString(item.description),
-          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
         };
       })
       .filter((item): item is KnowledgeEntity => item !== null);
@@ -1182,7 +1313,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private sanitizeThemes(
     value: unknown,
-    currentPageRef: KnowledgePageRef,
+    allowedPageRefs: KnowledgePageRef[],
   ): KnowledgeTheme[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const themes = value
@@ -1196,7 +1327,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           label,
           strength: typeof strength === 'number' ? Math.max(0, Math.min(1, strength)) : undefined,
           description: asString(item.description),
-          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
         };
       })
       .filter((item): item is KnowledgeTheme => item !== null);
@@ -1205,7 +1336,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private sanitizeRelations(
     value: unknown,
-    currentPageRef: KnowledgePageRef,
+    allowedPageRefs: KnowledgePageRef[],
   ): KnowledgeRelation[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const relations = value
@@ -1239,7 +1370,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
               : 'related_to',
           description: asString(item.description),
           confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
-          evidence: this.sanitizeEvidence(item.evidence, currentPageRef),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
         };
       })
       .filter((item): item is KnowledgeRelation => item !== null);
@@ -1248,6 +1379,10 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private createPageRef(pageIndex: number, pageNumber: number): KnowledgePageRef {
     return { pageIndex, pageNumber };
+  }
+
+  private combinePieceSourceHashes(left: string, right: string): string {
+    return createHash('sha256').update(`${left}\n${right}`).digest('hex');
   }
 
   private summarize(text: string, maxLength: number): string {

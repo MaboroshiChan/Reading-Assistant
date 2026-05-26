@@ -1,0 +1,50 @@
+{
+  "bookId": "7F06D639-5F68-4EAC-9719-509F4ADA1B83",
+  "chapterId": "17",
+  "chapterIndex": 17,
+  "chapterTitle": "Acknowledgments",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "489c0bf6454905b42bbbc23117972a60aef75f7e2500b261b688e091d7829221",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "ACKNOWLEDGMENTS",
+        "2": "Jointly, we would like to thank two people who helped nurture this book: Claire Wachtel of William Morrow and Suzanne Gluck of the William Morris Agency. This is the third book that Stephen Dubner has written under their auspices; he continues to be grateful and, on occasion, awestruck. This was the first such book for Steven Levitt; he has been duly impressed. Many thanks also to the talented and supportive colleagues in each shop: Jane Friedman, Michael Morrison, Cathy Hemming, Lisa Gallagher, Debbie Stier, Dee Dee De Bartlo, George Bick, Brian McSharry, Jennifer Pooley, Kevin Callahan, Trent Duffy, and many others at William Morrow; Tracy Fisher, Raffaella DeAngelis, Karen Gerwin, Erin Malone, Georgia Cool, Candace Finn, Andy McNicol, and many others at the William Morris Agency. We would also like to thank the various subjects of this book (especially Stetson Kennedy, Paul Feldman, Sudhir Venkatesh, Arne Duncan, and Roland Fryer) for their time and trouble. Thanks also to the friends and colleagues who helped improve the manu script, including Melanie Thernstrom, Lisa Chase, and Colin Camerer. And to Linda Jines, who came up with the title: nicely done.",
+        "3": "PERSONAL ACKNOWLEDGMENTS"
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\nACKNOWLEDGMENTS\n\nJointly, we would like to thank two people who helped nurture this book: Claire Wachtel of William Morrow and Suzanne Gluck of the William Morris Agency. This is the third book that Stephen Dubner has written under their auspices; he continues to be grateful and, on occasion, awestruck. This was the first such book for Steven Levitt; he has been duly impressed. Many thanks also to the talented and supportive colleagues in each shop: Jane Friedman, Michael Morrison, Cathy Hemming, Lisa Gallagher, Debbie Stier, Dee Dee De Bartlo, George Bick, Brian McSharry, Jennifer Pooley, Kevin Callahan, Trent Duffy, and many others at William Morrow; Tracy Fisher, Raffaella DeAngelis, Karen Gerwin, Erin Malone, Georgia Cool, Candace Finn, Andy McNicol, and many others at the William Morris Agency. We would also like to thank the various subjects of this book (especially Stetson Kennedy, Paul Feldman, Sudhir Venkatesh, Arne Duncan, and Roland Fryer) for their time and trouble. Thanks also to the friends and colleagues who helped improve the manu script, including Melanie Thernstrom, Lisa Chase, and Colin Camerer. And to Linda Jines, who came up with the title: nicely done.\n\nPERSONAL ACKNOWLEDGMENTS",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "e3c34cdc4e6035e05099c7378fbd93f5ee12c027acc313ac882cca5a0d3e79a7",
+        "2": "69bb681b45f3cf94fc9bf829312a4b3a46b438289556a2e7e0e7b4d628ed1e7f",
+        "3": "cefdc638cba8b67dd847e8cf383505a383348705b75a414917880ce8f6dc2df1"
+      },
+      "createdAt": "2026-05-01T09:33:47.418Z",
+      "updatedAt": "2026-05-01T09:33:47.418Z"
+    },
+    "1": {
+      "pageIndex": 1,
+      "sourceHash": "1f9ccac6cfe6b6a3b67422910d232d6345d096312e621cef4a074f74d6e7fceb",
+      "pageParagraphs": {
+        "4": "I owe an enormous debt to my many co-authors and colleagues, whose great ideas fill this book, and to all the kind people who have taken the time to teach me what I know about economics and life. I am especially grateful to the University of Chicago, whose Becker Center on Chicago Price Theory provides me the ideal research home; and also to the American Bar Foundation for its collegiality and support. My wife, Jeannette, and our children, Amanda, Olivia, Nicholas, and Sophie, make every day a joy, even though we miss Andrew so much. I thank my parents, who showed me it was okay to be different. Most of all, I want to thank my good friend and co-author Stephen Dubner, who is a brilliant writer and a creative genius.",
+        "5": "—S. D. L.",
+        "6": "I have yet to write a book that did not germinate, or was not at least brought along, in the pages of the New York Times Magazine . This one is no exception. For that I thank Hugo Lindgren, Adam Moss, and Gerry Marzorati; also, thanks to Vera Titunik and Paul Tough for inviting the Bagel Man into the Magazine ’s pages. I am most grateful to Steven Levitt, who is so clever and wise and even kind as to make me wish—well, almost—that I had become an economist myself. Now I know why half the profession dreams of having an adjoining office to Levitt. And finally, as always, thanks and love to Ellen, Solomon, and Anya. See you at dinnertime.",
+        "7": "—S. J. D."
+      },
+      "pageTextMaterialized": "I owe an enormous debt to my many co-authors and colleagues, whose great ideas fill this book, and to all the kind people who have taken the time to teach me what I know about economics and life. I am especially grateful to the University of Chicago, whose Becker Center on Chicago Price Theory provides me the ideal research home; and also to the American Bar Foundation for its collegiality and support. My wife, Jeannette, and our children, Amanda, Olivia, Nicholas, and Sophie, make every day a joy, even though we miss Andrew so much. I thank my parents, who showed me it was okay to be different. Most of all, I want to thank my good friend and co-author Stephen Dubner, who is a brilliant writer and a creative genius.\n\n—S. D. L.\n\nI have yet to write a book that did not germinate, or was not at least brought along, in the pages of the New York Times Magazine . This one is no exception. For that I thank Hugo Lindgren, Adam Moss, and Gerry Marzorati; also, thanks to Vera Titunik and Paul Tough for inviting the Bagel Man into the Magazine ’s pages. I am most grateful to Steven Levitt, who is so clever and wise and even kind as to make me wish—well, almost—that I had become an economist myself. Now I know why half the profession dreams of having an adjoining office to Levitt. And finally, as always, thanks and love to Ellen, Solomon, and Anya. See you at dinnertime.\n\n—S. J. D.",
+      "paragraphHashes": {
+        "4": "de73490e93ce1eda96f1dadd5c5de8b23abfc2e8ef486759f78c435750adb50d",
+        "5": "681d02fb8f7b39569707819709e3f2f4651783f2ae2c017113b501444b42730c",
+        "6": "3ba48fd4fbb0e10cd3f446086c76abb86d9c332dd905c883108524c2eb2a47b7",
+        "7": "7c7e2649995950beeb42e87f7290600c76ffd2c01c463368b13a97002ee93434"
+      },
+      "createdAt": "2026-05-01T09:33:47.428Z",
+      "updatedAt": "2026-05-01T09:33:47.428Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\nACKNOWLEDGMENTS\n\nJointly, we would like to thank two people who helped nurture this book: Claire Wachtel of William Morrow and Suzanne Gluck of the William Morris Agency. This is the third book that Stephen Dubner has written under their auspices; he continues to be grateful and, on occasion, awestruck. This was the first such book for Steven Levitt; he has been duly impressed. Many thanks also to the talented and supportive colleagues in each shop: Jane Friedman, Michael Morrison, Cathy Hemming, Lisa Gallagher, Debbie Stier, Dee Dee De Bartlo, George Bick, Brian McSharry, Jennifer Pooley, Kevin Callahan, Trent Duffy, and many others at William Morrow; Tracy Fisher, Raffaella DeAngelis, Karen Gerwin, Erin Malone, Georgia Cool, Candace Finn, Andy McNicol, and many others at the William Morris Agency. We would also like to thank the various subjects of this book (especially Stetson Kennedy, Paul Feldman, Sudhir Venkatesh, Arne Duncan, and Roland Fryer) for their time and trouble. Thanks also to the friends and colleagues who helped improve the manu script, including Melanie Thernstrom, Lisa Chase, and Colin Camerer. And to Linda Jines, who came up with the title: nicely done.\n\nPERSONAL ACKNOWLEDGMENTS\n\nI owe an enormous debt to my many co-authors and colleagues, whose great ideas fill this book, and to all the kind people who have taken the time to teach me what I know about economics and life. I am especially grateful to the University of Chicago, whose Becker Center on Chicago Price Theory provides me the ideal research home; and also to the American Bar Foundation for its collegiality and support. My wife, Jeannette, and our children, Amanda, Olivia, Nicholas, and Sophie, make every day a joy, even though we miss Andrew so much. I thank my parents, who showed me it was okay to be different. Most of all, I want to thank my good friend and co-author Stephen Dubner, who is a brilliant writer and a creative genius.\n\n—S. D. L.\n\nI have yet to write a book that did not germinate, or was not at least brought along, in the pages of the New York Times Magazine . This one is no exception. For that I thank Hugo Lindgren, Adam Moss, and Gerry Marzorati; also, thanks to Vera Titunik and Paul Tough for inviting the Bagel Man into the Magazine ’s pages. I am most grateful to Steven Levitt, who is so clever and wise and even kind as to make me wish—well, almost—that I had become an economist myself. Now I know why half the profession dreams of having an adjoining office to Levitt. And finally, as always, thanks and love to Ellen, Solomon, and Anya. See you at dinnertime.\n\n—S. J. D.",
+  "chapterContentHash": "4f52dd29ddd129427865666e67460cadcc417c95740cc36ea7ee3ad8aa056c08",
+  "createdAt": "2026-05-01T09:33:47.418Z",
+  "updatedAt": "2026-05-01T09:33:47.428Z"
+}

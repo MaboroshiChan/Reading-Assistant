@@ -1,0 +1,67 @@
+{
+  "bookId": "7F06D639-5F68-4EAC-9719-509F4ADA1B83",
+  "chapterId": "3",
+  "chapterIndex": 3,
+  "chapterTitle": "Preface to the Revised and Expanded Edition",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "d697cbaa6f2b5e74a82e491b11115db90fbd70ef24940a9c94e0f90cec7dffd5",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "PREFACE TO THE REVISED AND EXPANDED EDITION",
+        "2": "As we were writing Freakonomics, we had grave doubts that anyone would actually read it—and we certainly never envisioned the need for this revised and expanded edition. But we are very happy, and grateful, to have been wrong.",
+        "3": "So why bother with a revised edition?",
+        "4": "There are a few reasons. The first is that the world is a living, breathing, changing thing, whereas a book is not. Once a manuscript is finished, it sits, dead in the water, for nearly a year until it is made ready by the publisher for its debut. This doesn’t pose much of a problem if you have written, say, a history of the Third Punic War. But because Freakonomics explores all sorts of modern real-world issues, and because the modern world tends to change quite fast, we have gone through the book and made a number of minor updates.",
+        "5": "Also, we made some mistakes. It was usually a reader who would bring a mistake to our attention, and we very much appreciate this input. Again, most of these changes are quite minor."
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\nPREFACE TO THE REVISED AND EXPANDED EDITION\n\nAs we were writing Freakonomics, we had grave doubts that anyone would actually read it—and we certainly never envisioned the need for this revised and expanded edition. But we are very happy, and grateful, to have been wrong.\n\nSo why bother with a revised edition?\n\nThere are a few reasons. The first is that the world is a living, breathing, changing thing, whereas a book is not. Once a manuscript is finished, it sits, dead in the water, for nearly a year until it is made ready by the publisher for its debut. This doesn’t pose much of a problem if you have written, say, a history of the Third Punic War. But because Freakonomics explores all sorts of modern real-world issues, and because the modern world tends to change quite fast, we have gone through the book and made a number of minor updates.\n\nAlso, we made some mistakes. It was usually a reader who would bring a mistake to our attention, and we very much appreciate this input. Again, most of these changes are quite minor.",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "8a5335b796bb8600782830e576be8f9a1c2b38854d51226fa1abdadf3f39141e",
+        "2": "67a42edaa393eafe0c2afde4c88496a3121928bab861903dd0bf957e90140992",
+        "3": "51930aa0744c7c707423b889b8d7b798740869cd72a83dbfc67d69a77625a81b",
+        "4": "5a2ae3ea04db108b0d69a83d3147f746ffcf99bd9b9d9c25b1aea30b07f7c671",
+        "5": "0e850b460c5ed05ee15b6777f8d297bc7e6299eee6b09c4ce1f73bbc7b1c7354"
+      },
+      "createdAt": "2026-05-01T09:33:43.717Z",
+      "updatedAt": "2026-05-01T09:33:43.717Z"
+    },
+    "1": {
+      "pageIndex": 1,
+      "sourceHash": "8ce93a8cd2b492d44b1235fad1b78a231a636b51bfe9bddf3bc0a967a165ad7c",
+      "pageParagraphs": {
+        "6": "The most aggressively revised section of the book is the beginning of chapter 2, which tells the story of one man’s crusade against the Ku Klux Klan. Several months after Freakonomics was first published, it was brought to our attention that this man’s portrayal of his crusade, and of various other Klan matters, was considerably overstated. (For a fuller explanation, see an essay called “Hoodwinked?”.) As unpleasant as it was to acknowledge this error, and to diminish the reputation of a man beloved in many quarters, we felt it was important to set straight the historical record.",
+        "7": "We have also futzed a bit with the architecture of the book. In the original version, each chapter was preceded by an excerpt from the New York Times Magazine profile that one of us (Dubner) wrote about the other (Levitt), and which led to our collaboration on this book. Because some readers found these excerpts intrusive (and/or egomaniacal, and/or sycophantic), we have removed them, instead reprinting the complete Times profile in the back of this edition in the section called “Bonus Material”. There, it can be easily skipped over if one so chooses, or read in isolation."
+      },
+      "pageTextMaterialized": "The most aggressively revised section of the book is the beginning of chapter 2, which tells the story of one man’s crusade against the Ku Klux Klan. Several months after Freakonomics was first published, it was brought to our attention that this man’s portrayal of his crusade, and of various other Klan matters, was considerably overstated. (For a fuller explanation, see an essay called “Hoodwinked?”.) As unpleasant as it was to acknowledge this error, and to diminish the reputation of a man beloved in many quarters, we felt it was important to set straight the historical record.\n\nWe have also futzed a bit with the architecture of the book. In the original version, each chapter was preceded by an excerpt from the New York Times Magazine profile that one of us (Dubner) wrote about the other (Levitt), and which led to our collaboration on this book. Because some readers found these excerpts intrusive (and/or egomaniacal, and/or sycophantic), we have removed them, instead reprinting the complete Times profile in the back of this edition in the section called “Bonus Material”. There, it can be easily skipped over if one so chooses, or read in isolation.",
+      "paragraphHashes": {
+        "6": "a13514d751bbc69538e0f92afa35bce52f65c05bdfecdc2f0f4210eeaf18cf54",
+        "7": "e91a278598c40191d96da1f459ae3d985a9600ac900f3ca0cf13f1fd62485746"
+      },
+      "createdAt": "2026-05-01T09:33:43.721Z",
+      "updatedAt": "2026-05-01T09:33:43.721Z"
+    },
+    "2": {
+      "pageIndex": 2,
+      "sourceHash": "cc8e7513a265f3727cc9e297afed6f3749acdaa971d664b0c312373d57912c06",
+      "pageParagraphs": {
+        "8": "The further bonus material is what accounts for our having called this edition “expanded” in addition to “revised.” Soon after the original publication of Freakonomics, in April 2005, we began writing a monthly column for the New York Times Magazine. We have included in this edition several of these columns, on subjects ranging from voting behavior to dog poop to the economics of sexual preference.",
+        "9": "We have also included a variety of writings from our blog (www.freakonomics.com/blog/)—which, like this revised edition, was not planned. In the beginning, we built a website merely to perform archival and trafficking functions. We blogged reluctantly, tentatively, infrequently. But as the months went on, and as we discovered an audience of people who had read Freakonomics and were eager to bat its ideas back and forth, we took to it more enthusiastically.",
+        "10": "A blog, as it turns out, is an author’s perfect antidote for that sickening feeling of being dead in the water once a manuscript has been completed. Particularly for a book like this one, a book of ideas, there is nothing more intoxicating than to be able to extend those ideas, to continue to refine and challenge and wrestle with them, even as the world marches on."
+      },
+      "pageTextMaterialized": "The further bonus material is what accounts for our having called this edition “expanded” in addition to “revised.” Soon after the original publication of Freakonomics, in April 2005, we began writing a monthly column for the New York Times Magazine. We have included in this edition several of these columns, on subjects ranging from voting behavior to dog poop to the economics of sexual preference.\n\nWe have also included a variety of writings from our blog (www.freakonomics.com/blog/)—which, like this revised edition, was not planned. In the beginning, we built a website merely to perform archival and trafficking functions. We blogged reluctantly, tentatively, infrequently. But as the months went on, and as we discovered an audience of people who had read Freakonomics and were eager to bat its ideas back and forth, we took to it more enthusiastically.\n\nA blog, as it turns out, is an author’s perfect antidote for that sickening feeling of being dead in the water once a manuscript has been completed. Particularly for a book like this one, a book of ideas, there is nothing more intoxicating than to be able to extend those ideas, to continue to refine and challenge and wrestle with them, even as the world marches on.",
+      "paragraphHashes": {
+        "8": "92d57ae20e7049688cfadfea161f7902bfeb9eae3c7e739ea501e21fcab51d84",
+        "9": "65a49beacfde051705eeb79ffd7489dcc1e9c17292fe78c6f81e89e95fc3b959",
+        "10": "e4dee2c11be58ddc120ab289c301f5566ab4e57619d84db6a6eb94712c5fbc01"
+      },
+      "createdAt": "2026-05-01T09:33:43.729Z",
+      "updatedAt": "2026-05-01T09:33:43.729Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\nPREFACE TO THE REVISED AND EXPANDED EDITION\n\nAs we were writing Freakonomics, we had grave doubts that anyone would actually read it—and we certainly never envisioned the need for this revised and expanded edition. But we are very happy, and grateful, to have been wrong.\n\nSo why bother with a revised edition?\n\nThere are a few reasons. The first is that the world is a living, breathing, changing thing, whereas a book is not. Once a manuscript is finished, it sits, dead in the water, for nearly a year until it is made ready by the publisher for its debut. This doesn’t pose much of a problem if you have written, say, a history of the Third Punic War. But because Freakonomics explores all sorts of modern real-world issues, and because the modern world tends to change quite fast, we have gone through the book and made a number of minor updates.\n\nAlso, we made some mistakes. It was usually a reader who would bring a mistake to our attention, and we very much appreciate this input. Again, most of these changes are quite minor.\n\nThe most aggressively revised section of the book is the beginning of chapter 2, which tells the story of one man’s crusade against the Ku Klux Klan. Several months after Freakonomics was first published, it was brought to our attention that this man’s portrayal of his crusade, and of various other Klan matters, was considerably overstated. (For a fuller explanation, see an essay called “Hoodwinked?”.) As unpleasant as it was to acknowledge this error, and to diminish the reputation of a man beloved in many quarters, we felt it was important to set straight the historical record.\n\nWe have also futzed a bit with the architecture of the book. In the original version, each chapter was preceded by an excerpt from the New York Times Magazine profile that one of us (Dubner) wrote about the other (Levitt), and which led to our collaboration on this book. Because some readers found these excerpts intrusive (and/or egomaniacal, and/or sycophantic), we have removed them, instead reprinting the complete Times profile in the back of this edition in the section called “Bonus Material”. There, it can be easily skipped over if one so chooses, or read in isolation.\n\nThe further bonus material is what accounts for our having called this edition “expanded” in addition to “revised.” Soon after the original publication of Freakonomics, in April 2005, we began writing a monthly column for the New York Times Magazine. We have included in this edition several of these columns, on subjects ranging from voting behavior to dog poop to the economics of sexual preference.\n\nWe have also included a variety of writings from our blog (www.freakonomics.com/blog/)—which, like this revised edition, was not planned. In the beginning, we built a website merely to perform archival and trafficking functions. We blogged reluctantly, tentatively, infrequently. But as the months went on, and as we discovered an audience of people who had read Freakonomics and were eager to bat its ideas back and forth, we took to it more enthusiastically.\n\nA blog, as it turns out, is an author’s perfect antidote for that sickening feeling of being dead in the water once a manuscript has been completed. Particularly for a book like this one, a book of ideas, there is nothing more intoxicating than to be able to extend those ideas, to continue to refine and challenge and wrestle with them, even as the world marches on.",
+  "chapterContentHash": "284384d6b5cb1cf69240b422cfb4ee426c1c087638fd087479701ed5eabb6806",
+  "createdAt": "2026-05-01T09:33:43.717Z",
+  "updatedAt": "2026-05-01T09:33:43.729Z"
+}

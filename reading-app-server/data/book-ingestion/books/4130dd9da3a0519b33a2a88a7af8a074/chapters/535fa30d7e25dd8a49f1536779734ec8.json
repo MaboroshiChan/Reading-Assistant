@@ -1,0 +1,27 @@
+{
+  "bookId": "7F06D639-5F68-4EAC-9719-509F4ADA1B83",
+  "chapterId": "23",
+  "chapterIndex": 23,
+  "chapterTitle": "Chapter 24",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "fb947bea62a4c2d6c20031689cf4f9f5c3faf75f3eced7fa9d2e11686fa7a744",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "* Concerning the teenage girl named Temptress: judging from Chastity’s poor showing here, it is doubtful that Temptress would have gained much benefit from being called Chastity."
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\n* Concerning the teenage girl named Temptress: judging from Chastity’s poor showing here, it is doubtful that Temptress would have gained much benefit from being called Chastity.",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "8838ee94d6e3f8bc0090c38d5cb8e650a1734180920ffa56543b778816377593"
+      },
+      "createdAt": "2026-05-01T09:33:47.604Z",
+      "updatedAt": "2026-05-01T09:33:47.604Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\n* Concerning the teenage girl named Temptress: judging from Chastity’s poor showing here, it is doubtful that Temptress would have gained much benefit from being called Chastity.",
+  "chapterContentHash": "fb947bea62a4c2d6c20031689cf4f9f5c3faf75f3eced7fa9d2e11686fa7a744",
+  "createdAt": "2026-05-01T09:33:47.604Z",
+  "updatedAt": "2026-05-01T09:33:47.604Z"
+}

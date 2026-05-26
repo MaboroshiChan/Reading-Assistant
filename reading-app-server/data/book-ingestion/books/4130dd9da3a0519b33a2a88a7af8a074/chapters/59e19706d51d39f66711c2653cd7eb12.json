@@ -1,0 +1,27 @@
+{
+  "bookId": "7F06D639-5F68-4EAC-9719-509F4ADA1B83",
+  "chapterId": "28",
+  "chapterIndex": 28,
+  "chapterTitle": "Chapter 29",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "5af0d6488c10783cf5c2c7ea14ca9b9c169b73a40508faacd9b582f1937c71e8",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "* With a minimum of 10 occurrences."
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\n* With a minimum of 10 occurrences.",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "d19462f88207f5e563e2b884cf4e1ac905b254a6918da2e49ba77e138598a3e5"
+      },
+      "createdAt": "2026-05-01T09:33:47.659Z",
+      "updatedAt": "2026-05-01T09:33:47.659Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\n* With a minimum of 10 occurrences.",
+  "chapterContentHash": "5af0d6488c10783cf5c2c7ea14ca9b9c169b73a40508faacd9b582f1937c71e8",
+  "createdAt": "2026-05-01T09:33:47.659Z",
+  "updatedAt": "2026-05-01T09:33:47.659Z"
+}

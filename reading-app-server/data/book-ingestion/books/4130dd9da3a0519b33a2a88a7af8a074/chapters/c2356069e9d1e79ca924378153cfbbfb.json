@@ -1,0 +1,27 @@
+{
+  "bookId": "7F06D639-5F68-4EAC-9719-509F4ADA1B83",
+  "chapterId": "24",
+  "chapterIndex": 24,
+  "chapterTitle": "Chapter 25",
+  "pages": {
+    "0": {
+      "pageIndex": 0,
+      "sourceHash": "9df58263d3a592c2e1ca6fccbc227ac15ca4764da1210dd6f3ef33b89b276049",
+      "pageParagraphs": {
+        "0": "Freakonomics \n• \n•",
+        "1": "* See Chapter 6 in Notes Section."
+      },
+      "pageTextMaterialized": "Freakonomics \n• \n•\n\n* See Chapter 6 in Notes Section.",
+      "paragraphHashes": {
+        "0": "47db88d1c15b4a6b78e6c1e538d4dcc0690c26765198cb692e36fdc96619f33f",
+        "1": "e6e0de297decaf27f03f55d723dc64cbc0e04b666c10af6074f089fcfb0a0f90"
+      },
+      "createdAt": "2026-05-01T09:33:47.615Z",
+      "updatedAt": "2026-05-01T09:33:47.615Z"
+    }
+  },
+  "chapterTextMaterialized": "Freakonomics \n• \n•\n\n* See Chapter 6 in Notes Section.",
+  "chapterContentHash": "9df58263d3a592c2e1ca6fccbc227ac15ca4764da1210dd6f3ef33b89b276049",
+  "createdAt": "2026-05-01T09:33:47.615Z",
+  "updatedAt": "2026-05-01T09:33:47.615Z"
+}
