@@ -35,6 +35,11 @@ export interface PatchReadingProgressRequestDto {
   sentenceId?: string;
   scrollPercent?: number;
   completedParagraphIds?: string[];
+  locatorJSON?: string;
+  contentHash?: string;
+  clientUpdatedAt?: string;
+  mutationId?: string;
+  baseRevision?: number;
 }
 
 export interface PatchMasteryRequestDto {

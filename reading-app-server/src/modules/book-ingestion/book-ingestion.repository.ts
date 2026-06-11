@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -57,7 +57,7 @@ export class BookIngestionRepository {
   private readonly books = new Map<string, CanonicalBookRecord>();
   private readonly storePath: string;
 
-  constructor(dataDirOverride?: string) {
+  constructor(@Optional() dataDirOverride?: string) {
     const dataDir = dataDirOverride ?? process.env.BOOK_INGESTION_DATA_DIR ?? DEFAULT_DATA_DIR;
     this.storePath = path.join(dataDir, DEFAULT_STORE_FILE);
     this.loadPersistedStore();

@@ -52,6 +52,11 @@ export interface ReadingProgressRecord {
   sentenceId?: string;
   scrollPercent?: number;
   completedParagraphIds: string[];
+  locatorJSON?: string;
+  contentHash?: string;
+  clientUpdatedAt?: string;
+  revision: number;
+  lastMutationId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -118,6 +123,11 @@ export interface PatchReadingProgressInput {
   sentenceId?: string;
   scrollPercent?: number;
   completedParagraphIds?: string[];
+  locatorJSON?: string;
+  contentHash?: string;
+  clientUpdatedAt?: string;
+  mutationId?: string;
+  baseRevision?: number;
 }
 
 export interface PatchMasteryInput {

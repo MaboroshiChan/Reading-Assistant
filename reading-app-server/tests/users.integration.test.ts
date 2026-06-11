@@ -3,10 +3,14 @@ import type { AddressInfo } from 'node:net';
 import { createApp } from '../src/main';
 
 describe('users integration', () => {
-  let app: Awaited<ReturnType<typeof createApp>>;
+  let app: Awaited<ReturnType<typeof createApp>> | undefined;
   let baseUrl: string;
 
   beforeAll(async () => {
+    if (process.env.TEST_BASE_URL) {
+      baseUrl = process.env.TEST_BASE_URL.replace(/\/+$/, '');
+      return;
+    }
     app = await createApp();
     await app.listen(0, '127.0.0.1');
     const address = app.getHttpServer().address() as AddressInfo;
@@ -14,7 +18,7 @@ describe('users integration', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
   });
 
   test('creates anonymous user and stores reading state through raw JSON requests', async () => {
@@ -77,11 +81,75 @@ describe('users integration', () => {
       },
     );
     expect(progressResponse.status).toBe(200);
-    expect(await progressResponse.json()).toMatchObject({
+    const legacyProgress = await progressResponse.json();
+    expect(legacyProgress).toMatchObject({
       documentId: `doc-${suffix}`,
       chapterId: 'ch-1',
       scrollPercent: 42,
       completedParagraphIds: ['p-1', 'p-2'],
+      revision: 1,
+    });
+
+    const versionedProgressResponse = await fetch(
+      `${baseUrl}/v1/users/${anonymousJson.userId}/documents/doc-${suffix}/progress`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chapterId: 'ch-2',
+          scrollPercent: 64,
+          locatorJSON: '{"href":"ch-2.xhtml"}',
+          mutationId: `mutation-${suffix}`,
+          baseRevision: legacyProgress.revision,
+        }),
+      },
+    );
+    expect(versionedProgressResponse.status).toBe(200);
+    const versionedProgress = await versionedProgressResponse.json();
+    expect(versionedProgress).toMatchObject({
+      chapterId: 'ch-2',
+      scrollPercent: 64,
+      revision: 2,
+      lastMutationId: `mutation-${suffix}`,
+    });
+
+    const duplicateProgressResponse = await fetch(
+      `${baseUrl}/v1/users/${anonymousJson.userId}/documents/doc-${suffix}/progress`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scrollPercent: 99,
+          mutationId: `mutation-${suffix}`,
+          baseRevision: 1,
+        }),
+      },
+    );
+    expect(duplicateProgressResponse.status).toBe(200);
+    expect(await duplicateProgressResponse.json()).toMatchObject({
+      scrollPercent: 64,
+      revision: 2,
+    });
+
+    const conflictResponse = await fetch(
+      `${baseUrl}/v1/users/${anonymousJson.userId}/documents/doc-${suffix}/progress`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scrollPercent: 80,
+          mutationId: `conflict-${suffix}`,
+          baseRevision: 1,
+        }),
+      },
+    );
+    expect(conflictResponse.status).toBe(409);
+    expect(await conflictResponse.json()).toMatchObject({
+      error: 'progress_revision_conflict',
+      data: {
+        revision: 2,
+        scrollPercent: 64,
+      },
     });
 
     const quizResponse = await fetch(`${baseUrl}/v1/users/${anonymousJson.userId}/quiz-attempts`, {

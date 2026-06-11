@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -13,7 +14,10 @@ import type {
   UpsertAnnotationRequestDto,
   UpsertUserDocumentRequestDto,
 } from './users.dto';
-import { UsersRepository } from './users.repository';
+import {
+  ProgressRevisionConflictError,
+  UsersRepository,
+} from './users.repository';
 import type {
   AnnotationKind,
   AnnotationRecord,
@@ -98,6 +102,11 @@ export class UsersService {
       sentenceId: this.optionalString(parsed.sentenceId, 'sentenceId'),
       scrollPercent: this.optionalPercent(parsed.scrollPercent, 'scrollPercent'),
       completedParagraphIds: this.optionalStringArray(parsed.completedParagraphIds, 'completedParagraphIds'),
+      locatorJSON: this.optionalString(parsed.locatorJSON, 'locatorJSON'),
+      contentHash: this.optionalString(parsed.contentHash, 'contentHash'),
+      clientUpdatedAt: this.optionalISODate(parsed.clientUpdatedAt, 'clientUpdatedAt'),
+      mutationId: this.optionalString(parsed.mutationId, 'mutationId'),
+      baseRevision: this.optionalNonNegativeInteger(parsed.baseRevision, 'baseRevision'),
     };
   }
 
@@ -108,7 +117,17 @@ export class UsersService {
   ): Promise<ReadingProgressRecord> {
     this.requireUser(userId);
     this.requireDocument(userId, documentId);
-    return this.usersRepository.patchProgress(userId, documentId, input);
+    try {
+      return await this.usersRepository.patchProgress(userId, documentId, input);
+    } catch (error) {
+      if (error instanceof ProgressRevisionConflictError) {
+        throw new ConflictException({
+          error: 'progress_revision_conflict',
+          data: error.current,
+        });
+      }
+      throw error;
+    }
   }
 
   getProgress(userId: string, documentId: string): ReadingProgressRecord {
@@ -308,6 +327,24 @@ export class UsersService {
       throw new BadRequestException(`${fieldName} must be between 0 and 100`);
     }
     return numberValue;
+  }
+
+  private optionalNonNegativeInteger(value: unknown, fieldName: string): number | undefined {
+    if (value === undefined || value === null) return undefined;
+    const numberValue = this.requireNumber(value, fieldName);
+    if (!Number.isInteger(numberValue) || numberValue < 0) {
+      throw new BadRequestException(`${fieldName} must be a non-negative integer`);
+    }
+    return numberValue;
+  }
+
+  private optionalISODate(value: unknown, fieldName: string): string | undefined {
+    const text = this.optionalString(value, fieldName);
+    if (text === undefined) return undefined;
+    if (Number.isNaN(Date.parse(text))) {
+      throw new BadRequestException(`${fieldName} must be an ISO-8601 date string`);
+    }
+    return text;
   }
 
   private optionalStringArray(value: unknown, fieldName: string): string[] | undefined {

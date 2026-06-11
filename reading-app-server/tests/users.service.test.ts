@@ -73,4 +73,31 @@ describe('UsersService', () => {
       answers: [],
     }))).toThrowError('score cannot be greater than total');
   });
+
+  test('parses versioned progress requests', () => {
+    const service = createService();
+    const clientUpdatedAt = '2026-06-11T12:00:00.000Z';
+
+    expect(service.parsePatchProgressRequest(JSON.stringify({
+      chapterId: 'chapter-2',
+      locatorJSON: '{"href":"chapter-2.xhtml"}',
+      contentHash: 'sha256',
+      clientUpdatedAt,
+      mutationId: 'mutation-1',
+      baseRevision: 4,
+    }))).toMatchObject({
+      chapterId: 'chapter-2',
+      contentHash: 'sha256',
+      clientUpdatedAt,
+      mutationId: 'mutation-1',
+      baseRevision: 4,
+    });
+
+    expect(() => service.parsePatchProgressRequest(JSON.stringify({
+      baseRevision: -1,
+    }))).toThrowError('baseRevision must be a non-negative integer');
+    expect(() => service.parsePatchProgressRequest(JSON.stringify({
+      clientUpdatedAt: 'not-a-date',
+    }))).toThrowError('clientUpdatedAt must be an ISO-8601 date string');
+  });
 });

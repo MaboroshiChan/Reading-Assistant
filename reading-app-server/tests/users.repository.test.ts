@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { UsersRepository } from '../src/modules/users/users.repository';
+import {
+  ProgressRevisionConflictError,
+  UsersRepository,
+} from '../src/modules/users/users.repository';
 
 describe('UsersRepository', () => {
   test('restores the same anonymous user for the same device id', async () => {
@@ -54,6 +57,56 @@ describe('UsersRepository', () => {
     expect(profile.depthOfUnderstanding).toBe(40);
     expect(profile.exp).toBe(150);
     expect(profile.totalAnswers).toBe(3);
+  });
+
+  test('serializes progress revisions and deduplicates mutations', async () => {
+    const repository = new UsersRepository();
+    const { user } = await repository.createOrRestoreAnonymousUser({
+      deviceId: 'progress-device',
+      client: 'ios',
+    });
+    await repository.upsertDocument(user.userId, {
+      documentId: 'doc-progress',
+      sourceType: 'epub',
+      title: 'Progress Book',
+    });
+
+    const first = await repository.patchProgress(user.userId, 'doc-progress', {
+      chapterId: 'chapter-1',
+      scrollPercent: 25,
+      mutationId: 'mutation-1',
+      baseRevision: 0,
+    });
+    const duplicate = await repository.patchProgress(user.userId, 'doc-progress', {
+      chapterId: 'chapter-1',
+      scrollPercent: 99,
+      mutationId: 'mutation-1',
+      baseRevision: 0,
+    });
+
+    expect(first.revision).toBe(1);
+    expect(duplicate).toEqual(first);
+
+    const concurrent = await Promise.allSettled([
+      repository.patchProgress(user.userId, 'doc-progress', {
+        scrollPercent: 50,
+        mutationId: 'mutation-2',
+        baseRevision: 1,
+      }),
+      repository.patchProgress(user.userId, 'doc-progress', {
+        scrollPercent: 75,
+        mutationId: 'mutation-3',
+        baseRevision: 1,
+      }),
+    ]);
+
+    expect(concurrent.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = concurrent.find((result) => result.status === 'rejected');
+    expect(rejected).toMatchObject({
+      status: 'rejected',
+      reason: expect.any(ProgressRevisionConflictError),
+    });
+    expect(repository.getProgress(user.userId, 'doc-progress').revision).toBe(2);
   });
 
   test('queries quiz attempts and upserts annotations', async () => {

@@ -45,6 +45,13 @@ const clampSkill = (value: number): number => Math.max(0, Math.min(100, Math.rou
 const computeDepth = (skills: UserSkills): number =>
   Math.round((skills.Facts + skills.Inference + skills.Tone + skills.Argument) / 4);
 
+export class ProgressRevisionConflictError extends Error {
+  constructor(readonly current: ReadingProgressRecord) {
+    super('Reading progress revision conflict');
+    this.name = 'ProgressRevisionConflictError';
+  }
+}
+
 @Injectable()
 export class UsersRepository implements OnModuleInit {
   private readonly users = new Map<string, AppUserRecord>();
@@ -60,6 +67,7 @@ export class UsersRepository implements OnModuleInit {
   private readonly quizAttemptIdsByUser = new Map<string, Set<string>>();
   private readonly annotations = new Map<string, AnnotationRecord>();
   private readonly annotationIdsByUser = new Map<string, Set<string>>();
+  private readonly progressWriteTails = new Map<string, Promise<void>>();
 
   constructor(
     @Optional()
@@ -111,7 +119,12 @@ export class UsersRepository implements OnModuleInit {
     for (const user of users) this.indexUser(user);
     for (const device of devices) this.indexDevice(device);
     for (const document of documents) this.indexDocument(document);
-    for (const progress of progresses) this.indexProgress(progress);
+    for (const progress of progresses) {
+      this.indexProgress({
+        ...progress,
+        revision: progress.revision ?? 0,
+      });
+    }
     for (const profile of masteryProfiles) this.indexMasteryProfile(profile);
     for (const attempt of quizAttempts) this.indexQuizAttempt(attempt);
     for (const annotation of annotations) this.indexAnnotation(annotation);
@@ -219,42 +232,85 @@ export class UsersRepository implements OnModuleInit {
     documentId: string,
     input: PatchReadingProgressInput,
   ): Promise<ReadingProgressRecord> {
-    const timestamp = new Date().toISOString();
     const recordId = this.makeProgressRecordId(userId, documentId);
-    const existing = this.progresses.get(recordId);
-    const completedParagraphIds = input.completedParagraphIds === undefined
-      ? existing?.completedParagraphIds ?? []
-      : this.sortStrings([...new Set(input.completedParagraphIds)]);
-    const record: ReadingProgressRecord = {
-      recordId,
-      userId,
-      documentId,
-      chapterId: input.chapterId ?? existing?.chapterId,
-      paragraphId: input.paragraphId ?? existing?.paragraphId,
-      sentenceId: input.sentenceId ?? existing?.sentenceId,
-      scrollPercent: input.scrollPercent ?? existing?.scrollPercent,
-      completedParagraphIds,
-      createdAt: existing?.createdAt ?? timestamp,
-      updatedAt: timestamp,
-    };
+    return this.withProgressWriteLock(recordId, async () => {
+      const timestamp = new Date().toISOString();
+      const existing = this.progresses.get(recordId);
+      const existingRevision = existing?.revision ?? 0;
 
-    this.indexProgress(record);
-    await this.persistRecord('reading_progress', record.recordId, record);
-    return record;
+      if (input.mutationId && input.mutationId === existing?.lastMutationId) {
+        return existing;
+      }
+      if (input.baseRevision !== undefined && input.baseRevision !== existingRevision) {
+        throw new ProgressRevisionConflictError(existing ?? this.emptyProgress(userId, documentId, timestamp));
+      }
+
+      const completedParagraphIds = input.completedParagraphIds === undefined
+        ? existing?.completedParagraphIds ?? []
+        : this.sortStrings([...new Set(input.completedParagraphIds)]);
+      const record: ReadingProgressRecord = {
+        recordId,
+        userId,
+        documentId,
+        chapterId: input.chapterId ?? existing?.chapterId,
+        paragraphId: input.paragraphId ?? existing?.paragraphId,
+        sentenceId: input.sentenceId ?? existing?.sentenceId,
+        scrollPercent: input.scrollPercent ?? existing?.scrollPercent,
+        completedParagraphIds,
+        locatorJSON: input.locatorJSON ?? existing?.locatorJSON,
+        contentHash: input.contentHash ?? existing?.contentHash,
+        clientUpdatedAt: input.clientUpdatedAt ?? existing?.clientUpdatedAt,
+        revision: existingRevision + 1,
+        lastMutationId: input.mutationId ?? existing?.lastMutationId,
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      };
+
+      await this.persistRecord('reading_progress', record.recordId, record);
+      this.indexProgress(record);
+      return record;
+    });
   }
 
   getProgress(userId: string, documentId: string): ReadingProgressRecord {
     const existing = this.progresses.get(this.makeProgressRecordId(userId, documentId));
     if (existing) return existing;
-    const timestamp = new Date().toISOString();
+    return this.emptyProgress(userId, documentId, new Date().toISOString());
+  }
+
+  private emptyProgress(userId: string, documentId: string, timestamp: string): ReadingProgressRecord {
     return {
       recordId: this.makeProgressRecordId(userId, documentId),
       userId,
       documentId,
       completedParagraphIds: [],
+      revision: 0,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
+  }
+
+  private async withProgressWriteLock<T>(
+    recordId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.progressWriteTails.get(recordId) ?? Promise.resolve();
+    let release: (() => void) | undefined;
+    const tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.then(() => tail);
+    this.progressWriteTails.set(recordId, queued);
+
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release?.();
+      if (this.progressWriteTails.get(recordId) === queued) {
+        this.progressWriteTails.delete(recordId);
+      }
+    }
   }
 
   async patchMastery(userId: string, input: PatchMasteryInput): Promise<MasteryProfileRecord> {
