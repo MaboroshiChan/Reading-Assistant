@@ -6,6 +6,8 @@ export default defineConfig({
     environment: 'node',
     include: [
       'reading-app-server/tests/book-context.service.test.ts',
+      'reading-app-server/tests/chapter-open-analysis.service.test.ts',
+      'reading-app-server/tests/pre-reading-workflow.service.test.ts',
       'reading-app-server/tests/knowledge-extraction-workflow.service.test.ts',
       'reading-app-server/tests/quiz-workflow.service.test.ts',
       'reading-app-server/tests/message.service.test.ts',

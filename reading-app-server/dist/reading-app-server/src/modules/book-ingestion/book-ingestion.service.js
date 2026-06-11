@@ -38,38 +38,11 @@ let BookIngestionService = class BookIngestionService {
         this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
     }
     parseUpsertRequest(rawBody, params) {
-        if (!rawBody || rawBody.trim() === '') {
-            (0, book_ingestion_logger_1.bookIngestionLog)('request.parse_failed', {
-                reason: 'empty_body',
-                bookId: params.bookId,
-                chapterId: params.chapterId,
-                pageIndex: params.pageIndex,
-            });
-            throw new common_1.BadRequestException('Request body cannot be empty');
-        }
-        let parsed;
-        try {
-            parsed = JSON.parse(rawBody);
-        }
-        catch (error) {
-            (0, book_ingestion_logger_1.bookIngestionLog)('request.parse_failed', {
-                reason: 'invalid_json',
-                bookId: params.bookId,
-                chapterId: params.chapterId,
-                pageIndex: params.pageIndex,
-                error: error instanceof Error ? error.message : String(error),
-            });
-            throw new common_1.BadRequestException(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        if (!isPlainObject(parsed)) {
-            (0, book_ingestion_logger_1.bookIngestionLog)('request.parse_failed', {
-                reason: 'non_object_body',
-                bookId: params.bookId,
-                chapterId: params.chapterId,
-                pageIndex: params.pageIndex,
-            });
-            throw new common_1.BadRequestException('Request body must be a JSON object');
-        }
+        const parsed = this.parseJsonObjectBody(rawBody, {
+            bookId: params.bookId,
+            chapterId: params.chapterId,
+            pageIndex: params.pageIndex,
+        });
         const bookId = this.requireString(parsed.bookId, 'bookId');
         const chapterId = this.requireString(parsed.chapterId, 'chapterId');
         const sourceHash = this.requireString(parsed.sourceHash, 'sourceHash');
@@ -156,7 +129,134 @@ let BookIngestionService = class BookIngestionService {
             bookIngestionCompleted,
         };
     }
+    parseBatchUpsertRequest(rawBody, params) {
+        const parsed = this.parseJsonObjectBody(rawBody, {
+            bookId: params.bookId,
+            chapterId: params.chapterId,
+        });
+        const bookId = this.requireString(parsed.bookId, 'bookId');
+        const chapterId = this.requireString(parsed.chapterId, 'chapterId');
+        const chapterIndex = coerceNonNegativeInteger(parsed.chapterIndex, 'chapterIndex');
+        if (params.bookId !== bookId) {
+            (0, book_ingestion_logger_1.bookIngestionLog)('batch.request.parse_failed', {
+                reason: 'book_id_mismatch',
+                pathBookId: params.bookId,
+                bodyBookId: bookId,
+                chapterId,
+            });
+            throw new common_1.BadRequestException('Path bookId does not match body bookId');
+        }
+        if (params.chapterId !== chapterId) {
+            (0, book_ingestion_logger_1.bookIngestionLog)('batch.request.parse_failed', {
+                reason: 'chapter_id_mismatch',
+                bookId,
+                pathChapterId: params.chapterId,
+                bodyChapterId: chapterId,
+            });
+            throw new common_1.BadRequestException('Path chapterId does not match body chapterId');
+        }
+        if (!Array.isArray(parsed.pages) || parsed.pages.length === 0) {
+            (0, book_ingestion_logger_1.bookIngestionLog)('batch.request.parse_failed', {
+                reason: 'invalid_pages',
+                bookId,
+                chapterId,
+            });
+            throw new common_1.BadRequestException('pages must be a non-empty array');
+        }
+        const pages = parsed.pages.map((page, index) => this.parseBatchPage(page, index));
+        let bookMetadata;
+        if (parsed.bookMetadata !== undefined) {
+            if (!isPlainObject(parsed.bookMetadata)) {
+                throw new common_1.BadRequestException('bookMetadata must be a JSON object when provided');
+            }
+            bookMetadata = { ...parsed.bookMetadata };
+        }
+        const chapterTitle = parsed.chapterTitle === undefined
+            ? undefined
+            : this.requireOptionalString(parsed.chapterTitle, 'chapterTitle');
+        const chapterIngestionCompleted = parsed.chapterIngestionCompleted === undefined
+            ? undefined
+            : this.requireBoolean(parsed.chapterIngestionCompleted, 'chapterIngestionCompleted');
+        const bookIngestionCompleted = parsed.bookIngestionCompleted === undefined
+            ? undefined
+            : this.requireBoolean(parsed.bookIngestionCompleted, 'bookIngestionCompleted');
+        (0, book_ingestion_logger_1.bookIngestionLog)('batch.request.parsed', {
+            bookId,
+            chapterId,
+            chapterIndex,
+            chapterTitle,
+            pageCount: pages.length,
+            pageIndices: pages.map((page) => page.pageIndex),
+            hasBookMetadata: bookMetadata !== undefined,
+            chapterIngestionCompleted,
+            bookIngestionCompleted,
+        });
+        return {
+            bookId,
+            chapterId,
+            chapterIndex,
+            chapterTitle,
+            pages,
+            bookMetadata,
+            chapterIngestionCompleted,
+            bookIngestionCompleted,
+        };
+    }
     upsertPageFragment(input) {
+        return this.upsertPageFragmentInternal(input, true);
+    }
+    upsertChapterBatch(input) {
+        const orderedPages = [...input.pages].sort((left, right) => left.pageIndex - right.pageIndex);
+        let lastResponse = null;
+        let anyChanged = false;
+        for (const page of orderedPages) {
+            lastResponse = this.upsertPageFragmentInternal({
+                bookId: input.bookId,
+                chapterId: input.chapterId,
+                chapterIndex: input.chapterIndex,
+                chapterTitle: input.chapterTitle,
+                pageIndex: page.pageIndex,
+                sourceHash: page.sourceHash,
+                pageParagraphs: page.pageParagraphs,
+                bookMetadata: input.bookMetadata,
+            }, false);
+            anyChanged ||= !lastResponse.deduped;
+        }
+        if (!lastResponse) {
+            throw new common_1.BadRequestException('pages must be a non-empty array');
+        }
+        if (runtime_config_1.config.autoSubmitKnowledgeExtractionWorkflow
+            && anyChanged
+            && lastResponse.chapterTextAvailable
+            && input.bookIngestionCompleted === true
+            && this.knowledgeExtractionWorkflowService) {
+            void this.submitKnowledgeExtractionWorkflowAfterBookIngestion(lastResponse.bookId);
+        }
+        (0, book_ingestion_logger_1.bookIngestionLog)('batch.upsert_completed', {
+            bookId: lastResponse.bookId,
+            chapterId: lastResponse.chapterId,
+            chapterIndex: lastResponse.chapterIndex,
+            pageCount: orderedPages.length,
+            pageIndices: orderedPages.map((page) => page.pageIndex),
+            deduped: !anyChanged,
+            snapshotVersion: lastResponse.snapshotVersion,
+            pageCountInChapter: lastResponse.pageCountInChapter,
+            chapterContentHash: lastResponse.chapterContentHash,
+            chapterTextAvailable: lastResponse.chapterTextAvailable,
+            bookIngestionCompleted: input.bookIngestionCompleted === true,
+        });
+        return {
+            bookId: lastResponse.bookId,
+            chapterId: lastResponse.chapterId,
+            chapterIndex: lastResponse.chapterIndex,
+            deduped: !anyChanged,
+            snapshotVersion: lastResponse.snapshotVersion,
+            chapterContentHash: lastResponse.chapterContentHash,
+            pageCountInChapter: lastResponse.pageCountInChapter,
+            chapterTextAvailable: lastResponse.chapterTextAvailable,
+        };
+    }
+    upsertPageFragmentInternal(input, allowAutoSubmit) {
         const result = this.repository.upsertPageFragment(input);
         const chapterTextAvailable = result.chapter.chapterTextMaterialized.trim().length > 0;
         (0, book_ingestion_logger_1.bookIngestionLog)('page.upsert_completed', {
@@ -172,7 +272,9 @@ let BookIngestionService = class BookIngestionService {
             chapterTextAvailable,
             pageTextLength: result.page.pageTextMaterialized.length,
         });
-        if (runtime_config_1.config.autoSubmitKnowledgeExtractionWorkflow
+        if (allowAutoSubmit
+            &&
+                runtime_config_1.config.autoSubmitKnowledgeExtractionWorkflow
             && !result.deduped
             && chapterTextAvailable
             && input.bookIngestionCompleted === true
@@ -211,25 +313,48 @@ let BookIngestionService = class BookIngestionService {
                 snapshotVersion: book.snapshotVersion,
                 chapterCount: chapters.length,
             });
+            let submittedCount = 0;
+            let failedCount = 0;
             for (const chapter of chapters) {
-                const response = this.knowledgeExtractionWorkflowService?.submitKnowledgeExtractionWorkflow({
-                    bookId: book.bookId,
-                    chapterId: chapter.chapterId,
-                    chapterIndex: chapter.chapterIndex,
-                    workflowVersion: 'v1',
-                    expectedSnapshotVersion: book.snapshotVersion,
-                    expectedChapterContentHash: chapter.chapterContentHash,
-                });
-                (0, book_ingestion_logger_1.bookIngestionLog)('knowledge_extraction_workflow.auto_submitted', {
-                    bookId: book.bookId,
-                    chapterId: chapter.chapterId,
-                    chapterIndex: chapter.chapterIndex,
-                    snapshotVersion: book.snapshotVersion,
-                    chapterContentHash: chapter.chapterContentHash,
-                    workflowRunId: response?.workflowRunId,
-                    deduped: response?.deduped,
-                });
+                try {
+                    const response = this.knowledgeExtractionWorkflowService?.submitKnowledgeExtractionWorkflow({
+                        bookId: book.bookId,
+                        chapterId: chapter.chapterId,
+                        chapterIndex: chapter.chapterIndex,
+                        workflowVersion: 'v1',
+                        expectedSnapshotVersion: book.snapshotVersion,
+                        expectedChapterContentHash: chapter.chapterContentHash,
+                    });
+                    submittedCount += 1;
+                    (0, book_ingestion_logger_1.bookIngestionLog)('knowledge_extraction_workflow.auto_submitted', {
+                        bookId: book.bookId,
+                        chapterId: chapter.chapterId,
+                        chapterIndex: chapter.chapterIndex,
+                        snapshotVersion: book.snapshotVersion,
+                        chapterContentHash: chapter.chapterContentHash,
+                        workflowRunId: response?.workflowRunId,
+                        deduped: response?.deduped,
+                    });
+                }
+                catch (error) {
+                    failedCount += 1;
+                    (0, book_ingestion_logger_1.bookIngestionLog)('knowledge_extraction_workflow.auto_submit_chapter_failed', {
+                        bookId: book.bookId,
+                        chapterId: chapter.chapterId,
+                        chapterIndex: chapter.chapterIndex,
+                        snapshotVersion: book.snapshotVersion,
+                        chapterContentHash: chapter.chapterContentHash,
+                        error: error instanceof Error ? error.message : String(error),
+                    });
+                }
             }
+            (0, book_ingestion_logger_1.bookIngestionLog)('knowledge_extraction_workflow.auto_submit_finished', {
+                bookId: book.bookId,
+                snapshotVersion: book.snapshotVersion,
+                chapterCount: chapters.length,
+                submittedCount,
+                failedCount,
+            });
         }
         catch (error) {
             (0, book_ingestion_logger_1.bookIngestionLog)('knowledge_extraction_workflow.auto_submit_failed', {
@@ -486,6 +611,56 @@ let BookIngestionService = class BookIngestionService {
             throw new common_1.BadRequestException('pageIndex must be a non-negative integer');
         }
         return parsed;
+    }
+    parseJsonObjectBody(rawBody, context) {
+        if (!rawBody || rawBody.trim() === '') {
+            (0, book_ingestion_logger_1.bookIngestionLog)('request.parse_failed', {
+                reason: 'empty_body',
+                ...context,
+            });
+            throw new common_1.BadRequestException('Request body cannot be empty');
+        }
+        let parsed;
+        try {
+            parsed = JSON.parse(rawBody);
+        }
+        catch (error) {
+            (0, book_ingestion_logger_1.bookIngestionLog)('request.parse_failed', {
+                reason: 'invalid_json',
+                ...context,
+                error: error instanceof Error ? error.message : String(error),
+            });
+            throw new common_1.BadRequestException(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (!isPlainObject(parsed)) {
+            (0, book_ingestion_logger_1.bookIngestionLog)('request.parse_failed', {
+                reason: 'non_object_body',
+                ...context,
+            });
+            throw new common_1.BadRequestException('Request body must be a JSON object');
+        }
+        return parsed;
+    }
+    parseBatchPage(value, index) {
+        if (!isPlainObject(value)) {
+            throw new common_1.BadRequestException(`pages.${index} must be an object`);
+        }
+        const pageIndex = coerceNonNegativeInteger(value.pageIndex, `pages.${index}.pageIndex`);
+        const sourceHash = this.requireString(value.sourceHash, `pages.${index}.sourceHash`);
+        if (!isPlainObject(value.pageParagraphs) || Object.keys(value.pageParagraphs).length === 0) {
+            throw new common_1.BadRequestException(`pages.${index}.pageParagraphs must be a non-empty object`);
+        }
+        const pageParagraphs = Object.fromEntries(Object.entries(value.pageParagraphs).map(([key, paragraphValue]) => {
+            if (!isNonEmptyString(paragraphValue)) {
+                throw new common_1.BadRequestException(`pages.${index}.pageParagraphs.${key} must be a non-empty string`);
+            }
+            return [key, paragraphValue];
+        }));
+        return {
+            pageIndex,
+            sourceHash,
+            pageParagraphs,
+        };
     }
     requireString(value, fieldName) {
         if (!isNonEmptyString(value)) {

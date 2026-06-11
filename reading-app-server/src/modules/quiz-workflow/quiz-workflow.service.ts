@@ -38,11 +38,13 @@ import type {
   SubmitQuizWorkflowInput,
 } from './quiz-workflow.types';
 import { createLLMClient, extractJsonFromText } from '../../../services/llmService';
+import { config } from '../../config/runtime-config';
 import { buildSharedChapterPrefixCache } from '../../utils/chapter-prefix-cache';
 import { retryLLMOperation } from '../../utils/llm-retry';
 import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
+import { PreReadingWorkflowRepository } from '../pre-reading-workflow/pre-reading-workflow.repository';
 
-const PROMPT_VERSION = 'quiz.v3.1';
+const PROMPT_VERSION = 'quiz.v3.2';
 const PROMPT_PATH = resolvePromptPath('quiz.txt');
 const MAX_WORKFLOW_LLM_RETRIES = 2;
 const DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS = 5_000;
@@ -84,6 +86,8 @@ type PlannedKnowledgeUnit = KnowledgeUnit & {
   targetQuestionType: QuizWorkflowQuestionType;
 };
 
+type QuizWorkflowPreReadingGuide = Pick<QuizWorkflowResultPayload, 'teaser' | 'pre_reading_questions'>;
+
 @Injectable()
 export class QuizWorkflowService {
   private readonly bookIngestionRepository: BookIngestionRepository;
@@ -99,6 +103,8 @@ export class QuizWorkflowService {
     knowledgeExtractionWorkflowRepository: KnowledgeExtractionWorkflowRepository,
     @Inject(QuizWorkflowRepository) quizWorkflowRepository: QuizWorkflowRepository,
     @Inject(WorkflowQueueService) workflowQueueService: WorkflowQueueService,
+    @Inject(PreReadingWorkflowRepository)
+    private readonly preReadingWorkflowRepository?: PreReadingWorkflowRepository,
   ) {
     this.bookIngestionRepository = bookIngestionRepository;
     this.bookContextService = bookContextService;
@@ -457,6 +463,11 @@ export class QuizWorkflowService {
     const bookContext = this.bookContextService.buildBookContextBundle(input.bookId, input.chapterId);
     const chapterContext = this.bookContextService.buildChapterContextBundle(input.bookId, input.chapterId);
     const groupedUnits = Array.from(this.groupUnitsByAnchorPage(selectedUnits).values());
+    const preReadingGuide = this.getMatchingPreReadingGuide(
+      input.bookId,
+      input.chapterId,
+      input.chapterContentHash,
+    );
 
     const questions: QuizWorkflowQuestion[] = [];
     for (const groupUnits of groupedUnits) {
@@ -485,7 +496,21 @@ export class QuizWorkflowService {
       throw new Error('Quiz LLM response did not contain any valid questions');
     }
 
-    return { questions: questions.slice(0, 5) };
+    return {
+      teaser: preReadingGuide.teaser,
+      pre_reading_questions: preReadingGuide.pre_reading_questions,
+      questions: questions.slice(0, 5),
+    };
+  }
+
+  private getMatchingPreReadingGuide(
+    bookId: string,
+    chapterId: string,
+    chapterContentHash: string,
+  ): QuizWorkflowPreReadingGuide {
+    const stored = this.preReadingWorkflowRepository?.getLatestResult(bookId, chapterId);
+    if (!stored || stored.chapterContentHash !== chapterContentHash) return {};
+    return stored.result;
   }
 
   private async generateQuizForUnits(input: {
@@ -508,6 +533,7 @@ export class QuizWorkflowService {
     const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
     const llmClient = createLLMClient({
       systemPrompt,
+      model: config.quizWorkflowModel,
       prefixCache: buildSharedChapterPrefixCache({
         bookId: input.bookId,
         chapterId: input.chapterId,

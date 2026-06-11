@@ -215,6 +215,47 @@ describe('BookIngestionRepository', () => {
     );
   });
 
+  test('reloads chapter files even when the split manifest omits chapter ids', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'book-ingestion-stale-manifest-'));
+    process.env.BOOK_INGESTION_DATA_DIR = dataDir;
+
+    const writer = new BookIngestionRepository();
+    writer.upsertPageFragment({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Recovered Chapter',
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: {
+        '0': 'persisted paragraph',
+      },
+      bookMetadata: {
+        title: 'Persistent Book',
+      },
+    });
+
+    const booksDir = path.join(dataDir, 'books');
+    const [bookDirectory] = await fs.readdir(booksDir);
+    const manifestPath = path.join(booksDir, bookDirectory, 'book.json');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as {
+      chapterIds?: string[];
+    };
+
+    manifest.chapterIds = [];
+    await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+    const reader = new BookIngestionRepository();
+
+    expect(reader.getBook('book-1')?.snapshotVersion).toBe(1);
+    expect(reader.getChapter('book-1', 'chapter-1')).toMatchObject({
+      chapterId: 'chapter-1',
+      chapterTitle: 'Recovered Chapter',
+      chapterTextMaterialized: 'persisted paragraph',
+    });
+    expect(reader.getPage('book-1', 'chapter-1', 0)?.pageTextMaterialized).toBe('persisted paragraph');
+  });
+
   test('migrates legacy store.json into split files on startup', async () => {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'book-ingestion-legacy-'));
     process.env.BOOK_INGESTION_DATA_DIR = dataDir;

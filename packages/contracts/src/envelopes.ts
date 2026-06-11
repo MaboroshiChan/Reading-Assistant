@@ -506,6 +506,8 @@ export interface KnowledgeRelation {
 export interface AnalyzeKnowledgeExtractionData {
   title: string;
   summary: string;
+  teaser?: string;
+  pre_reading_questions?: string[];
   people: KnowledgePerson[];
   ideas: KnowledgeIdea[];
   events: KnowledgeEvent[];

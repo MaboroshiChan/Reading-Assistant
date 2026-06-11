@@ -228,15 +228,10 @@ describe('message service', () => {
           importance: 1,
           reason: 'Core claim',
         },
-        {
-          sentence_ref: payload.sentences[2].ref,
-          sentence_text: payload.sentences[2].text,
-          importance: 0,
-          reason: '',
-        },
       ],
       sentence_keywords: [],
     });
+    expect((firstData as { key_sentences: unknown[] }).key_sentences).toHaveLength(1);
 
     const second = await handleRawMessage(raw);
     let secondText = '';

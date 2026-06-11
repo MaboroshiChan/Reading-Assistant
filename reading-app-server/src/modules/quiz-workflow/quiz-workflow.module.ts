@@ -1,12 +1,17 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { BookIngestionModule } from '../book-ingestion/book-ingestion.module';
 import { KnowledgeExtractionWorkflowModule } from '../knowledge-extraction-workflow/knowledge-extraction-workflow.module';
+import { PreReadingWorkflowModule } from '../pre-reading-workflow/pre-reading-workflow.module';
 import { QuizWorkflowController } from './quiz-workflow.controller';
 import { QuizWorkflowRepository } from './quiz-workflow.repository';
 import { QuizWorkflowService } from './quiz-workflow.service';
 
 @Module({
-  imports: [BookIngestionModule, forwardRef(() => KnowledgeExtractionWorkflowModule)],
+  imports: [
+    forwardRef(() => BookIngestionModule),
+    forwardRef(() => PreReadingWorkflowModule),
+    forwardRef(() => KnowledgeExtractionWorkflowModule),
+  ],
   controllers: [QuizWorkflowController],
   providers: [QuizWorkflowRepository, QuizWorkflowService],
   exports: [QuizWorkflowRepository, QuizWorkflowService],

@@ -214,14 +214,7 @@ let BookIngestionRepository = class BookIngestionRepository {
             if (!node_fs_1.default.existsSync(manifestPath))
                 continue;
             const manifest = JSON.parse(node_fs_1.default.readFileSync(manifestPath, 'utf8'));
-            const chapters = new Map();
-            for (const chapterId of manifest.chapterIds ?? []) {
-                const chapterPath = this.getChapterPath(manifest.bookId, chapterId);
-                if (!node_fs_1.default.existsSync(chapterPath))
-                    continue;
-                const chapter = JSON.parse(node_fs_1.default.readFileSync(chapterPath, 'utf8'));
-                chapters.set(chapterId, this.deserializeChapter(chapter));
-            }
+            const chapters = this.loadSplitBookChapters(manifest);
             this.books.set(manifest.bookId, {
                 bookId: manifest.bookId,
                 bookMetadata: manifest.bookMetadata,
@@ -231,6 +224,34 @@ let BookIngestionRepository = class BookIngestionRepository {
                 chapters,
             });
         }
+    }
+    loadSplitBookChapters(manifest) {
+        const chapters = new Map();
+        const loadedChapterPaths = new Set();
+        for (const chapterId of manifest.chapterIds ?? []) {
+            const chapterPath = this.getChapterPath(manifest.bookId, chapterId);
+            const chapter = this.readPersistedChapter(chapterPath, manifest.bookId, chapterId);
+            if (!chapter)
+                continue;
+            loadedChapterPaths.add(chapterPath);
+            chapters.set(chapter.chapterId, chapter);
+        }
+        const chaptersDir = this.getChaptersDir(manifest.bookId);
+        if (!node_fs_1.default.existsSync(chaptersDir)) {
+            return chapters;
+        }
+        for (const entry of node_fs_1.default.readdirSync(chaptersDir, { withFileTypes: true })) {
+            if (!entry.isFile() || !entry.name.endsWith('.json'))
+                continue;
+            const chapterPath = node_path_1.default.join(chaptersDir, entry.name);
+            if (loadedChapterPaths.has(chapterPath))
+                continue;
+            const chapter = this.readPersistedChapter(chapterPath, manifest.bookId);
+            if (!chapter)
+                continue;
+            chapters.set(chapter.chapterId, chapter);
+        }
+        return chapters;
     }
     loadLegacyStore() {
         if (!node_fs_1.default.existsSync(this.legacyStorePath)) {
@@ -308,6 +329,23 @@ let BookIngestionRepository = class BookIngestionRepository {
             createdAt: chapter.createdAt ?? fallbackTimestamp,
             pages: new Map(Object.entries(chapter.pages ?? {}).map(([pageIndex, page]) => [Number(pageIndex), page])),
         };
+    }
+    readPersistedChapter(chapterPath, bookId, fallbackChapterId) {
+        if (!node_fs_1.default.existsSync(chapterPath)) {
+            return null;
+        }
+        const chapter = JSON.parse(node_fs_1.default.readFileSync(chapterPath, 'utf8'));
+        const chapterId = typeof chapter.chapterId === 'string' && chapter.chapterId.trim().length > 0
+            ? chapter.chapterId
+            : fallbackChapterId;
+        if (!chapterId) {
+            return null;
+        }
+        return this.deserializeChapter({
+            ...chapter,
+            chapterId,
+            bookId: chapter.bookId ?? bookId,
+        });
     }
     getBookDir(bookId) {
         return node_path_1.default.join(this.booksDirPath, this.makeSegment(bookId));

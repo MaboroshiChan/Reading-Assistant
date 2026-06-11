@@ -35,6 +35,7 @@ import type {
 } from '../book-ingestion/book-context.types';
 import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
 import type { CanonicalChapterRecord } from '../book-ingestion/book-ingestion.types';
+import { QuizWorkflowRepository } from '../quiz-workflow/quiz-workflow.repository';
 import { QuizWorkflowService } from '../quiz-workflow/quiz-workflow.service';
 import { workflowLog } from '../workflow.logger';
 import type {
@@ -145,6 +146,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private readonly knowledgeExtractionWorkflowRepository: KnowledgeExtractionWorkflowRepository;
   private readonly workflowQueueService: WorkflowQueueService;
   private readonly moduleRef?: ModuleRef;
+  private readonly quizWorkflowRepository?: QuizWorkflowRepository;
 
   constructor(
     @Inject(forwardRef(() => BookIngestionRepository))
@@ -156,6 +158,9 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     @Inject(WorkflowQueueService)
     workflowQueueService: WorkflowQueueService,
     @Optional()
+    @Inject(forwardRef(() => QuizWorkflowRepository))
+    quizWorkflowRepository?: QuizWorkflowRepository,
+    @Optional()
     @Inject(ModuleRef)
     moduleRef?: ModuleRef,
   ) {
@@ -163,6 +168,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     this.bookContextService = bookContextService;
     this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
     this.workflowQueueService = workflowQueueService;
+    this.quizWorkflowRepository = quizWorkflowRepository;
     this.moduleRef = moduleRef;
   }
 
@@ -396,7 +402,13 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       chapterContentHash: run.chapterContentHash,
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
-      result: run.output,
+      result: this.withLatestQuizPreReading(
+        run.output,
+        run.bookId,
+        run.chapterId,
+        run.snapshotVersion,
+        run.chapterContentHash,
+      ),
     };
   }
 
@@ -431,7 +443,42 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       snapshotVersion: result.snapshotVersion,
       chapterContentHash: result.chapterContentHash,
       updatedAt: result.updatedAt,
-      result: result.result,
+      result: this.withLatestQuizPreReading(
+        result.result,
+        result.bookId,
+        result.chapterId,
+        result.snapshotVersion,
+        result.chapterContentHash,
+      ),
+    };
+  }
+
+  private withLatestQuizPreReading(
+    result: AnalyzeKnowledgeExtractionData,
+    bookId: string,
+    chapterId: string,
+    snapshotVersion: number,
+    chapterContentHash: string,
+  ): AnalyzeKnowledgeExtractionData {
+    const latestQuiz = this.quizWorkflowRepository?.getLatestResult(bookId, chapterId);
+    if (!latestQuiz) return result;
+    if (
+      latestQuiz.snapshotVersion !== snapshotVersion
+      || latestQuiz.chapterContentHash !== chapterContentHash
+    ) {
+      return result;
+    }
+
+    const teaser = asString(latestQuiz.result.teaser);
+    const preReadingQuestions = this.sanitizeStringArray(latestQuiz.result.pre_reading_questions);
+    if (!teaser && !preReadingQuestions) {
+      return result;
+    }
+
+    return {
+      ...result,
+      teaser: teaser ?? result.teaser,
+      pre_reading_questions: preReadingQuestions ?? result.pre_reading_questions,
     };
   }
 
@@ -893,6 +940,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
     const llmClient = createLLMClient({
       systemPrompt,
+      model: config.knowledgeExtractionWorkflowModel,
       prefixCache: buildSharedChapterPrefixCache({
         bookId: input.bookId,
         chapterId: input.chapterId,
@@ -906,6 +954,17 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           language: asString(metadataRecord.language),
         },
       }),
+      logContext: {
+        workflowKind: 'knowledge_extraction',
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        chapterIndex: input.chapterIndex,
+        pageIndex: input.piece.pageIndex,
+        pageNumber: input.piece.pageNumber,
+        pieceIndex: input.piece.pieceIndex,
+        totalPieces: input.piece.totalPieces,
+        sourceHash: input.piece.sourceHash,
+      },
     });
     const response = await llmClient.json(userPrompt);
 

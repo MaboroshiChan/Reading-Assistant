@@ -227,4 +227,70 @@ describe('book ingestion integration', () => {
       message: 'Path pageIndex does not match body pageIndex',
     });
   });
+
+  test('uploads a chapter batch and exposes canonical chapter state', async () => {
+    const batchUpload = await fetch(`${baseUrl}/v1/books/book-batch/chapters/10/pages:batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bookId: 'book-batch',
+        chapterId: '10',
+        chapterIndex: 10,
+        chapterTitle: 'Chapter Eleven',
+        pages: [
+          {
+            pageIndex: 1,
+            sourceHash: 'hash-batch-1',
+            pageParagraphs: {
+              '0': 'second page',
+            },
+          },
+          {
+            pageIndex: 0,
+            sourceHash: 'hash-batch-0',
+            pageParagraphs: {
+              '0': 'first page',
+            },
+          },
+        ],
+        chapterIngestionCompleted: true,
+      }),
+    });
+
+    const batchJson = await batchUpload.json();
+    expect(batchUpload.status).toBe(201);
+    expect(batchJson).toMatchObject({
+      bookId: 'book-batch',
+      chapterId: '10',
+      chapterIndex: 10,
+      deduped: false,
+      snapshotVersion: 2,
+      pageCountInChapter: 2,
+      chapterTextAvailable: true,
+    });
+
+    const chapterResponse = await fetch(`${baseUrl}/v1/books/book-batch/chapters/10`);
+    const chapterJson = await chapterResponse.json();
+    expect(chapterResponse.status).toBe(200);
+    expect(chapterJson).toMatchObject({
+      bookId: 'book-batch',
+      chapterId: '10',
+      chapterIndex: 10,
+      pageCount: 2,
+      chapterContentHash: batchJson.chapterContentHash,
+      chapterTextAvailable: true,
+    });
+
+    const pageResponse = await fetch(`${baseUrl}/v1/books/book-batch/chapters/10/pages/0`);
+    const pageJson = await pageResponse.json();
+    expect(pageResponse.status).toBe(200);
+    expect(pageJson).toMatchObject({
+      pageIndex: 0,
+      sourceHash: 'hash-batch-0',
+      snapshotVersion: 2,
+    });
+    expect(pageJson.pageTextMaterialized).toBe('first page');
+  });
 });

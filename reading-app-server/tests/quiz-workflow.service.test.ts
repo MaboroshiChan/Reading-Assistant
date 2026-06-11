@@ -8,6 +8,7 @@ import { BookIngestionRepository } from '../src/modules/book-ingestion/book-inge
 import { KnowledgeExtractionWorkflowRepository } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.repository';
 import { QuizWorkflowRepository } from '../src/modules/quiz-workflow/quiz-workflow.repository';
 import { QuizWorkflowService } from '../src/modules/quiz-workflow/quiz-workflow.service';
+import { PreReadingWorkflowRepository } from '../src/modules/pre-reading-workflow/pre-reading-workflow.repository';
 import { WorkflowQueueService } from '../src/modules/workflow-queue/workflow-queue.service';
 import * as llmService from '../services/llmService';
 
@@ -168,12 +169,14 @@ describe('QuizWorkflowService', () => {
     const bookRepository = await createBookRepository();
     const knowledgeRepository = new KnowledgeExtractionWorkflowRepository();
     const quizRepository = new QuizWorkflowRepository();
+    const preReadingRepository = new PreReadingWorkflowRepository();
     const service = new QuizWorkflowService(
       bookRepository,
       new BookContextService(bookRepository, knowledgeRepository),
       knowledgeRepository,
       quizRepository,
       new WorkflowQueueService(),
+      preReadingRepository,
     );
 
     bookRepository.upsertPageFragment({
@@ -225,6 +228,28 @@ describe('QuizWorkflowService', () => {
       snapshotVersion: book.snapshotVersion,
       chapterContentHash: chapter.chapterContentHash,
       result: knowledgeResult,
+    });
+    const preReadingRun = preReadingRepository.createOrReuseRun({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      idempotencyKey: 'pre-reading:chapter-1',
+      expectedSnapshotVersion: book.snapshotVersion,
+      expectedChapterContentHash: chapter.chapterContentHash,
+    });
+    preReadingRepository.completeRun({
+      workflowRunId: preReadingRun.run.id,
+      snapshotVersion: book.snapshotVersion,
+      chapterContentHash: chapter.chapterContentHash,
+      result: {
+        teaser: 'Watch how freedom turns from an idea into a public test.',
+        pre_reading_questions: [
+          'What pressure turns an idea into action?',
+          'Which public moments reveal the chapter\'s real stakes?',
+          'How does the chapter ask you to judge courage or risk?',
+        ],
+      },
     });
 
     const units = (service as never).deriveKnowledgeUnits(knowledgeResult) as Array<{
@@ -295,6 +320,12 @@ describe('QuizWorkflowService', () => {
     });
 
     const result = service.getWorkflowResult(submit.workflowRunId).result;
+    expect(result.teaser).toBe('Watch how freedom turns from an idea into a public test.');
+    expect(result.pre_reading_questions).toEqual([
+      'What pressure turns an idea into action?',
+      'Which public moments reveal the chapter\'s real stakes?',
+      'How does the chapter ask you to judge courage or risk?',
+    ]);
     expect(result.questions).toHaveLength(4);
     expect(result.questions).toEqual([
       expect.objectContaining({
@@ -409,12 +440,14 @@ describe('QuizWorkflowService', () => {
         sourcePageRefs: [{ pageIndex: 2, pageNumber: 3 }],
       }),
     ]);
-    expect(prompts[0]).toContain('Source knowledge units:');
-    expect(prompts[0]).toContain('Current chapter summary:');
-    expect(prompts[0]).toContain('Page window:');
-    expect(prompts[0]).toContain('targetQuestionType');
-    expect(prompts[0]).toContain('sourceEvidence');
+    expect(prompts.some((prompt) => prompt.includes('Source knowledge units:'))).toBe(true);
+    expect(prompts.some((prompt) => prompt.includes('Current chapter summary:'))).toBe(true);
+    expect(prompts.some((prompt) => prompt.includes('Page window:'))).toBe(true);
+    expect(prompts.some((prompt) => prompt.includes('targetQuestionType'))).toBe(true);
+    expect(prompts.some((prompt) => prompt.includes('sourceEvidence'))).toBe(true);
+    expect(prompts.some((prompt) => prompt.includes('Generate a spoiler-light chapter pre-reading guide'))).toBe(false);
     expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gemini-2.5-flash',
       prefixCache: expect.objectContaining({
         cacheKey: `chapter_context.v1:book-1:chapter-1:${chapter.chapterContentHash}`,
         systemPromptMode: 'request',

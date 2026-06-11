@@ -29,6 +29,10 @@ let BookIngestionController = class BookIngestionController {
         const request = this.bookIngestionService.parseUpsertRequest(rawBody, params);
         return this.bookIngestionService.upsertPageFragment(request);
     }
+    upsertChapterBatch(bookId, chapterId, rawBody) {
+        const request = this.bookIngestionService.parseBatchUpsertRequest(rawBody, { bookId, chapterId });
+        return this.bookIngestionService.upsertChapterBatch(request);
+    }
     getChapter(bookId, chapterId) {
         return this.bookIngestionService.getChapter(bookId, chapterId);
     }
@@ -50,6 +54,15 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String, Object]),
     __metadata("design:returntype", Object)
 ], BookIngestionController.prototype, "upsertPageFragment", null);
+__decorate([
+    (0, common_1.Post)(':bookId/chapters/:chapterId/pages:batch'),
+    __param(0, (0, common_1.Param)('bookId')),
+    __param(1, (0, common_1.Param)('chapterId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Object)
+], BookIngestionController.prototype, "upsertChapterBatch", null);
 __decorate([
     (0, common_1.Get)(':bookId/chapters/:chapterId'),
     __param(0, (0, common_1.Param)('bookId')),

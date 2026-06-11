@@ -31,6 +31,7 @@ Rules:
 - Do not lemmatize, paraphrase, summarize, or change capitalization.
 - Select key sentences that carry the chunk's main claims, definitions, contrasts, causes, conclusions, or examples.
 - Prefer 2 to 5 key sentences per chunk, fewer for short chunks.
+- Return at most one key sentence per paragraph.
 - `importance` must be a number between 0 and 1.
 - `reason` must be a short explanation in plain English, ideally 4 to 12 words.
 - `reason` should explain why the sentence matters, not restate the whole sentence.

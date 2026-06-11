@@ -573,6 +573,13 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     return this.latestResultsByChapter.get(chapterKey(bookId, chapterId)) ?? null;
   }
 
+  findLatestRunForChapter(bookId: string, chapterId: string): KnowledgeExtractionWorkflowRunRecord | null {
+    const candidates = Array.from(this.runs.values())
+      .filter((run) => run.bookId === bookId && run.chapterId === chapterId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    return candidates[0] ?? null;
+  }
+
   async ensureSchema(): Promise<void> {
     if (!this.surrealService) return;
 

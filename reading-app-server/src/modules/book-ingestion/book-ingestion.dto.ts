@@ -16,12 +16,40 @@ export interface UpsertBookPageFragmentRequestDto {
   bookIngestionCompleted?: boolean;
 }
 
+export interface UpsertBookChapterBatchPageDto {
+  pageIndex: number;
+  sourceHash: string;
+  pageParagraphs: Record<string, string>;
+}
+
+export interface UpsertBookChapterBatchRequestDto {
+  bookId: string;
+  chapterId: string;
+  chapterIndex: number;
+  chapterTitle?: string;
+  pages: UpsertBookChapterBatchPageDto[];
+  bookMetadata?: Record<string, unknown>;
+  chapterIngestionCompleted?: boolean;
+  bookIngestionCompleted?: boolean;
+}
+
 export interface UpsertBookPageFragmentResponseDto {
   bookId: string;
   chapterId: string;
   chapterIndex: number;
   pageIndex: number;
   sourceHash: string;
+  deduped: boolean;
+  snapshotVersion: number;
+  chapterContentHash: string;
+  pageCountInChapter: number;
+  chapterTextAvailable: boolean;
+}
+
+export interface UpsertBookChapterBatchResponseDto {
+  bookId: string;
+  chapterId: string;
+  chapterIndex: number;
   deduped: boolean;
   snapshotVersion: number;
   chapterContentHash: string;

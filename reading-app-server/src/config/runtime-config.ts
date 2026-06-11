@@ -6,6 +6,9 @@ import { registerAs } from '@nestjs/config';
 export interface Config {
   port: number;
   model: string;
+  quizWorkflowModel: string;
+  knowledgeExtractionWorkflowModel: string;
+  chapterKeywordsWorkflowModel: string;
   timeoutMs: number;
   cacheMax: number;
   cacheTtlMs: number;
@@ -47,6 +50,9 @@ loadEnvFiles();
 export const createAppConfig = (): Config => ({
   port: Number(process.env.PORT ?? 8787),
   model: process.env.MODEL_ID ?? 'gemini-flash-lite-latest',
+  quizWorkflowModel: process.env.QUIZ_WORKFLOW_MODEL_ID ?? 'gemini-2.5-flash',
+  knowledgeExtractionWorkflowModel: process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID ?? 'gemini-flash-lite-latest',
+  chapterKeywordsWorkflowModel: process.env.CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID ?? 'gemini-flash-lite-latest',
   timeoutMs: 50_000,
   cacheMax: 500,
   cacheTtlMs: 7 * 24 * 3600_000,

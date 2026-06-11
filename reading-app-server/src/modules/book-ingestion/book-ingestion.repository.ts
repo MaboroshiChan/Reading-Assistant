@@ -258,16 +258,7 @@ export class BookIngestionRepository {
       if (!fs.existsSync(manifestPath)) continue;
 
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as SerializedBookManifest;
-      const chapters = new Map<string, CanonicalChapterRecord>();
-      for (const chapterId of manifest.chapterIds ?? []) {
-        const chapterPath = this.getChapterPath(manifest.bookId, chapterId);
-        if (!fs.existsSync(chapterPath)) continue;
-
-        const chapter = JSON.parse(
-          fs.readFileSync(chapterPath, 'utf8'),
-        ) as SerializedCanonicalChapterRecord;
-        chapters.set(chapterId, this.deserializeChapter(chapter));
-      }
+      const chapters = this.loadSplitBookChapters(manifest);
 
       this.books.set(manifest.bookId, {
         bookId: manifest.bookId,
@@ -278,6 +269,38 @@ export class BookIngestionRepository {
         chapters,
       });
     }
+  }
+
+  private loadSplitBookChapters(manifest: SerializedBookManifest): Map<string, CanonicalChapterRecord> {
+    const chapters = new Map<string, CanonicalChapterRecord>();
+    const loadedChapterPaths = new Set<string>();
+
+    for (const chapterId of manifest.chapterIds ?? []) {
+      const chapterPath = this.getChapterPath(manifest.bookId, chapterId);
+      const chapter = this.readPersistedChapter(chapterPath, manifest.bookId, chapterId);
+      if (!chapter) continue;
+
+      loadedChapterPaths.add(chapterPath);
+      chapters.set(chapter.chapterId, chapter);
+    }
+
+    const chaptersDir = this.getChaptersDir(manifest.bookId);
+    if (!fs.existsSync(chaptersDir)) {
+      return chapters;
+    }
+
+    for (const entry of fs.readdirSync(chaptersDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+
+      const chapterPath = path.join(chaptersDir, entry.name);
+      if (loadedChapterPaths.has(chapterPath)) continue;
+
+      const chapter = this.readPersistedChapter(chapterPath, manifest.bookId);
+      if (!chapter) continue;
+      chapters.set(chapter.chapterId, chapter);
+    }
+
+    return chapters;
   }
 
   private loadLegacyStore(): void {
@@ -376,6 +399,33 @@ export class BookIngestionRepository {
         Object.entries(chapter.pages ?? {}).map(([pageIndex, page]) => [Number(pageIndex), page]),
       ),
     };
+  }
+
+  private readPersistedChapter(
+    chapterPath: string,
+    bookId: string,
+    fallbackChapterId?: string,
+  ): CanonicalChapterRecord | null {
+    if (!fs.existsSync(chapterPath)) {
+      return null;
+    }
+
+    const chapter = JSON.parse(
+      fs.readFileSync(chapterPath, 'utf8'),
+    ) as SerializedCanonicalChapterRecord;
+    const chapterId = typeof chapter.chapterId === 'string' && chapter.chapterId.trim().length > 0
+      ? chapter.chapterId
+      : fallbackChapterId;
+
+    if (!chapterId) {
+      return null;
+    }
+
+    return this.deserializeChapter({
+      ...chapter,
+      chapterId,
+      bookId: chapter.bookId ?? bookId,
+    });
   }
 
   private getBookDir(bookId: string): string {

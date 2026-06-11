@@ -88,6 +88,8 @@ export type QuizWorkflowQuestion =
   | QuizWorkflowFillInBlankQuestion;
 
 export interface QuizWorkflowResultPayload {
+  teaser?: string;
+  pre_reading_questions?: string[];
   questions: QuizWorkflowQuestion[];
 }
 

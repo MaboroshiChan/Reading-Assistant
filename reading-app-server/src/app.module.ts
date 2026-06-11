@@ -10,6 +10,8 @@ import { QuizWorkflowModule } from './modules/quiz-workflow/quiz-workflow.module
 import { WorkflowQueueModule } from './modules/workflow-queue/workflow-queue.module';
 import { SurrealModule } from './modules/surrealDB/surrealdb.module';
 import { UsersModule } from './modules/users/users.module';
+import { ChapterOpenAnalysisModule } from './modules/chapter-open-analysis/chapter-open-analysis.module';
+import { PreReadingWorkflowModule } from './modules/pre-reading-workflow/pre-reading-workflow.module';
 
 @Module({
   imports: [
@@ -21,7 +23,9 @@ import { UsersModule } from './modules/users/users.module';
     BookIngestionModule,
     WorkflowQueueModule,
     KnowledgeExtractionWorkflowModule,
+    PreReadingWorkflowModule,
     QuizWorkflowModule,
+    ChapterOpenAnalysisModule,
     UsersModule,
     SurrealModule,
   ],

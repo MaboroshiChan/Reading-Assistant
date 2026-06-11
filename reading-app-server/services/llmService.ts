@@ -28,6 +28,7 @@ export interface LLMOptions {
   timeoutMs?: number;       // request timeout
   signal?: AbortSignal;     // external cancel
   prefixCache?: LLMPrefixCacheOptions | null;
+  logContext?: LLMLogContext;
 }
 
 export interface LLMUsage {
@@ -53,7 +54,10 @@ export interface LLMClientFactoryOptions {
   maxOutputTokens?: number;
   timeoutMs?: number;
   prefixCache?: LLMPrefixCacheOptions;
+  logContext?: LLMLogContext;
 }
+
+export type LLMLogContext = Record<string, string | number | boolean | undefined>;
 
 export interface LLMPrefixCacheOptions {
   cacheKey: string;
@@ -104,6 +108,7 @@ export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMCli
         timeoutMs: opts.timeoutMs ?? factoryOptions.timeoutMs ?? config.timeoutMs,
         signal: opts.signal,
         prefixCache: opts.prefixCache ?? factoryOptions.prefixCache,
+        logContext: opts.logContext ?? factoryOptions.logContext,
       });
 
       let text = '';
@@ -125,6 +130,7 @@ export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMCli
         timeoutMs: opts.timeoutMs ?? factoryOptions.timeoutMs ?? config.timeoutMs,
         signal: opts.signal,
         prefixCache: opts.prefixCache ?? factoryOptions.prefixCache,
+        logContext: opts.logContext ?? factoryOptions.logContext,
       });
     },
   };
@@ -241,6 +247,7 @@ interface CallArgs {
   timeoutMs: number;
   signal?: AbortSignal;
   prefixCache?: LLMPrefixCacheOptions | null;
+  logContext?: LLMLogContext;
 }
 
 const LOG_DIR = path.join(__dirname, '..', 'log');
@@ -307,7 +314,10 @@ async function callLLMDirect(
 ): Promise<CallReturn<string>> {
   const { GoogleGenAI } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey });
-  console.log(`LLM model is ${args.model}`);
+  logLLMEvent('request.start', args, {
+    inlineSystemPrompt: useDeveloperInstruction ? 0 : 1,
+    prefixCache: 0,
+  });
   const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
   let resolveUsage!: (usage: LLMUsage) => void;
   let rejectUsage!: (reason?: unknown) => void;
@@ -343,17 +353,12 @@ async function callLLMDirect(
         }
       }
       resolveUsage(latestUsage);
-      if (config.debugMode) {
-        console.log(
-          `[${new Date().toISOString()}][info][llm-service] LLM response received`
-          + ` model=${args.model}`
-          + ` inlineSystemPrompt=${useDeveloperInstruction ? '0' : '1'}`
-          + ` prefixCache=0`
-          + ` responseAs=${args.responseAs}`
-          + ` inputTokens=${latestUsage.inputTokens ?? 0}`
-          + ` outputTokens=${latestUsage.outputTokens ?? 0}`,
-        );
-      }
+      logLLMEvent('response.received', args, {
+        inlineSystemPrompt: useDeveloperInstruction ? 0 : 1,
+        prefixCache: 0,
+        inputTokens: latestUsage.inputTokens ?? 0,
+        outputTokens: latestUsage.outputTokens ?? 0,
+      });
       void persistLLMResponse(args, fullText);
     } catch (error) {
       rejectUsage(error);
@@ -375,6 +380,11 @@ async function callLLMWithCachedPrefix(
   const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
   const shouldSendSystemPrompt =
     useDeveloperInstruction && args.prefixCache?.systemPromptMode === 'request';
+  logLLMEvent('request.start', args, {
+    inlineSystemPrompt: 0,
+    prefixCache: 1,
+    cachedSystemPrompt: shouldSendSystemPrompt ? 0 : 1,
+  });
   let resolveUsage!: (usage: LLMUsage) => void;
   let rejectUsage!: (reason?: unknown) => void;
   const usagePromise = new Promise<LLMUsage>((resolve, reject) => {
@@ -411,17 +421,13 @@ async function callLLMWithCachedPrefix(
         }
       }
       resolveUsage(latestUsage);
-      if (config.debugMode) {
-        console.log(
-          `[${new Date().toISOString()}][info][llm-service] LLM response received`
-          + ` model=${args.model}`
-          + ` inlineSystemPrompt=0`
-          + ` prefixCache=1`
-          + ` responseAs=${args.responseAs}`
-          + ` inputTokens=${latestUsage.inputTokens ?? 0}`
-          + ` outputTokens=${latestUsage.outputTokens ?? 0}`,
-        );
-      }
+      logLLMEvent('response.received', args, {
+        inlineSystemPrompt: 0,
+        prefixCache: 1,
+        cachedSystemPrompt: shouldSendSystemPrompt ? 0 : 1,
+        inputTokens: latestUsage.inputTokens ?? 0,
+        outputTokens: latestUsage.outputTokens ?? 0,
+      });
       void persistLLMResponse(args, fullText);
     } catch (error) {
       rejectUsage(error);
@@ -430,6 +436,29 @@ async function callLLMWithCachedPrefix(
   })();
 
   return { data: dataStream, usage: usagePromise };
+}
+
+function logLLMEvent(
+  event: 'request.start' | 'response.received',
+  args: CallArgs,
+  fields: Record<string, string | number | boolean | undefined>,
+): void {
+  const context = formatLLMLogContext({
+    model: args.model,
+    responseAs: args.responseAs,
+    ...fields,
+    ...args.logContext,
+  });
+  console.log(`[${new Date().toISOString()}][info][llm-service][${event}] ${context}`);
+}
+
+function formatLLMLogContext(
+  context: Record<string, string | number | boolean | undefined>,
+): string {
+  return Object.entries(context)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(' ');
 }
 
 async function resolveCachedContentName(

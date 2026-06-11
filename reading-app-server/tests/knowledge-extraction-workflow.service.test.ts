@@ -7,6 +7,7 @@ import { BookContextService } from '../src/modules/book-ingestion/book-context.s
 import { BookIngestionRepository } from '../src/modules/book-ingestion/book-ingestion.repository';
 import { KnowledgeExtractionWorkflowRepository } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.repository';
 import { KnowledgeExtractionWorkflowService } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.service';
+import { QuizWorkflowRepository } from '../src/modules/quiz-workflow/quiz-workflow.repository';
 import { WorkflowQueueService } from '../src/modules/workflow-queue/workflow-queue.service';
 import * as llmService from '../services/llmService';
 
@@ -959,6 +960,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(prompts[0]).toContain('Use the primary evidence pages as the only source of evidence quotes.');
     expect(prompts[0]).toContain('Every evidence item must include quote, pageIndex, and pageNumber');
     expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gemini-flash-lite-latest',
       prefixCache: expect.objectContaining({
         cacheKey: 'chapter_context.v1:book-5:chapter-5:chapter-hash-5',
         systemPromptMode: 'request',
@@ -1405,6 +1407,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       bookContextService,
       workflowRepository,
       new WorkflowQueueService(),
+      undefined,
       { get: vi.fn(() => quizService) } as never,
     );
 
@@ -1451,6 +1454,101 @@ describe('KnowledgeExtractionWorkflowService', () => {
     });
   });
 
+  test('merges matching quiz pre-reading guide into latest knowledge extraction results', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const quizRepository = new QuizWorkflowRepository();
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      new BookContextService(bookRepository, workflowRepository),
+      workflowRepository,
+      new WorkflowQueueService(),
+      quizRepository,
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-preread',
+      chapterId: 'chapter-preread',
+      chapterIndex: 3,
+      chapterTitle: 'Chapter Three',
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: { '0': 'Alice studies the risks before she speaks in public.' },
+    });
+
+    const book = bookRepository.getBook('book-preread');
+    const chapter = bookRepository.getChapter('book-preread', 'chapter-preread');
+    if (!book || !chapter) {
+      throw new Error('expected canonical chapter state');
+    }
+
+    const knowledgeRun = workflowRepository.createOrReuseRun({
+      bookId: 'book-preread',
+      chapterId: 'chapter-preread',
+      chapterIndex: 3,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge-preread',
+      expectedSnapshotVersion: book.snapshotVersion,
+      expectedChapterContentHash: chapter.chapterContentHash,
+    });
+    workflowRepository.completeRun({
+      workflowRunId: knowledgeRun.run.id,
+      snapshotVersion: book.snapshotVersion,
+      chapterContentHash: chapter.chapterContentHash,
+      result: {
+        title: 'Chapter Three',
+        summary: 'Alice studies the risks before she speaks in public.',
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+    });
+
+    const quizRun = quizRepository.createOrReuseRun({
+      bookId: 'book-preread',
+      chapterId: 'chapter-preread',
+      chapterIndex: 3,
+      workflowVersion: 'v1',
+      idempotencyKey: 'quiz-preread',
+      expectedSnapshotVersion: book.snapshotVersion,
+      expectedChapterContentHash: chapter.chapterContentHash,
+      requestedByUserId: undefined,
+    });
+    quizRepository.completeRun({
+      workflowRunId: quizRun.run.id,
+      snapshotVersion: book.snapshotVersion,
+      chapterContentHash: chapter.chapterContentHash,
+      result: {
+        teaser: 'A public decision is coming, but the chapter first teaches you how to watch it.',
+        pre_reading_questions: [
+          'What kind of risk is becoming visible?',
+          'Which details prepare you to judge the coming choice?',
+          'What should you watch for when private doubt becomes public action?',
+        ],
+        questions: [],
+      },
+    });
+
+    const latest = service.getLatestChapterKnowledgeExtraction('book-preread', 'chapter-preread');
+    expect(latest.result.teaser).toBe(
+      'A public decision is coming, but the chapter first teaches you how to watch it.',
+    );
+    expect(latest.result.pre_reading_questions).toEqual([
+      'What kind of risk is becoming visible?',
+      'Which details prepare you to judge the coming choice?',
+      'What should you watch for when private doubt becomes public action?',
+    ]);
+
+    const result = service.getWorkflowResult(knowledgeRun.run.id);
+    expect(result.result.teaser).toBe(
+      'A public decision is coming, but the chapter first teaches you how to watch it.',
+    );
+    expect(result.result.pre_reading_questions).toHaveLength(3);
+  });
+
   test('does not auto-submit quiz when disabled', async () => {
     process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
     process.env.AUTO_SUBMIT_QUIZ_WORKFLOW = '0';
@@ -1464,6 +1562,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       bookContextService,
       workflowRepository,
       new WorkflowQueueService(),
+      undefined,
       { get: vi.fn(() => quizService) } as never,
     );
 
@@ -1518,6 +1617,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       bookContextService,
       workflowRepository,
       new WorkflowQueueService(),
+      undefined,
       { get: vi.fn(() => quizService) } as never,
     );
 

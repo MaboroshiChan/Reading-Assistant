@@ -179,6 +179,13 @@ export class QuizWorkflowRepository {
     return this.latestResultsByChapter.get(chapterKey(bookId, chapterId)) ?? null;
   }
 
+  findLatestRunForChapter(bookId: string, chapterId: string): QuizWorkflowRunRecord | null {
+    const candidates = Array.from(this.runs.values())
+      .filter((run) => run.bookId === bookId && run.chapterId === chapterId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    return candidates[0] ?? null;
+  }
+
   private finishWithError(
     workflowRunId: string,
     status: 'failed' | 'stale',

@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import type { GetBookModelResponseDto } from './book-model.dto';
 import type {
+  UpsertBookChapterBatchRequestDto,
+  UpsertBookChapterBatchResponseDto,
   GetChapterResponseDto,
   GetPageResponseDto,
   UpsertBookPageFragmentParamsDto,
@@ -37,6 +39,19 @@ export class BookIngestionController {
     };
     const request = this.bookIngestionService.parseUpsertRequest(rawBody, params);
     return this.bookIngestionService.upsertPageFragment(request);
+  }
+
+  @Post(':bookId/chapters/:chapterId/pages:batch')
+  upsertChapterBatch(
+    @Param('bookId') bookId: string,
+    @Param('chapterId') chapterId: string,
+    @Body() rawBody: string | undefined,
+  ): UpsertBookChapterBatchResponseDto {
+    const request: UpsertBookChapterBatchRequestDto = this.bookIngestionService.parseBatchUpsertRequest(
+      rawBody,
+      { bookId, chapterId },
+    );
+    return this.bookIngestionService.upsertChapterBatch(request);
   }
 
   @Get(':bookId/chapters/:chapterId')
