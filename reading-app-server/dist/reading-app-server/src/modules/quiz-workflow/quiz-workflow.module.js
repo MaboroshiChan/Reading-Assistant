@@ -10,6 +10,7 @@ exports.QuizWorkflowModule = void 0;
 const common_1 = require("@nestjs/common");
 const book_ingestion_module_1 = require("../book-ingestion/book-ingestion.module");
 const knowledge_extraction_workflow_module_1 = require("../knowledge-extraction-workflow/knowledge-extraction-workflow.module");
+const pre_reading_workflow_module_1 = require("../pre-reading-workflow/pre-reading-workflow.module");
 const quiz_workflow_controller_1 = require("./quiz-workflow.controller");
 const quiz_workflow_repository_1 = require("./quiz-workflow.repository");
 const quiz_workflow_service_1 = require("./quiz-workflow.service");
@@ -18,7 +19,11 @@ let QuizWorkflowModule = class QuizWorkflowModule {
 exports.QuizWorkflowModule = QuizWorkflowModule;
 exports.QuizWorkflowModule = QuizWorkflowModule = __decorate([
     (0, common_1.Module)({
-        imports: [book_ingestion_module_1.BookIngestionModule, (0, common_1.forwardRef)(() => knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule)],
+        imports: [
+            (0, common_1.forwardRef)(() => book_ingestion_module_1.BookIngestionModule),
+            (0, common_1.forwardRef)(() => pre_reading_workflow_module_1.PreReadingWorkflowModule),
+            (0, common_1.forwardRef)(() => knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule),
+        ],
         controllers: [quiz_workflow_controller_1.QuizWorkflowController],
         providers: [quiz_workflow_repository_1.QuizWorkflowRepository, quiz_workflow_service_1.QuizWorkflowService],
         exports: [quiz_workflow_repository_1.QuizWorkflowRepository, quiz_workflow_service_1.QuizWorkflowService],

@@ -13,6 +13,7 @@ const chapter_keywords_workflow_module_1 = require("../chapter-keywords-workflow
 const knowledge_extraction_workflow_module_1 = require("../knowledge-extraction-workflow/knowledge-extraction-workflow.module");
 const quiz_workflow_module_1 = require("../quiz-workflow/quiz-workflow.module");
 const workflow_queue_module_1 = require("../workflow-queue/workflow-queue.module");
+const pre_reading_workflow_module_1 = require("../pre-reading-workflow/pre-reading-workflow.module");
 const chapter_open_analysis_controller_1 = require("./chapter-open-analysis.controller");
 const chapter_open_analysis_repository_1 = require("./chapter-open-analysis.repository");
 const chapter_open_analysis_service_1 = require("./chapter-open-analysis.service");
@@ -24,6 +25,7 @@ exports.ChapterOpenAnalysisModule = ChapterOpenAnalysisModule = __decorate([
         imports: [
             book_ingestion_module_1.BookIngestionModule,
             workflow_queue_module_1.WorkflowQueueModule,
+            pre_reading_workflow_module_1.PreReadingWorkflowModule,
             chapter_keywords_workflow_module_1.ChapterKeywordsWorkflowModule,
             knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule,
             quiz_workflow_module_1.QuizWorkflowModule,

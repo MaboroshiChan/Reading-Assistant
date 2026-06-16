@@ -18,6 +18,7 @@ export interface Config {
   autoSubmitKnowledgeExtractionWorkflow: boolean;
   autoSubmitQuizWorkflow: boolean;
   requireKnowledgeExtractionCache: boolean;
+  llmProvider: 'gemini' | 'openrouter';
   surrealUrl: string;
   surrealNamespace: string;
   surrealDatabase: string;
@@ -49,10 +50,10 @@ loadEnvFiles();
 
 export const createAppConfig = (): Config => ({
   port: Number(process.env.PORT ?? 8787),
-  model: process.env.MODEL_ID ?? 'gemini-flash-lite-latest',
-  quizWorkflowModel: process.env.QUIZ_WORKFLOW_MODEL_ID ?? 'gemini-2.5-flash',
-  knowledgeExtractionWorkflowModel: process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID ?? 'gemini-flash-lite-latest',
-  chapterKeywordsWorkflowModel: process.env.CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID ?? 'gemini-flash-lite-latest',
+  model: process.env.MODEL_ID ?? (process.env.LLM_PROVIDER === 'gemini' ? 'gemini-flash-lite-latest' : 'qwen/qwen-3-32b-instruct'),
+  quizWorkflowModel: process.env.QUIZ_WORKFLOW_MODEL_ID ?? (process.env.LLM_PROVIDER === 'gemini' ? 'gemini-2.5-flash' : 'qwen/qwen-3-32b-instruct'),
+  knowledgeExtractionWorkflowModel: process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID ?? (process.env.LLM_PROVIDER === 'gemini' ? 'gemini-flash-lite-latest' : 'qwen/qwen-3-32b-instruct'),
+  chapterKeywordsWorkflowModel: process.env.CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID ?? (process.env.LLM_PROVIDER === 'gemini' ? 'gemini-flash-lite-latest' : 'qwen/qwen-3-32b-instruct'),
   timeoutMs: 50_000,
   cacheMax: 500,
   cacheTtlMs: 7 * 24 * 3600_000,
@@ -62,6 +63,7 @@ export const createAppConfig = (): Config => ({
   autoSubmitKnowledgeExtractionWorkflow: process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === '1',
   autoSubmitQuizWorkflow: process.env.AUTO_SUBMIT_QUIZ_WORKFLOW !== '0',
   requireKnowledgeExtractionCache: process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE === '1',
+  llmProvider: (process.env.LLM_PROVIDER as 'gemini' | 'openrouter') || 'openrouter',
   surrealUrl: process.env.SURREAL_URL ?? '',
   surrealNamespace: process.env.SURREAL_NS ?? '',
   surrealDatabase: process.env.SURREAL_DB ?? '',
@@ -81,4 +83,8 @@ export const config: Config = new Proxy({} as Config, {
 
 export function getOpenAIApiKey(): string {
   return process.env.GEMINI_API_KEY ?? '';
+}
+
+export function getOpenRouterApiKey(): string {
+  return process.env.OPENROUTER_API_KEY ?? '';
 }

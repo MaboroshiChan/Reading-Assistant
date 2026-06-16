@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.KnowledgeExtractionWorkflowModule = void 0;
 const common_1 = require("@nestjs/common");
 const book_ingestion_module_1 = require("../book-ingestion/book-ingestion.module");
+const quiz_workflow_module_1 = require("../quiz-workflow/quiz-workflow.module");
 const knowledge_extraction_workflow_controller_1 = require("./knowledge-extraction-workflow.controller");
 const knowledge_extraction_workflow_repository_1 = require("./knowledge-extraction-workflow.repository");
 const knowledge_extraction_workflow_service_1 = require("./knowledge-extraction-workflow.service");
@@ -17,7 +18,7 @@ let KnowledgeExtractionWorkflowModule = class KnowledgeExtractionWorkflowModule 
 exports.KnowledgeExtractionWorkflowModule = KnowledgeExtractionWorkflowModule;
 exports.KnowledgeExtractionWorkflowModule = KnowledgeExtractionWorkflowModule = __decorate([
     (0, common_1.Module)({
-        imports: [(0, common_1.forwardRef)(() => book_ingestion_module_1.BookIngestionModule)],
+        imports: [(0, common_1.forwardRef)(() => book_ingestion_module_1.BookIngestionModule), (0, common_1.forwardRef)(() => quiz_workflow_module_1.QuizWorkflowModule)],
         controllers: [knowledge_extraction_workflow_controller_1.KnowledgeExtractionWorkflowController],
         providers: [knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository, knowledge_extraction_workflow_service_1.KnowledgeExtractionWorkflowService],
         exports: [knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository, knowledge_extraction_workflow_service_1.KnowledgeExtractionWorkflowService],

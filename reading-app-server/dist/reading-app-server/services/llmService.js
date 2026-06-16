@@ -26,10 +26,14 @@ const abort_1 = require("../src/utils/abort");
 // -----------------------------
 // Public API
 // -----------------------------
+const openrouterService_1 = require("./openrouterService");
 /**
  * Creates a reusable LLM client bound to a stable system prompt.
  */
 function createLLMClient(factoryOptions) {
+    if (config_1.config.llmProvider === 'openrouter') {
+        return (0, openrouterService_1.createOpenRouterLLMClient)(factoryOptions);
+    }
     const systemPrompt = factoryOptions.systemPrompt.trim();
     if (!systemPrompt) {
         throw new Error('LLM client factory requires a non-empty system prompt');
@@ -46,6 +50,7 @@ function createLLMClient(factoryOptions) {
                 timeoutMs: opts.timeoutMs ?? factoryOptions.timeoutMs ?? config_1.config.timeoutMs,
                 signal: opts.signal,
                 prefixCache: opts.prefixCache ?? factoryOptions.prefixCache,
+                logContext: opts.logContext ?? factoryOptions.logContext,
             });
             let text = '';
             for await (const chunk of data) {
@@ -64,6 +69,7 @@ function createLLMClient(factoryOptions) {
                 timeoutMs: opts.timeoutMs ?? factoryOptions.timeoutMs ?? config_1.config.timeoutMs,
                 signal: opts.signal,
                 prefixCache: opts.prefixCache ?? factoryOptions.prefixCache,
+                logContext: opts.logContext ?? factoryOptions.logContext,
             });
         },
     };
@@ -73,6 +79,9 @@ function createLLMClient(factoryOptions) {
  * It uses the SDK's startChat method to preserve conversation history.
  */
 function createLLMChatClient(factoryOptions) {
+    if (config_1.config.llmProvider === 'openrouter') {
+        return (0, openrouterService_1.createOpenRouterLLMChatClient)(factoryOptions);
+    }
     const systemPrompt = factoryOptions.systemPrompt.trim();
     if (!systemPrompt) {
         throw new Error('LLM client factory requires a non-empty system prompt');
@@ -210,7 +219,10 @@ async function callLLM(args) {
 async function callLLMDirect(args, apiKey, useDeveloperInstruction) {
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
-    console.log(`LLM model is ${args.model}`);
+    logLLMEvent('request.start', args, {
+        inlineSystemPrompt: useDeveloperInstruction ? 0 : 1,
+        prefixCache: 0,
+    });
     const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
     let resolveUsage;
     let rejectUsage;
@@ -245,15 +257,12 @@ async function callLLMDirect(args, apiKey, useDeveloperInstruction) {
                 }
             }
             resolveUsage(latestUsage);
-            if (config_1.config.debugMode) {
-                console.log(`[${new Date().toISOString()}][info][llm-service] LLM response received`
-                    + ` model=${args.model}`
-                    + ` inlineSystemPrompt=${useDeveloperInstruction ? '0' : '1'}`
-                    + ` prefixCache=0`
-                    + ` responseAs=${args.responseAs}`
-                    + ` inputTokens=${latestUsage.inputTokens ?? 0}`
-                    + ` outputTokens=${latestUsage.outputTokens ?? 0}`);
-            }
+            logLLMEvent('response.received', args, {
+                inlineSystemPrompt: useDeveloperInstruction ? 0 : 1,
+                prefixCache: 0,
+                inputTokens: latestUsage.inputTokens ?? 0,
+                outputTokens: latestUsage.outputTokens ?? 0,
+            });
             void persistLLMResponse(args, fullText);
         }
         catch (error) {
@@ -268,6 +277,11 @@ async function callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDevel
     const ai = new GoogleGenAI({ apiKey });
     const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
     const shouldSendSystemPrompt = useDeveloperInstruction && args.prefixCache?.systemPromptMode === 'request';
+    logLLMEvent('request.start', args, {
+        inlineSystemPrompt: 0,
+        prefixCache: 1,
+        cachedSystemPrompt: shouldSendSystemPrompt ? 0 : 1,
+    });
     let resolveUsage;
     let rejectUsage;
     const usagePromise = new Promise((resolve, reject) => {
@@ -302,15 +316,13 @@ async function callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDevel
                 }
             }
             resolveUsage(latestUsage);
-            if (config_1.config.debugMode) {
-                console.log(`[${new Date().toISOString()}][info][llm-service] LLM response received`
-                    + ` model=${args.model}`
-                    + ` inlineSystemPrompt=0`
-                    + ` prefixCache=1`
-                    + ` responseAs=${args.responseAs}`
-                    + ` inputTokens=${latestUsage.inputTokens ?? 0}`
-                    + ` outputTokens=${latestUsage.outputTokens ?? 0}`);
-            }
+            logLLMEvent('response.received', args, {
+                inlineSystemPrompt: 0,
+                prefixCache: 1,
+                cachedSystemPrompt: shouldSendSystemPrompt ? 0 : 1,
+                inputTokens: latestUsage.inputTokens ?? 0,
+                outputTokens: latestUsage.outputTokens ?? 0,
+            });
             void persistLLMResponse(args, fullText);
         }
         catch (error) {
@@ -319,6 +331,21 @@ async function callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDevel
         }
     })();
     return { data: dataStream, usage: usagePromise };
+}
+function logLLMEvent(event, args, fields) {
+    const context = formatLLMLogContext({
+        model: args.model,
+        responseAs: args.responseAs,
+        ...fields,
+        ...args.logContext,
+    });
+    console.log(`[${new Date().toISOString()}][info][llm-service][${event}] ${context}`);
+}
+function formatLLMLogContext(context) {
+    return Object.entries(context)
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join(' ');
 }
 async function resolveCachedContentName(args, apiKey, useDeveloperInstruction) {
     const prefixCache = args.prefixCache;

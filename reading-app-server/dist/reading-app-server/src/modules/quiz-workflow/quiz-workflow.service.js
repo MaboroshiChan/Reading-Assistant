@@ -25,10 +25,12 @@ const workflow_logger_1 = require("../workflow.logger");
 const prompt_path_1 = require("../../utils/prompt-path");
 const quiz_workflow_repository_1 = require("./quiz-workflow.repository");
 const llmService_1 = require("../../../services/llmService");
+const runtime_config_1 = require("../../config/runtime-config");
 const chapter_prefix_cache_1 = require("../../utils/chapter-prefix-cache");
 const llm_retry_1 = require("../../utils/llm-retry");
 const workflow_queue_service_1 = require("../workflow-queue/workflow-queue.service");
-const PROMPT_VERSION = 'quiz.v3.1';
+const pre_reading_workflow_repository_1 = require("../pre-reading-workflow/pre-reading-workflow.repository");
+const PROMPT_VERSION = 'quiz.v3.2';
 const PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('quiz.txt');
 const MAX_WORKFLOW_LLM_RETRIES = 2;
 const DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS = 5_000;
@@ -41,12 +43,14 @@ const hasBlankSemantics = (question) => /_{3,}/.test(question)
     || /\b(fill in the blank|complete the sentence|choose the (?:best|most (?:appropriate|suitable)) (?:word|phrase)|select the (?:best|most (?:appropriate|suitable)) (?:word|phrase))\b/i.test(question);
 let cachedQuizSystemPrompt = null;
 let QuizWorkflowService = class QuizWorkflowService {
+    preReadingWorkflowRepository;
     bookIngestionRepository;
     bookContextService;
     knowledgeExtractionWorkflowRepository;
     quizWorkflowRepository;
     workflowQueueService;
-    constructor(bookIngestionRepository, bookContextService, knowledgeExtractionWorkflowRepository, quizWorkflowRepository, workflowQueueService) {
+    constructor(bookIngestionRepository, bookContextService, knowledgeExtractionWorkflowRepository, quizWorkflowRepository, workflowQueueService, preReadingWorkflowRepository) {
+        this.preReadingWorkflowRepository = preReadingWorkflowRepository;
         this.bookIngestionRepository = bookIngestionRepository;
         this.bookContextService = bookContextService;
         this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
@@ -313,6 +317,7 @@ let QuizWorkflowService = class QuizWorkflowService {
         const bookContext = this.bookContextService.buildBookContextBundle(input.bookId, input.chapterId);
         const chapterContext = this.bookContextService.buildChapterContextBundle(input.bookId, input.chapterId);
         const groupedUnits = Array.from(this.groupUnitsByAnchorPage(selectedUnits).values());
+        const preReadingGuide = this.getMatchingPreReadingGuide(input.bookId, input.chapterId, input.chapterContentHash);
         const questions = [];
         for (const groupUnits of groupedUnits) {
             const pageWindow = this.bookContextService.buildPageWindowContext(input.bookId, input.chapterId, groupUnits[0].anchorPageIndex);
@@ -335,7 +340,17 @@ let QuizWorkflowService = class QuizWorkflowService {
         if (questions.length === 0) {
             throw new Error('Quiz LLM response did not contain any valid questions');
         }
-        return { questions: questions.slice(0, 5) };
+        return {
+            teaser: preReadingGuide.teaser,
+            pre_reading_questions: preReadingGuide.pre_reading_questions,
+            questions: questions.slice(0, 5),
+        };
+    }
+    getMatchingPreReadingGuide(bookId, chapterId, chapterContentHash) {
+        const stored = this.preReadingWorkflowRepository?.getLatestResult(bookId, chapterId);
+        if (!stored || stored.chapterContentHash !== chapterContentHash)
+            return {};
+        return stored.result;
     }
     async generateQuizForUnits(input) {
         const [systemPrompt, userPrompt] = await Promise.all([
@@ -346,6 +361,7 @@ let QuizWorkflowService = class QuizWorkflowService {
         const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
         const llmClient = (0, llmService_1.createLLMClient)({
             systemPrompt,
+            model: runtime_config_1.config.quizWorkflowModel,
             prefixCache: (0, chapter_prefix_cache_1.buildSharedChapterPrefixCache)({
                 bookId: input.bookId,
                 chapterId: input.chapterId,
@@ -867,10 +883,12 @@ exports.QuizWorkflowService = QuizWorkflowService = __decorate([
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository))),
     __param(3, (0, common_1.Inject)(quiz_workflow_repository_1.QuizWorkflowRepository)),
     __param(4, (0, common_1.Inject)(workflow_queue_service_1.WorkflowQueueService)),
+    __param(5, (0, common_1.Inject)(pre_reading_workflow_repository_1.PreReadingWorkflowRepository)),
     __metadata("design:paramtypes", [book_ingestion_repository_1.BookIngestionRepository,
         book_context_service_1.BookContextService,
         knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository,
         quiz_workflow_repository_1.QuizWorkflowRepository,
-        workflow_queue_service_1.WorkflowQueueService])
+        workflow_queue_service_1.WorkflowQueueService,
+        pre_reading_workflow_repository_1.PreReadingWorkflowRepository])
 ], QuizWorkflowService);
 //# sourceMappingURL=quiz-workflow.service.js.map

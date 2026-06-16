@@ -83,6 +83,7 @@ let ChapterOpenAnalysisRepository = class ChapterOpenAnalysisRepository {
     attachChildRuns(args) {
         return this.update(args.runId, (run) => ({
             ...run,
+            preReadingWorkflowRunId: args.preReadingWorkflowRunId ?? run.preReadingWorkflowRunId,
             chapterKeywordsWorkflowRunId: args.chapterKeywordsWorkflowRunId ?? run.chapterKeywordsWorkflowRunId,
             knowledgeExtractionWorkflowRunId: args.knowledgeExtractionWorkflowRunId ?? run.knowledgeExtractionWorkflowRunId,
             quizWorkflowRunId: args.quizWorkflowRunId ?? run.quizWorkflowRunId,

@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.config = exports.appConfig = exports.createAppConfig = void 0;
 exports.getOpenAIApiKey = getOpenAIApiKey;
+exports.getOpenRouterApiKey = getOpenRouterApiKey;
 const node_fs_1 = require("node:fs");
 const node_path_1 = __importDefault(require("node:path"));
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -29,7 +30,10 @@ const loadEnvFiles = () => {
 loadEnvFiles();
 const createAppConfig = () => ({
     port: Number(process.env.PORT ?? 8787),
-    model: process.env.MODEL_ID ?? 'gemini-flash-lite-latest',
+    model: process.env.MODEL_ID ?? (process.env.LLM_PROVIDER === 'gemini' ? 'gemini-flash-lite-latest' : 'qwen/qwen-2.5-72b-instruct'),
+    quizWorkflowModel: process.env.QUIZ_WORKFLOW_MODEL_ID ?? (process.env.LLM_PROVIDER === 'gemini' ? 'gemini-2.5-flash' : 'qwen/qwen-2.5-72b-instruct'),
+    knowledgeExtractionWorkflowModel: process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID ?? (process.env.LLM_PROVIDER === 'gemini' ? 'gemini-flash-lite-latest' : 'qwen/qwen-2.5-72b-instruct'),
+    chapterKeywordsWorkflowModel: process.env.CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID ?? (process.env.LLM_PROVIDER === 'gemini' ? 'gemini-flash-lite-latest' : 'qwen/qwen-2.5-72b-instruct'),
     timeoutMs: 50_000,
     cacheMax: 500,
     cacheTtlMs: 7 * 24 * 3600_000,
@@ -39,6 +43,7 @@ const createAppConfig = () => ({
     autoSubmitKnowledgeExtractionWorkflow: process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === '1',
     autoSubmitQuizWorkflow: process.env.AUTO_SUBMIT_QUIZ_WORKFLOW !== '0',
     requireKnowledgeExtractionCache: process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE === '1',
+    llmProvider: process.env.LLM_PROVIDER || 'openrouter',
     surrealUrl: process.env.SURREAL_URL ?? '',
     surrealNamespace: process.env.SURREAL_NS ?? '',
     surrealDatabase: process.env.SURREAL_DB ?? '',
@@ -56,5 +61,8 @@ exports.config = new Proxy({}, {
 });
 function getOpenAIApiKey() {
     return process.env.GEMINI_API_KEY ?? '';
+}
+function getOpenRouterApiKey() {
+    return process.env.OPENROUTER_API_KEY ?? '';
 }
 //# sourceMappingURL=runtime-config.js.map

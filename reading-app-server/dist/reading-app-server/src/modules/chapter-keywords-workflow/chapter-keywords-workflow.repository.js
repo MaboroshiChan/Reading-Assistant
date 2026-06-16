@@ -159,6 +159,12 @@ let ChapterKeywordsWorkflowRepository = class ChapterKeywordsWorkflowRepository 
     getLatestResult(bookId, chapterId) {
         return this.latestResultsByChapter.get(chapterKey(bookId, chapterId)) ?? null;
     }
+    findLatestRunForChapter(bookId, chapterId) {
+        const candidates = Array.from(this.runs.values())
+            .filter((run) => run.bookId === bookId && run.chapterId === chapterId)
+            .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+        return candidates[0] ?? null;
+    }
     finishWithError(workflowRunId, status, code, message) {
         const run = this.runs.get(workflowRunId);
         if (!run)

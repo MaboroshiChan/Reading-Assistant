@@ -290,6 +290,12 @@ let KnowledgeExtractionWorkflowRepository = class KnowledgeExtractionWorkflowRep
     getLatestResult(bookId, chapterId) {
         return this.latestResultsByChapter.get(chapterKey(bookId, chapterId)) ?? null;
     }
+    findLatestRunForChapter(bookId, chapterId) {
+        const candidates = Array.from(this.runs.values())
+            .filter((run) => run.bookId === bookId && run.chapterId === chapterId)
+            .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+        return candidates[0] ?? null;
+    }
     async ensureSchema() {
         if (!this.surrealService)
             return;

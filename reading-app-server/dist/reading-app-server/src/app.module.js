@@ -20,6 +20,7 @@ const workflow_queue_module_1 = require("./modules/workflow-queue/workflow-queue
 const surrealdb_module_1 = require("./modules/surrealDB/surrealdb.module");
 const users_module_1 = require("./modules/users/users.module");
 const chapter_open_analysis_module_1 = require("./modules/chapter-open-analysis/chapter-open-analysis.module");
+const pre_reading_workflow_module_1 = require("./modules/pre-reading-workflow/pre-reading-workflow.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -34,6 +35,7 @@ exports.AppModule = AppModule = __decorate([
             book_ingestion_module_1.BookIngestionModule,
             workflow_queue_module_1.WorkflowQueueModule,
             knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule,
+            pre_reading_workflow_module_1.PreReadingWorkflowModule,
             quiz_workflow_module_1.QuizWorkflowModule,
             chapter_open_analysis_module_1.ChapterOpenAnalysisModule,
             users_module_1.UsersModule,

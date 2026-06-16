@@ -87,10 +87,19 @@ export interface LLMChatClient {
 // Public API
 // -----------------------------
 
+import { createOpenRouterLLMClient, createOpenRouterLLMChatClient } from './openrouterService';
+
 /**
  * Creates a reusable LLM client bound to a stable system prompt.
  */
 export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMClient {
+  return createOpenRouterLLMClient(factoryOptions);
+}
+
+// -----------------------------
+// Legacy Gemini implementation (Disconnected)
+// -----------------------------
+export function createGeminiLLMClient(factoryOptions: LLMClientFactoryOptions): LLMClient {
   const systemPrompt = factoryOptions.systemPrompt.trim();
   if (!systemPrompt) {
     throw new Error('LLM client factory requires a non-empty system prompt');
@@ -141,6 +150,10 @@ export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMCli
  * It uses the SDK's startChat method to preserve conversation history.
  */
 export function createLLMChatClient(factoryOptions: LLMClientFactoryOptions): LLMChatClient {
+  return createOpenRouterLLMChatClient(factoryOptions);
+}
+
+export function createGeminiLLMChatClient(factoryOptions: LLMClientFactoryOptions): LLMChatClient {
   const systemPrompt = factoryOptions.systemPrompt.trim();
   if (!systemPrompt) {
     throw new Error('LLM client factory requires a non-empty system prompt');

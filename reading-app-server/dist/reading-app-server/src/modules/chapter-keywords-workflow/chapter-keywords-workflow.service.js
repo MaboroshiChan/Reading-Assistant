@@ -28,6 +28,19 @@ const isPlainObject = (value) => typeof value === 'object' && value !== null && 
 const asString = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
 const asNumber = (value) => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 const refKey = (ref) => `${ref.page_index}:${ref.paragraph_index}:${ref.paragraph_id}:${ref.sentence_id}`;
+const paragraphKey = (ref) => `${ref.page_index}:${ref.paragraph_index}:${ref.paragraph_id}`;
+const compareSentenceRefs = (left, right) => {
+    if (left.page_index !== right.page_index) {
+        return left.page_index - right.page_index;
+    }
+    if (left.paragraph_index !== right.paragraph_index) {
+        return left.paragraph_index - right.paragraph_index;
+    }
+    if (left.paragraph_id !== right.paragraph_id) {
+        return left.paragraph_id - right.paragraph_id;
+    }
+    return left.sentence_id - right.sentence_id;
+};
 const stableParagraphId = (raw, paragraphIndex) => {
     const numeric = Number(raw);
     if (Number.isInteger(numeric) && String(numeric) === raw.trim()) {
@@ -239,7 +252,7 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
                 this.chapterKeywordsWorkflowRepository.failRun(workflowRunId, 'CHAPTER_KEYWORDS_NO_SENTENCES', 'No text sentences were found in the canonical chapter state.');
                 return;
             }
-            const mergedByRef = new Map();
+            const mergedByParagraph = new Map();
             for (const chunk of chunks) {
                 const result = await (0, chapter_keywords_llm_1.analyzeChapterKeywordsChunk)({
                     docId: runningRun.bookId,
@@ -253,10 +266,13 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
                     contentHash: chapter.chapterContentHash,
                 });
                 for (const item of result.key_sentences) {
-                    const key = refKey(item.sentence_ref);
-                    const existing = mergedByRef.get(key);
-                    if (!existing || item.importance > existing.importance) {
-                        mergedByRef.set(key, {
+                    const key = paragraphKey(item.sentence_ref);
+                    const existing = mergedByParagraph.get(key);
+                    if (!existing
+                        || item.importance > existing.importance
+                        || (item.importance === existing.importance
+                            && compareSentenceRefs(item.sentence_ref, existing.ref) < 0)) {
+                        mergedByParagraph.set(key, {
                             ref: item.sentence_ref,
                             text: item.sentence_text,
                             importance: item.importance,
@@ -266,7 +282,7 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
                 }
             }
             const mergedResult = {
-                key_sentences: Array.from(mergedByRef.values())
+                key_sentences: Array.from(mergedByParagraph.values())
                     .sort((left, right) => {
                     if (left.ref.page_index !== right.ref.page_index) {
                         return left.ref.page_index - right.ref.page_index;

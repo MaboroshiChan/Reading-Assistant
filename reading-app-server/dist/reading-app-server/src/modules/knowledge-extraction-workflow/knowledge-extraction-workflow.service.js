@@ -27,6 +27,7 @@ const chapter_prefix_cache_1 = require("../../utils/chapter-prefix-cache");
 const prompt_path_1 = require("../../utils/prompt-path");
 const book_context_service_1 = require("../book-ingestion/book-context.service");
 const book_ingestion_repository_1 = require("../book-ingestion/book-ingestion.repository");
+const quiz_workflow_repository_1 = require("../quiz-workflow/quiz-workflow.repository");
 const quiz_workflow_service_1 = require("../quiz-workflow/quiz-workflow.service");
 const workflow_logger_1 = require("../workflow.logger");
 const knowledge_extraction_workflow_repository_1 = require("./knowledge-extraction-workflow.repository");
@@ -82,11 +83,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
     knowledgeExtractionWorkflowRepository;
     workflowQueueService;
     moduleRef;
-    constructor(bookIngestionRepository, bookContextService, knowledgeExtractionWorkflowRepository, workflowQueueService, moduleRef) {
+    quizWorkflowRepository;
+    constructor(bookIngestionRepository, bookContextService, knowledgeExtractionWorkflowRepository, workflowQueueService, quizWorkflowRepository, moduleRef) {
         this.bookIngestionRepository = bookIngestionRepository;
         this.bookContextService = bookContextService;
         this.knowledgeExtractionWorkflowRepository = knowledgeExtractionWorkflowRepository;
         this.workflowQueueService = workflowQueueService;
+        this.quizWorkflowRepository = quizWorkflowRepository;
         this.moduleRef = moduleRef;
     }
     onApplicationBootstrap() {
@@ -274,7 +277,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             chapterContentHash: run.chapterContentHash,
             createdAt: run.createdAt,
             updatedAt: run.updatedAt,
-            result: run.output,
+            result: this.withLatestQuizPreReading(run.output, run.bookId, run.chapterId, run.snapshotVersion, run.chapterContentHash),
         };
     }
     getLatestChapterKnowledgeExtraction(bookId, chapterId) {
@@ -303,7 +306,26 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             snapshotVersion: result.snapshotVersion,
             chapterContentHash: result.chapterContentHash,
             updatedAt: result.updatedAt,
-            result: result.result,
+            result: this.withLatestQuizPreReading(result.result, result.bookId, result.chapterId, result.snapshotVersion, result.chapterContentHash),
+        };
+    }
+    withLatestQuizPreReading(result, bookId, chapterId, snapshotVersion, chapterContentHash) {
+        const latestQuiz = this.quizWorkflowRepository?.getLatestResult(bookId, chapterId);
+        if (!latestQuiz)
+            return result;
+        if (latestQuiz.snapshotVersion !== snapshotVersion
+            || latestQuiz.chapterContentHash !== chapterContentHash) {
+            return result;
+        }
+        const teaser = asString(latestQuiz.result.teaser);
+        const preReadingQuestions = this.sanitizeStringArray(latestQuiz.result.pre_reading_questions);
+        if (!teaser && !preReadingQuestions) {
+            return result;
+        }
+        return {
+            ...result,
+            teaser: teaser ?? result.teaser,
+            pre_reading_questions: preReadingQuestions ?? result.pre_reading_questions,
         };
     }
     async executeRun(workflowRunId) {
@@ -647,6 +669,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
         const llmClient = (0, llmService_1.createLLMClient)({
             systemPrompt,
+            model: runtime_config_1.config.knowledgeExtractionWorkflowModel,
             prefixCache: (0, chapter_prefix_cache_1.buildSharedChapterPrefixCache)({
                 bookId: input.bookId,
                 chapterId: input.chapterId,
@@ -660,6 +683,17 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                     language: asString(metadataRecord.language),
                 },
             }),
+            logContext: {
+                workflowKind: 'knowledge_extraction',
+                bookId: input.bookId,
+                chapterId: input.chapterId,
+                chapterIndex: input.chapterIndex,
+                pageIndex: input.piece.pageIndex,
+                pageNumber: input.piece.pageNumber,
+                pieceIndex: input.piece.pieceIndex,
+                totalPieces: input.piece.totalPieces,
+                sourceHash: input.piece.sourceHash,
+            },
         });
         const response = await llmClient.json(userPrompt);
         let text = '';
@@ -1212,11 +1246,14 @@ exports.KnowledgeExtractionWorkflowService = KnowledgeExtractionWorkflowService 
     __param(2, (0, common_1.Inject)(knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository)),
     __param(3, (0, common_1.Inject)(workflow_queue_service_1.WorkflowQueueService)),
     __param(4, (0, common_1.Optional)()),
-    __param(4, (0, common_1.Inject)(core_1.ModuleRef)),
+    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => quiz_workflow_repository_1.QuizWorkflowRepository))),
+    __param(5, (0, common_1.Optional)()),
+    __param(5, (0, common_1.Inject)(core_1.ModuleRef)),
     __metadata("design:paramtypes", [book_ingestion_repository_1.BookIngestionRepository,
         book_context_service_1.BookContextService,
         knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository,
         workflow_queue_service_1.WorkflowQueueService,
+        quiz_workflow_repository_1.QuizWorkflowRepository,
         core_1.ModuleRef])
 ], KnowledgeExtractionWorkflowService);
 //# sourceMappingURL=knowledge-extraction-workflow.service.js.map

@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CHAPTER_KEYWORDS_PROMPT_VERSION = exports.toCachedResponseText = exports.toLLMInputFromEnvelope = exports.analyzeChapterKeywordsChunk = exports.buildChapterKeywordsCall = exports.buildChapterKeywordsPrompt = exports.sanitizeChapterKeywords = void 0;
 const promises_1 = __importDefault(require("node:fs/promises"));
 const llmService_1 = require("../../../services/llmService");
+const runtime_config_1 = require("../../config/runtime-config");
 const chapter_prefix_cache_1 = require("../../utils/chapter-prefix-cache");
 const prompt_path_1 = require("../../utils/prompt-path");
 const PROMPT_VERSION = 'chapter_keywords.v1';
@@ -19,6 +20,23 @@ const refKey = (ref) => [
     ref.paragraph_id,
     ref.sentence_id,
 ].join(':');
+const paragraphKey = (ref) => [
+    ref.page_index,
+    ref.paragraph_index,
+    ref.paragraph_id,
+].join(':');
+const compareSentenceRefs = (left, right) => {
+    if (left.page_index !== right.page_index) {
+        return left.page_index - right.page_index;
+    }
+    if (left.paragraph_index !== right.paragraph_index) {
+        return left.paragraph_index - right.paragraph_index;
+    }
+    if (left.paragraph_id !== right.paragraph_id) {
+        return left.paragraph_id - right.paragraph_id;
+    }
+    return left.sentence_id - right.sentence_id;
+};
 const readSentenceRef = (value) => {
     if (!isRecord(value))
         return undefined;
@@ -74,8 +92,19 @@ const sanitizeChapterKeywords = (raw, sourceSentences) => {
             reason: typeof item.reason === 'string' ? item.reason : '',
         });
     }
+    const bestByParagraph = new Map();
+    for (const item of keySentences) {
+        const key = paragraphKey(item.sentence_ref);
+        const existing = bestByParagraph.get(key);
+        if (!existing
+            || item.importance > existing.importance
+            || (item.importance === existing.importance
+                && compareSentenceRefs(item.sentence_ref, existing.sentence_ref) < 0)) {
+            bestByParagraph.set(key, item);
+        }
+    }
     return {
-        key_sentences: keySentences,
+        key_sentences: Array.from(bestByParagraph.values()).sort((left, right) => compareSentenceRefs(left.sentence_ref, right.sentence_ref)),
         sentence_keywords: [],
     };
 };
@@ -115,6 +144,7 @@ const buildChapterKeywordsCall = async (input, signal) => {
     ]);
     const llmClient = (0, llmService_1.createLLMClient)({
         systemPrompt,
+        model: runtime_config_1.config.chapterKeywordsWorkflowModel,
         prefixCache: (0, chapter_prefix_cache_1.buildChunkPrefixCache)({
             task: 'chapter_keywords',
             version: PROMPT_VERSION,
@@ -124,6 +154,15 @@ const buildChapterKeywordsCall = async (input, signal) => {
             chunkText: input.chunkText,
             contentHash: input.contentHash,
         }),
+        logContext: {
+            workflowKind: 'chapter_keywords',
+            docId: input.docId,
+            chapterId: input.chapterId,
+            chapterIndex: input.chapterIndex,
+            chunkId: input.chunkId,
+            chunkIndex: input.chunkIndex,
+            totalChunks: input.totalChunks,
+        },
     });
     return llmClient.json(userPrompt, { signal });
 };
