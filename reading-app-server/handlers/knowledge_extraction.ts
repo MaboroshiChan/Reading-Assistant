@@ -1,4 +1,3 @@
-import path from 'node:path';
 import fs from 'node:fs/promises';
 import type {
   AnalyzeKnowledgeExtractionData,
@@ -6,7 +5,6 @@ import type {
   KnowledgeEvent,
   KnowledgeEvidence,
   KnowledgeIdea,
-  KnowledgePageRef,
   KnowledgePerson,
   KnowledgeRelation,
   KnowledgeTheme,
@@ -22,11 +20,13 @@ import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'knowledge-extraction';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'knowledge_extraction.v2.1';
-const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
+const PROMPT_VERSION = 'knowledge_extraction.v2.7';
+const FICTION_PROMPT_PATH = resolvePromptPath('knowledge_extraction_fiction.txt');
+const NON_FICTION_PROMPT_PATH = resolvePromptPath('knowledge_extraction_nonfiction.txt');
 
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
 const NODE_TYPES = new Set(['person', 'idea', 'event', 'entity', 'theme']);
+const PERSON_IMPORTANCE = new Set(['main', 'supporting', 'minor']);
 const RELATION_TYPES = new Set([
   'knows',
   'supports',
@@ -36,6 +36,11 @@ const RELATION_TYPES = new Set([
   'participates_in',
   'located_in',
   'happens_at',
+  'founded',
+  'authored',
+  'mentions',
+  'argues',
+  'illustrates',
   'reflects',
   'related_to',
 ]);
@@ -45,6 +50,15 @@ type KnowledgeIdeaKind = KnowledgeIdea['kind'];
 type KnowledgeEntityType = KnowledgeEntity['type'];
 type KnowledgeNodeType = KnowledgeRelation['from_type'];
 type KnowledgeRelationType = KnowledgeRelation['relation_type'];
+type KnowledgePersonImportance = NonNullable<KnowledgePerson['importance']>;
+type KnowledgePromptVariant = 'fiction' | 'nonfiction';
+
+const asPersonImportance = (value: unknown): KnowledgePersonImportance | undefined => {
+  const importance = asString(value);
+  return importance && PERSON_IMPORTANCE.has(importance)
+    ? (importance as KnowledgePersonImportance)
+    : undefined;
+};
 
 const asIdeaKind = (value: unknown): KnowledgeIdeaKind | undefined => {
   const kind = asString(value);
@@ -107,6 +121,7 @@ const sanitizePeople = (value: unknown): KnowledgePerson[] | undefined => {
         local_id: asString(item.local_id) ?? `p${index + 1}`,
         name,
         aliases: sanitizeStringArray(item.aliases),
+        importance: asPersonImportance(item.importance),
         description: asString(item.description),
         roles: sanitizeStringArray(item.roles),
         traits: sanitizeStringArray(item.traits),
@@ -256,20 +271,49 @@ const sanitizeKnowledgeExtraction = (
 };
 
 const buildCacheKey = (req: RequestEnvelopeKnowledgeExtraction): string => {
+  const promptVariant = getPromptVariant(req);
   return buildStableCacheKey(CACHE_PREFIX, CACHE_VERSION, {
     payload: req.payload,
     context: req.context ?? {},
     prompt_version: PROMPT_VERSION,
+    prompt_variant: promptVariant,
     model: config.model,
   });
 };
 
-let cachedSystemPrompt: string | null = null;
+const cachedSystemPrompts: Partial<Record<KnowledgePromptVariant, string>> = {};
 
-const loadSystemPrompt = async (): Promise<string> => {
-  if (cachedSystemPrompt) return cachedSystemPrompt;
-  cachedSystemPrompt = (await fs.readFile(PROMPT_PATH, 'utf8')).trim();
-  return cachedSystemPrompt;
+const asBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return undefined;
+};
+
+const getPromptVariant = (req: RequestEnvelopeKnowledgeExtraction): KnowledgePromptVariant => {
+  const meta = isRecord(req.meta) ? req.meta : {};
+  const bookMetadata = isRecord(meta.bookMetadata) ? meta.bookMetadata : {};
+  const payload = req.payload as unknown as Record<string, unknown>;
+  const isFiction =
+    asBoolean(bookMetadata.isFiction)
+    ?? asBoolean(meta.isFiction)
+    ?? asBoolean(meta.is_fiction)
+    ?? asBoolean(payload.isFiction)
+    ?? asBoolean(payload.is_fiction)
+    ?? false;
+
+  return isFiction ? 'fiction' : 'nonfiction';
+};
+
+const loadSystemPrompt = async (variant: KnowledgePromptVariant): Promise<string> => {
+  const cached = cachedSystemPrompts[variant];
+  if (cached) return cached;
+  const promptPath = variant === 'fiction' ? FICTION_PROMPT_PATH : NON_FICTION_PROMPT_PATH;
+  const prompt = (await fs.readFile(promptPath, 'utf8')).trim();
+  cachedSystemPrompts[variant] = prompt;
+  return prompt;
 };
 
 const buildPrompt = (req: RequestEnvelopeKnowledgeExtraction): string => {
@@ -309,8 +353,9 @@ const buildKnowledgeExtractionData = async (
     promptVersion: PROMPT_VERSION,
   });
 
+  const promptVariant = getPromptVariant(req);
   const [systemPrompt, userPrompt] = await Promise.all([
-    loadSystemPrompt(),
+    loadSystemPrompt(promptVariant),
     Promise.resolve(buildPrompt(req)),
   ]);
   const llmClient = createLLMClient({ systemPrompt });
@@ -318,6 +363,7 @@ const buildKnowledgeExtractionData = async (
     requestId: req.request_id,
     chapterId: req.payload.chapter_id,
     promptVersion: PROMPT_VERSION,
+    promptVariant,
     systemPromptLength: systemPrompt.length,
     userPromptLength: userPrompt.length,
   });
@@ -334,6 +380,7 @@ export const handleKnowledgeExtraction = async (
     chapterId: req.payload.chapter_id,
     chunkId: req.payload.chunk_id,
     promptVersion: PROMPT_VERSION,
+    promptVariant: getPromptVariant(req),
   });
 
   const cacheKey = buildCacheKey(req);

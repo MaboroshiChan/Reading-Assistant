@@ -16,9 +16,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createLLMClient = createLLMClient;
+exports.createGeminiLLMClient = createGeminiLLMClient;
 exports.createLLMChatClient = createLLMChatClient;
+exports.createGeminiLLMChatClient = createGeminiLLMChatClient;
 exports.extractJsonFromText = extractJsonFromText;
-const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
 const config_1 = require("./config");
 const generative_ai_1 = require("@google/generative-ai");
@@ -26,14 +27,16 @@ const abort_1 = require("../src/utils/abort");
 // -----------------------------
 // Public API
 // -----------------------------
-const openrouterService_1 = require("./openrouterService");
 /**
  * Creates a reusable LLM client bound to a stable system prompt.
  */
 function createLLMClient(factoryOptions) {
-    if (config_1.config.llmProvider === 'openrouter') {
-        return (0, openrouterService_1.createOpenRouterLLMClient)(factoryOptions);
-    }
+    return createGeminiLLMClient(factoryOptions);
+}
+// -----------------------------
+// Gemini implementation
+// -----------------------------
+function createGeminiLLMClient(factoryOptions) {
     const systemPrompt = factoryOptions.systemPrompt.trim();
     if (!systemPrompt) {
         throw new Error('LLM client factory requires a non-empty system prompt');
@@ -79,9 +82,9 @@ function createLLMClient(factoryOptions) {
  * It uses the SDK's startChat method to preserve conversation history.
  */
 function createLLMChatClient(factoryOptions) {
-    if (config_1.config.llmProvider === 'openrouter') {
-        return (0, openrouterService_1.createOpenRouterLLMChatClient)(factoryOptions);
-    }
+    return createGeminiLLMChatClient(factoryOptions);
+}
+function createGeminiLLMChatClient(factoryOptions) {
     const systemPrompt = factoryOptions.systemPrompt.trim();
     if (!systemPrompt) {
         throw new Error('LLM client factory requires a non-empty system prompt');
@@ -213,7 +216,7 @@ async function callLLM(args) {
         return callLLMDirect(args, apiKey, useDeveloperInstruction);
     }
     catch (error) {
-        throw normalizeError(error);
+        throw normalizeError(error, args);
     }
 }
 async function callLLMDirect(args, apiKey, useDeveloperInstruction) {
@@ -224,12 +227,7 @@ async function callLLMDirect(args, apiKey, useDeveloperInstruction) {
         prefixCache: 0,
     });
     const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
-    let resolveUsage;
-    let rejectUsage;
-    const usagePromise = new Promise((resolve, reject) => {
-        resolveUsage = resolve;
-        rejectUsage = reject;
-    });
+    const usageTracker = createUsageTracker(args.model);
     const stream = await ai.models.generateContentStream({
         model: args.model,
         contents: requestPrompt,
@@ -246,31 +244,30 @@ async function callLLMDirect(args, apiKey, useDeveloperInstruction) {
     });
     const dataStream = (async function* () {
         let fullText = '';
-        let latestUsage = { modelId: args.model };
         try {
             for await (const chunk of stream) {
-                latestUsage = getUsageFromGenAIChunk(chunk, args.model);
+                Object.assign(usageTracker.latestUsage, getUsageFromGenAIChunk(chunk, args.model));
                 const text = typeof chunk.text === 'string' ? chunk.text : '';
                 fullText += text;
                 if (text) {
                     yield text;
                 }
             }
-            resolveUsage(latestUsage);
+            usageTracker.resolve();
             logLLMEvent('response.received', args, {
                 inlineSystemPrompt: useDeveloperInstruction ? 0 : 1,
                 prefixCache: 0,
-                inputTokens: latestUsage.inputTokens ?? 0,
-                outputTokens: latestUsage.outputTokens ?? 0,
+                inputTokens: usageTracker.latestUsage.inputTokens ?? 0,
+                outputTokens: usageTracker.latestUsage.outputTokens ?? 0,
             });
             void persistLLMResponse(args, fullText);
         }
         catch (error) {
-            rejectUsage(error);
-            throw error;
+            usageTracker.fail(error);
+            throw normalizeError(error, args);
         }
     })();
-    return { data: dataStream, usage: usagePromise };
+    return { data: dataStream, usage: usageTracker.usage };
 }
 async function callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDeveloperInstruction) {
     const { GoogleGenAI } = await import('@google/genai');
@@ -282,12 +279,7 @@ async function callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDevel
         prefixCache: 1,
         cachedSystemPrompt: shouldSendSystemPrompt ? 0 : 1,
     });
-    let resolveUsage;
-    let rejectUsage;
-    const usagePromise = new Promise((resolve, reject) => {
-        resolveUsage = resolve;
-        rejectUsage = reject;
-    });
+    const usageTracker = createUsageTracker(args.model);
     const stream = await ai.models.generateContentStream({
         model: args.model,
         contents: requestPrompt,
@@ -305,32 +297,31 @@ async function callLLMWithCachedPrefix(args, apiKey, cachedContentName, useDevel
     });
     const dataStream = (async function* () {
         let fullText = '';
-        let latestUsage = { modelId: args.model };
         try {
             for await (const chunk of stream) {
-                latestUsage = getUsageFromGenAIChunk(chunk, args.model);
+                Object.assign(usageTracker.latestUsage, getUsageFromGenAIChunk(chunk, args.model));
                 const text = typeof chunk.text === 'string' ? chunk.text : '';
                 fullText += text;
                 if (text) {
                     yield text;
                 }
             }
-            resolveUsage(latestUsage);
+            usageTracker.resolve();
             logLLMEvent('response.received', args, {
                 inlineSystemPrompt: 0,
                 prefixCache: 1,
                 cachedSystemPrompt: shouldSendSystemPrompt ? 0 : 1,
-                inputTokens: latestUsage.inputTokens ?? 0,
-                outputTokens: latestUsage.outputTokens ?? 0,
+                inputTokens: usageTracker.latestUsage.inputTokens ?? 0,
+                outputTokens: usageTracker.latestUsage.outputTokens ?? 0,
             });
             void persistLLMResponse(args, fullText);
         }
         catch (error) {
-            rejectUsage(error);
-            throw error;
+            usageTracker.fail(error);
+            throw normalizeError(error, args);
         }
     })();
-    return { data: dataStream, usage: usagePromise };
+    return { data: dataStream, usage: usageTracker.usage };
 }
 function logLLMEvent(event, args, fields) {
     const context = formatLLMLogContext({
@@ -425,28 +416,7 @@ function getUsageFromGenAIChunk(chunk, modelId) {
  * @param args - Arguments for the LLM call.
  */
 async function logPromptIfDebug(args) {
-    if (!config_1.config.debugMode)
-        return;
-    const timestamp = new Date().toISOString();
-    const entry = {
-        timestamp,
-        model: args.model,
-        responseAs: args.responseAs,
-        temperature: args.temperature,
-        maxOutputTokens: args.maxOutputTokens,
-        systemPrompt: args.systemPrompt,
-        userPrompt: args.userPrompt,
-        prefixCache: args.prefixCache ?? undefined,
-    };
-    try {
-        await promises_1.default.mkdir(LOG_DIR, { recursive: true });
-        await promises_1.default.appendFile(LOG_FILE, `${JSON.stringify(entry)}\n`, 'utf8');
-        console.log(`[llm-debug] ${timestamp} model=${args.model} responseAs=${args.responseAs}\n${formatDebugPrompt(args)}`);
-    }
-    catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(`[llm-debug] failed to persist prompt log: ${message}`);
-    }
+    return;
 }
 /**
  * Persists the LLM response to a JSON file in the resource directory for debugging and auditing.
@@ -455,36 +425,7 @@ async function logPromptIfDebug(args) {
  * @param text - The raw text response from the LLM.
  */
 async function persistLLMResponse(args, text) {
-    try {
-        await promises_1.default.mkdir(RESPONSE_DIR, { recursive: true });
-        const timestamp = new Date().toISOString();
-        const safeStamp = timestamp.replace(/[:.]/g, '-');
-        const parsed = (() => {
-            if (!text)
-                return null;
-            try {
-                return JSON.parse(text);
-            }
-            catch {
-                return null;
-            }
-        })();
-        const record = {
-            timestamp,
-            model: args.model,
-            responseAs: args.responseAs,
-            text: text || null,
-            parsed: parsed ?? undefined,
-            systemPrompt: config_1.config.debugMode ? args.systemPrompt : undefined,
-            userPrompt: config_1.config.debugMode ? args.userPrompt : undefined,
-            prompt: config_1.config.debugMode ? formatDebugPrompt(args) : undefined,
-        };
-        const filePath = node_path_1.default.join(RESPONSE_DIR, `${safeStamp}_${args.model}.json`);
-        await promises_1.default.writeFile(filePath, JSON.stringify(record, null, 2), 'utf8');
-    }
-    catch (error) {
-        console.warn('[llm-response] failed to persist response', error);
-    }
+    return;
 }
 /**
  * Extracts a JSON object from a text string, handling potential markdown code fences.
@@ -502,15 +443,106 @@ function extractJsonFromText(text) {
     catch {
         // Some models may wrap JSON in markdown fences
         const unwrapped = unwrapCodeFence(trimmed);
-        if (!unwrapped)
-            return {};
+        if (unwrapped) {
+            try {
+                return JSON.parse(unwrapped);
+            }
+            catch {
+                const extracted = extractBestEmbeddedJson(unwrapped);
+                if (extracted !== null)
+                    return extracted;
+            }
+        }
+        const extracted = extractBestEmbeddedJson(trimmed);
+        return extracted ?? {};
+    }
+}
+function extractBestEmbeddedJson(text) {
+    const candidates = collectBalancedJsonObjectCandidates(text);
+    let bestScore = -1;
+    let bestLength = -1;
+    let bestValue = null;
+    for (const candidate of candidates) {
         try {
-            return JSON.parse(unwrapped);
+            const parsed = JSON.parse(candidate);
+            const score = scoreJsonCandidate(parsed);
+            if (score > bestScore || (score === bestScore && candidate.length > bestLength)) {
+                bestScore = score;
+                bestLength = candidate.length;
+                bestValue = parsed;
+            }
         }
         catch {
-            return {};
+            // ignore invalid candidate
         }
     }
+    return bestScore >= 0 ? bestValue : null;
+}
+function collectBalancedJsonObjectCandidates(text) {
+    const candidates = [];
+    const startIndexes = [];
+    let inString = false;
+    let escaped = false;
+    for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (char === '\\') {
+            escaped = true;
+            continue;
+        }
+        if (char === '"') {
+            inString = !inString;
+            continue;
+        }
+        if (inString)
+            continue;
+        if (char === '{') {
+            startIndexes.push(index);
+            continue;
+        }
+        if (char === '}') {
+            const start = startIndexes.pop();
+            if (start === undefined)
+                continue;
+            candidates.push(text.slice(start, index + 1));
+        }
+    }
+    return candidates;
+}
+function scoreJsonCandidate(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        return -1;
+    const record = value;
+    const keys = Object.keys(record);
+    if (keys.length === 0)
+        return 0;
+    let score = keys.length;
+    if (Array.isArray(record.nodes))
+        score += 30;
+    if (Array.isArray(record.edges))
+        score += 30;
+    if (Array.isArray(record.evidence))
+        score += 30;
+    if (Array.isArray(record.people))
+        score += 12;
+    if (Array.isArray(record.ideas))
+        score += 12;
+    if (Array.isArray(record.events))
+        score += 12;
+    if (Array.isArray(record.entities))
+        score += 12;
+    if (Array.isArray(record.themes))
+        score += 12;
+    if (Array.isArray(record.relations))
+        score += 12;
+    if (Array.isArray(record.questions))
+        score += 20;
+    if (record.data && typeof record.data === 'object' && !Array.isArray(record.data))
+        score += 5;
+    return score;
 }
 /**
  * Removes markdown code fences from a string.
@@ -529,8 +561,14 @@ function unwrapCodeFence(s) {
  * @param error - The unknown error.
  * @returns A standard Error object.
  */
-function normalizeError(error) {
+function normalizeError(error, args) {
     if ((0, abort_1.isAbortError)(error)) {
+        if (!args?.signal?.aborted) {
+            const timeoutMs = args?.timeoutMs;
+            return new Error(timeoutMs && Number.isFinite(timeoutMs)
+                ? `LLM request timed out after ${timeoutMs}ms`
+                : 'LLM request timed out');
+        }
         return error instanceof Error ? error : new Error('Operation aborted');
     }
     if (error instanceof Error)
@@ -549,5 +587,28 @@ function formatDebugPrompt(args) {
     }
     sections.push('[User Prompt]', args.userPrompt);
     return sections.join('\n');
+}
+function createUsageTracker(modelId) {
+    let resolveUsage;
+    let settled = false;
+    const latestUsage = { modelId };
+    const usage = new Promise((resolve) => {
+        resolveUsage = resolve;
+    });
+    const resolve = (usageValue) => {
+        if (settled)
+            return;
+        settled = true;
+        resolveUsage(usageValue ?? latestUsage);
+    };
+    const fail = () => {
+        resolve(latestUsage);
+    };
+    return {
+        latestUsage,
+        usage,
+        resolve,
+        fail,
+    };
 }
 //# sourceMappingURL=llmService.js.map

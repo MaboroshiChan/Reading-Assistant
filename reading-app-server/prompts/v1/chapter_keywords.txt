@@ -36,3 +36,9 @@ Rules:
 - `reason` must be a short explanation in plain English, ideally 4 to 12 words.
 - `reason` should explain why the sentence matters, not restate the whole sentence.
 - `sentence_keywords` must always be an empty array.
+
+Variant handling:
+- If `Prompt Variant` is `fiction`, use a much stricter bar.
+- For fiction, only select sentences that capture plot-critical events: decisive actions, major revelations, irreversible choices, turning points, or confrontations with clear downstream consequences.
+- For fiction, do not highlight setup, scenery, mood, routine motion, incidental dialogue, or descriptive sentences unless they directly change the course of events.
+- For fiction, prefer 0 to 2 key sentences per chunk, not 2 to 5.

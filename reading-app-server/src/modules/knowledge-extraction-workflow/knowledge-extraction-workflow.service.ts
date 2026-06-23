@@ -13,9 +13,18 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import type {
   AnalyzeKnowledgeExtractionData,
+  AnalyzeKnowledgeExtractionGraphData,
   KnowledgeEntity,
   KnowledgeEvent,
   KnowledgeEvidence,
+  KnowledgeGraphEdge,
+  KnowledgeGraphEntityNode,
+  KnowledgeGraphEventNode,
+  KnowledgeGraphEvidence,
+  KnowledgeGraphIdeaNode,
+  KnowledgeGraphNode,
+  KnowledgeGraphPersonNode,
+  KnowledgeGraphThemeNode,
   KnowledgeIdea,
   KnowledgePageRef,
   KnowledgePerson,
@@ -42,20 +51,26 @@ import type {
   GetKnowledgeExtractionWorkflowResultResponseDto,
   GetKnowledgeExtractionWorkflowStatusResponseDto,
   GetLatestChapterKnowledgeExtractionResponseDto,
+  RestartKnowledgeExtractionWorkflowRequestDto,
+  RestartKnowledgeExtractionWorkflowResponseDto,
   SubmitKnowledgeExtractionWorkflowRequestDto,
   SubmitKnowledgeExtractionWorkflowResponseDto,
 } from './knowledge-extraction-workflow.dto';
 import { KnowledgeExtractionWorkflowRepository } from './knowledge-extraction-workflow.repository';
 import type {
+  KnowledgeExtractionWorkflowCheckpoint,
+  KnowledgeExtractionWorkflowPartialPieceResult,
   KnowledgeExtractionWorkflowProgress,
+  KnowledgeExtractionWorkflowRestartMode,
   KnowledgeExtractionWorkflowResultPayload,
   KnowledgeExtractionWorkflowRunRecord,
   SubmitKnowledgeExtractionWorkflowInput,
 } from './knowledge-extraction-workflow.types';
 import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
-const PROMPT_VERSION = 'knowledge_extraction.v2.3';
-const PROMPT_PATH = resolvePromptPath('knowledge_extraction.txt');
+const PROMPT_VERSION = 'knowledge_extraction.v2.7';
+const FICTION_PROMPT_PATH = resolvePromptPath('knowledge_extraction_fiction.txt');
+const NON_FICTION_PROMPT_PATH = resolvePromptPath('knowledge_extraction_nonfiction.txt');
 
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
 const NODE_TYPES = new Set(['person', 'idea', 'event', 'entity', 'theme']);
@@ -68,6 +83,11 @@ const RELATION_TYPES = new Set([
   'participates_in',
   'located_in',
   'happens_at',
+  'founded',
+  'authored',
+  'mentions',
+  'argues',
+  'illustrates',
   'reflects',
   'related_to',
 ]);
@@ -81,6 +101,16 @@ const MAX_TRANSIENT_LLM_RETRY_DELAY_MS = 12_000;
 const MAX_WORKFLOW_LLM_RETRIES = 2;
 const DEFAULT_WORKFLOW_LLM_RETRY_DELAY_MS = 5_000;
 const MAX_WORKFLOW_LLM_RETRY_DELAY_MS = 30_000;
+const MAX_KNOWLEDGE_EXTRACTION_OUTPUT_TOKENS = 6_144;
+const MAX_MEMORY_RELATION_HINTS = 6;
+const MAX_MEMORY_SEEN_PAGES = 4;
+const MEMORY_ITEM_LIMITS = {
+  people: 12,
+  ideas: 14,
+  events: 10,
+  entities: 10,
+  themes: 6,
+} as const;
 
 type KnowledgePiece = {
   pageIndex: number;
@@ -96,6 +126,7 @@ type KnowledgeMemoryItem = {
   local_id: string;
   canonical_label: string;
   aliases?: string[];
+  importance?: KnowledgePerson['importance'];
   relation_hints?: string[];
   seen_pages: number[];
 };
@@ -108,6 +139,9 @@ type KnowledgeMemoryContext = {
   themes: KnowledgeMemoryItem[];
 };
 
+type KnowledgeGraphNodeType = KnowledgeGraphNode['type'];
+type KnowledgePromptVariant = 'fiction' | 'nonfiction';
+
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
@@ -116,6 +150,15 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() ? value.trim() : undefined;
+
+const asBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return undefined;
+};
 
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -137,7 +180,83 @@ const CONTEXT_HEAVY_IDEA_TOKENS = [
   'election',
 ] as const;
 
-let cachedSystemPrompt: string | null = null;
+const IDEA_DEDUP_STOPWORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'as',
+  'at',
+  'by',
+  'for',
+  'from',
+  'in',
+  'into',
+  'of',
+  'on',
+  'or',
+  'the',
+  'to',
+  'vs',
+  'versus',
+  'with',
+  'within',
+]);
+
+const ENTITY_TYPE_PRIORITY: Record<KnowledgeEntity['type'], number> = {
+  organization: 5,
+  place: 4,
+  time: 3,
+  object: 2,
+  other: 1,
+};
+
+const ABSTRACT_ENTITY_IDEA_LABEL_PATTERN = /\b(economics?|philosophy|finance|policy|policies|policing|theory|discipline|movement|tradition|school of thought|school)\b/i;
+const ABSTRACT_ENTITY_IDEA_DESCRIPTION_PATTERN = /\b(discipline|field|school of thought|movement|tradition|policy|principle|theory|approach|framework)\b/i;
+const PLACE_ENTITY_HINT_PATTERN = /\b(city|town|county|state|country|school|university|hospital|office|hall|court|park|street|avenue|road|bridge|station|house|home)\b/i;
+const OBJECT_ENTITY_HINT_PATTERN = /\b(book|report|paper|article|essay|study|novel|memoir|journal|magazine|device|tool|machine|car|house|coin|gum)\b/i;
+const CORRELATION_CAUSATION_IDEA_PATTERN = /\bcorrelation\b.*\bcausation\b|\bcausation\b.*\bcorrelation\b/i;
+
+const AUTHORED_RELATION_PATTERN = /\b(author(?:ed|s|ing)?|wrote|written|co-?author(?:ed|s|ing)?|published)\b/i;
+const FOUNDED_RELATION_PATTERN = /\b(found(?:ed|er|ing)?|pioneer(?:ed|ing)?|originat(?:ed|ing)?|created)\b/i;
+const MENTIONS_RELATION_PATTERN = /\b(wrote about|writes about|written about|mentioned|mentions|discuss(?:es|ed|ing)?|describ(?:es|ed|ing)?|examines?|about)\b/i;
+const ARGUES_RELATION_PATTERN = /\b(argue(?:s|d|ing)?|argued that|claim(?:s|ed|ing)?|contend(?:s|ed|ing)?|maintain(?:s|ed|ing)?|assert(?:s|ed|ing)?|note(?:s|d|ing)?|hold(?:s|ing)? that)\b/i;
+const ILLUSTRATES_RELATION_PATTERN = /\b(illustrat(?:es|ed|ing)|example|exemplif(?:ies|ied|ying)|show(?:s|ed|ing)|demonstrat(?:es|ed|ing)|case(?: study)?|instance)\b/i;
+const PLACEHOLDER_PERSON_LABEL_PATTERN = /^candidate(?:\s+[a-z0-9]+)?$/i;
+const GENERIC_PERSON_LABELS = new Set([
+  'candidate',
+  'candidates',
+  'political candidate',
+  'observer',
+  'unknown observer',
+  'czar',
+  'ruler',
+  'real estate agent',
+  'real-estate agent',
+  'real estate agents',
+  'real-estate agents',
+  'auto mechanic',
+  'auto mechanics',
+  'obstetrician',
+  'obstetricians',
+  'politician',
+  'politicians',
+  'teacher',
+  'teachers',
+  'student',
+  'students',
+  'doctor',
+  'doctors',
+  'expert',
+  'experts',
+  'police officer',
+  'police officers',
+]);
+const LOW_SIGNAL_RELATED_TO_PATTERN = /\b(type of|kind of|used as (?:a )?comparison|point of comparison|part of the data used for analysis|analyzed for|setting for the discussion|context in which|compared to|comparison to|key aspect of|contributing to|applied to|contextualiz(?:e|es|ed|ing)|subject being analyzed)\b/i;
+const PERSON_TITLE_PREFIX_PATTERN = /^(president|senator|governor|representative|general|judge|justice|professor|prof\.?|doctor|dr\.?|mr\.?|mrs\.?|ms\.?|rev\.?|reverend|sir)\s+/i;
+const GENERIC_PERSON_GROUP_PATTERN = /^(?:(?:american|california|chicago|dallas|new york|u s|us|united states)\s+)?(?:real[- ]estate agents?|auto mechanics?|obstetricians?|politicians?|teachers?|students?|doctors?|experts?|police officers?)$/i;
+
+let cachedFictionSystemPrompt: string | null = null;
+let cachedNonFictionSystemPrompt: string | null = null;
 
 @Injectable()
 export class KnowledgeExtractionWorkflowService implements OnApplicationBootstrap {
@@ -256,6 +375,28 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     return request;
   }
 
+  parseRestartRequest(rawBody: string | undefined): RestartKnowledgeExtractionWorkflowRequestDto {
+    if (!rawBody || rawBody.trim() === '') {
+      return { mode: 'resume' };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch (error) {
+      throw new BadRequestException(
+        `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    if (!isPlainObject(parsed)) {
+      throw new BadRequestException('Request body must be a JSON object');
+    }
+
+    const mode = parsed.mode === undefined ? 'resume' : this.requireRestartMode(parsed.mode);
+    return { mode };
+  }
+
   submitKnowledgeExtractionWorkflow(
     request: SubmitKnowledgeExtractionWorkflowRequestDto,
   ): SubmitKnowledgeExtractionWorkflowResponseDto {
@@ -361,6 +502,56 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       resultAvailable: Boolean(run.output),
     });
     return this.toStatusResponse(run);
+  }
+
+  restartWorkflow(
+    workflowRunId: string,
+    request: RestartKnowledgeExtractionWorkflowRequestDto,
+  ): RestartKnowledgeExtractionWorkflowResponseDto {
+    const run = this.requireRun(workflowRunId);
+    const restartMode = request.mode ?? 'resume';
+
+    if (run.status === 'queued' || run.status === 'running') {
+      return {
+        ...this.toStatusResponse(run),
+        restartMode,
+      };
+    }
+    if (run.status === 'completed') {
+      throw new ConflictException('Knowledge extraction workflow is already completed and cannot be restarted');
+    }
+    if (run.status === 'stale') {
+      throw new ConflictException('Knowledge extraction workflow is stale and cannot be restarted');
+    }
+
+    const book = this.bookIngestionRepository.getBook(run.bookId);
+    const chapter = this.bookIngestionRepository.getChapter(run.bookId, run.chapterId);
+    if (!book || !chapter) {
+      throw new NotFoundException('Chapter not found in canonical ingestion state');
+    }
+    if (
+      run.expectedSnapshotVersion !== undefined
+      && run.expectedSnapshotVersion !== book.snapshotVersion
+    ) {
+      throw new ConflictException('Canonical book snapshot changed; submit a new knowledge extraction workflow');
+    }
+    if (
+      run.expectedChapterContentHash !== undefined
+      && run.expectedChapterContentHash !== chapter.chapterContentHash
+    ) {
+      throw new ConflictException('Canonical chapter content changed; submit a new knowledge extraction workflow');
+    }
+
+    const restarted = this.knowledgeExtractionWorkflowRepository.restartFailedRun(workflowRunId, restartMode);
+    if (!restarted) {
+      throw new ConflictException('Knowledge extraction workflow cannot be restarted from its current state');
+    }
+
+    this.workflowQueueService.enqueue(() => this.executeRun(restarted.id));
+    return {
+      ...this.toStatusResponse(restarted),
+      restartMode,
+    };
   }
 
   getWorkflowResult(workflowRunId: string): GetKnowledgeExtractionWorkflowResultResponseDto {
@@ -545,6 +736,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       const result = await retryLLMOperation({
         operation: () => this.generateKnowledgeExtraction({
           workflowRunId,
+          run: runningRun,
           bookId: runningRun.bookId,
           chapterId: runningRun.chapterId,
           chapterIndex: runningRun.chapterIndex,
@@ -736,6 +928,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private async generateKnowledgeExtraction(input: {
     workflowRunId: string;
+    run: KnowledgeExtractionWorkflowRunRecord;
     bookId: string;
     chapterId: string;
     chapterIndex: number;
@@ -746,20 +939,37 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   }): Promise<KnowledgeExtractionWorkflowResultPayload> {
     const bookContext = this.bookContextService.buildBookContextBundle(input.bookId, input.chapterId);
     const chapterContext = this.bookContextService.buildChapterContextBundle(input.bookId, input.chapterId);
-    const incrementalRepository = new KnowledgeExtractionWorkflowRepository();
+    const promptCacheVersion = this.pageCachePromptVersion(input.bookId);
+    const { incrementalRepository, startPieceIndex } = await this.restorePieceProgress({
+      workflowRunId: input.workflowRunId,
+      run: input.run,
+      bookId: input.bookId,
+      chapterId: input.chapterId,
+      chapterIndex: input.chapterIndex,
+      chapterTitle: input.chapterTitle,
+      chapterContentHash: input.chapterContentHash,
+      pieces: input.pieces,
+    });
 
     this.publishWorkflowProgress(input.workflowRunId, {
-      percent: INITIAL_RUNNING_PROGRESS_PERCENT,
+      percent: this.progressPercentForProcessedPieces(startPieceIndex, input.pieces.length),
       stage: 'extract_chunk_knowledge',
       message: '正在抽取关键人物与关系',
     });
 
-    for (const piece of input.pieces) {
+    if (startPieceIndex === 0) {
+      this.knowledgeExtractionWorkflowRepository.updateRunCheckpoint(
+        input.workflowRunId,
+        this.buildPieceCheckpoint(input.pieces, -1),
+      );
+    }
+
+    for (const piece of input.pieces.slice(startPieceIndex)) {
       const memorySnapshot = await incrementalRepository.buildChapterSnapshot(
         input.bookId,
         input.chapterId,
       );
-      const memoryContext = this.buildMemoryContext(memorySnapshot);
+      const memoryContext = this.buildMemoryContext(memorySnapshot, piece.pageIndex);
       const pageWindow = this.bookContextService.buildPageWindowContext(
         input.bookId,
         input.chapterId,
@@ -778,22 +988,30 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         pageWindow,
         memoryContext,
       });
-      this.knowledgeExtractionWorkflowRepository.setCachedPageExtraction({
+      this.knowledgeExtractionWorkflowRepository.setCachedPageGraphExtraction({
         bookId: input.bookId,
         chapterId: input.chapterId,
         pageIndex: piece.pageIndex,
         sourceHash: piece.sourceHash,
         chapterContentHash: input.chapterContentHash,
-        promptVersion: PROMPT_VERSION,
+        promptVersion: promptCacheVersion,
         extraction: pieceResult,
       });
-      const chapterCounts = await incrementalRepository.upsertPageExtraction({
+      const chapterCounts = await incrementalRepository.upsertPageGraphExtraction({
         bookId: input.bookId,
         chapterId: input.chapterId,
         chapterIndex: input.chapterIndex,
         chapterTitle: input.chapterTitle,
         extraction: pieceResult,
       });
+      this.knowledgeExtractionWorkflowRepository.upsertPartialPieceResult(
+        input.workflowRunId,
+        this.buildPartialPieceResult(piece, pieceResult),
+      );
+      this.knowledgeExtractionWorkflowRepository.updateRunCheckpoint(
+        input.workflowRunId,
+        this.buildPieceCheckpoint(input.pieces, piece.pieceIndex),
+      );
       workflowLog('piece.processed', {
         workflowKind: 'knowledge_extraction',
         bookId: input.bookId,
@@ -803,12 +1021,12 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         pieceIndex: piece.pieceIndex,
         totalPieces: piece.totalPieces,
         sourceHash: piece.sourceHash,
-        extractedPeopleCount: pieceResult.people.length,
-        extractedIdeaCount: pieceResult.ideas.length,
-        extractedEventCount: pieceResult.events.length,
-        extractedEntityCount: pieceResult.entities.length,
-        extractedThemeCount: pieceResult.themes.length,
-        extractedRelationCount: pieceResult.relations.length,
+        extractedPeopleCount: this.countGraphNodes(pieceResult.nodes, 'person'),
+        extractedIdeaCount: this.countGraphNodes(pieceResult.nodes, 'idea'),
+        extractedEventCount: this.countGraphNodes(pieceResult.nodes, 'event'),
+        extractedEntityCount: this.countGraphNodes(pieceResult.nodes, 'entity'),
+        extractedThemeCount: this.countGraphNodes(pieceResult.nodes, 'theme'),
+        extractedRelationCount: pieceResult.edges.length,
         accumulatedPeopleCount: chapterCounts.peopleCount,
         accumulatedIdeaCount: chapterCounts.ideaCount,
         accumulatedEventCount: chapterCounts.eventCount,
@@ -844,6 +1062,153 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     return knowledge;
   }
 
+  private async restorePieceProgress(input: {
+    workflowRunId: string;
+    run: KnowledgeExtractionWorkflowRunRecord;
+    bookId: string;
+    chapterId: string;
+    chapterIndex: number;
+    chapterTitle?: string;
+    chapterContentHash: string;
+    pieces: KnowledgePiece[];
+  }): Promise<{
+    incrementalRepository: KnowledgeExtractionWorkflowRepository;
+    startPieceIndex: number;
+  }> {
+    const incrementalRepository = new KnowledgeExtractionWorkflowRepository();
+    const checkpoint = input.run.checkpoint;
+    if (!checkpoint || checkpoint.nextPieceIndex <= 0) {
+      return {
+        incrementalRepository,
+        startPieceIndex: 0,
+      };
+    }
+
+    const expectedPieceCount = Math.min(checkpoint.nextPieceIndex, input.pieces.length);
+    const isCompatibleCheckpoint = checkpoint.totalPieces === input.pieces.length
+      && checkpoint.nextPieceIndex <= input.pieces.length;
+    const promptCacheVersion = this.pageCachePromptVersion(input.bookId);
+    const cachedExtractions: AnalyzeKnowledgeExtractionGraphData[] = [];
+    const hasReplayablePageCache = isCompatibleCheckpoint && input.pieces
+      .slice(0, expectedPieceCount)
+      .every((piece) => {
+        const cachedExtraction = this.knowledgeExtractionWorkflowRepository.getCachedPageGraphExtraction(
+          input.bookId,
+          input.chapterId,
+          piece.pageIndex,
+          piece.sourceHash,
+          input.chapterContentHash,
+          promptCacheVersion,
+        );
+        if (!cachedExtraction) {
+          return false;
+        }
+        cachedExtractions.push(cachedExtraction);
+        return true;
+      });
+
+    if (hasReplayablePageCache) {
+      for (const extraction of cachedExtractions) {
+        await incrementalRepository.upsertPageGraphExtraction({
+          bookId: input.bookId,
+          chapterId: input.chapterId,
+          chapterIndex: input.chapterIndex,
+          chapterTitle: input.chapterTitle,
+          extraction,
+        });
+      }
+
+      return {
+        incrementalRepository,
+        startPieceIndex: checkpoint.nextPieceIndex,
+      };
+    }
+
+    const partialPieceResults = (input.run.partialPieceResults ?? [])
+      .filter((item) => item.pieceIndex >= 0 && item.pieceIndex < expectedPieceCount)
+      .sort((left, right) => left.pieceIndex - right.pieceIndex);
+    const isSequential = partialPieceResults.length === expectedPieceCount
+      && partialPieceResults.every((item, index) => item.pieceIndex === index);
+    const matchesPiecePlan = partialPieceResults.every((item) => {
+      const piece = input.pieces[item.pieceIndex];
+      if (!piece) return false;
+      return piece.pageIndex === item.pageIndex
+        && piece.pageNumber === item.pageNumber
+        && piece.sourceHash === item.sourceHash
+        && piece.pageRefs.length === item.pageRefs.length
+        && piece.pageRefs.every((pageRef, pageRefIndex) =>
+          pageRef.pageIndex === item.pageRefs[pageRefIndex]?.pageIndex
+          && pageRef.pageNumber === item.pageRefs[pageRefIndex]?.pageNumber);
+    });
+
+    if (!isCompatibleCheckpoint || !isSequential || !matchesPiecePlan) {
+      const fallbackReason = !isCompatibleCheckpoint
+        ? 'checkpoint_mismatch'
+        : !isSequential
+          ? 'missing_partial_piece_results'
+          : 'piece_plan_mismatch';
+      workflowLog('run.resume_fallback_to_start', {
+        workflowKind: input.run.kind,
+        workflowRunId: input.workflowRunId,
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        chapterIndex: input.chapterIndex,
+        workflowVersion: input.run.workflowVersion,
+        reason: fallbackReason,
+      });
+      this.knowledgeExtractionWorkflowRepository.clearRunCheckpoint(input.workflowRunId);
+      this.knowledgeExtractionWorkflowRepository.clearPartialPieceResults(input.workflowRunId);
+      return {
+        incrementalRepository,
+        startPieceIndex: 0,
+      };
+    }
+
+    for (const partialPieceResult of partialPieceResults) {
+      await incrementalRepository.upsertPageGraphExtraction({
+        bookId: input.bookId,
+        chapterId: input.chapterId,
+        chapterIndex: input.chapterIndex,
+        chapterTitle: input.chapterTitle,
+        extraction: partialPieceResult.extraction,
+      });
+    }
+
+    return {
+      incrementalRepository,
+      startPieceIndex: checkpoint.nextPieceIndex,
+    };
+  }
+
+  private buildPartialPieceResult(
+    piece: KnowledgePiece,
+    extraction: AnalyzeKnowledgeExtractionGraphData,
+  ): KnowledgeExtractionWorkflowPartialPieceResult {
+    return {
+      pieceIndex: piece.pieceIndex,
+      pageIndex: piece.pageIndex,
+      pageNumber: piece.pageNumber,
+      sourceHash: piece.sourceHash,
+      pageRefs: piece.pageRefs.map((pageRef) => ({ ...pageRef })),
+      extraction,
+    };
+  }
+
+  private buildPieceCheckpoint(
+    pieces: KnowledgePiece[],
+    completedPieceIndex: number,
+  ): KnowledgeExtractionWorkflowCheckpoint {
+    const nextPiece = pieces[completedPieceIndex + 1];
+    return {
+      totalPieces: pieces.length,
+      lastCompletedPieceIndex: completedPieceIndex,
+      nextPieceIndex: completedPieceIndex + 1,
+      nextPrimaryPageIndex: nextPiece?.pageIndex,
+      nextPrimaryPageNumber: nextPiece?.pageNumber,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   private async generateKnowledgeExtractionForPiece(input: {
     bookId: string;
     chapterId: string;
@@ -856,14 +1221,15 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     chapterContext: ChapterContextBundle | null;
     pageWindow: PageWindowContext;
     memoryContext: KnowledgeMemoryContext;
-  }): Promise<AnalyzeKnowledgeExtractionData> {
-    const cached = this.knowledgeExtractionWorkflowRepository.getCachedPageExtraction(
+  }): Promise<AnalyzeKnowledgeExtractionGraphData> {
+    const promptCacheVersion = this.pageCachePromptVersion(input.bookId);
+    const cached = this.knowledgeExtractionWorkflowRepository.getCachedPageGraphExtraction(
       input.bookId,
       input.chapterId,
       input.piece.pageIndex,
       input.piece.sourceHash,
       input.chapterContentHash,
-      PROMPT_VERSION,
+      promptCacheVersion,
     );
     if (cached) {
       workflowLog('piece.cache_hit', {
@@ -872,7 +1238,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         chapterId: input.chapterId,
         pageIndex: input.piece.pageIndex,
         sourceHash: input.piece.sourceHash,
-        promptVersion: PROMPT_VERSION,
+        promptVersion: promptCacheVersion,
       });
       return cached;
     }
@@ -892,7 +1258,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     chapterContext: ChapterContextBundle | null;
     pageWindow: PageWindowContext;
     memoryContext: KnowledgeMemoryContext;
-  }): Promise<AnalyzeKnowledgeExtractionData> {
+  }): Promise<AnalyzeKnowledgeExtractionGraphData> {
     return retryLLMOperation({
       operation: () => this.generateKnowledgeExtractionForPieceOnce(input),
       maxRetries: MAX_TRANSIENT_LLM_RETRIES,
@@ -931,16 +1297,20 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     chapterContext: ChapterContextBundle | null;
     pageWindow: PageWindowContext;
     memoryContext: KnowledgeMemoryContext;
-  }): Promise<AnalyzeKnowledgeExtractionData> {
-    const [systemPrompt, userPrompt] = await Promise.all([
-      this.loadPrompt(),
-      Promise.resolve(this.buildPieceSuffixPrompt(input)),
-    ]);
+  }): Promise<AnalyzeKnowledgeExtractionGraphData> {
     const book = this.bookIngestionRepository.getBook(input.bookId);
     const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
+    const promptVariant = this.promptVariantForBook(input.bookId);
+    const isFiction = promptVariant === 'fiction';
+    const [systemPrompt, userPrompt] = await Promise.all([
+      this.loadPrompt(isFiction),
+      Promise.resolve(this.buildPieceSuffixPrompt(input)),
+    ]);
     const llmClient = createLLMClient({
       systemPrompt,
       model: config.knowledgeExtractionWorkflowModel,
+      maxOutputTokens: MAX_KNOWLEDGE_EXTRACTION_OUTPUT_TOKENS,
+      timeoutMs: config.knowledgeExtractionWorkflowTimeoutMs,
       prefixCache: buildSharedChapterPrefixCache({
         bookId: input.bookId,
         chapterId: input.chapterId,
@@ -975,14 +1345,17 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
     try {
       const parsed = extractJsonFromText(text);
-      return this.sanitizeKnowledgeExtraction(parsed, {
+      return this.sanitizeKnowledgeExtractionGraph(parsed, {
         chapterId: input.chapterId,
         chapterTitle: input.chapterTitle,
-        chapterText: input.piece.rawText,
+        chapterText: input.chapterText,
         allowedPageRefs: input.piece.pageRefs,
+        promptVariant,
+        memoryContext: input.memoryContext,
+        primaryPageText: input.piece.rawText,
       });
     } catch {
-      return this.createEmptyKnowledgeExtraction(input.chapterId, input.chapterTitle);
+      return this.createEmptyKnowledgeExtractionGraph(input.chapterId, input.chapterTitle);
     }
   }
 
@@ -1056,25 +1429,99 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     return sections.join('\n');
   }
 
-  private async loadPrompt(): Promise<string> {
-    if (cachedSystemPrompt) return cachedSystemPrompt;
-    cachedSystemPrompt = (await fs.readFile(PROMPT_PATH, 'utf8')).trim();
-    return cachedSystemPrompt;
+  private async loadPrompt(isFiction?: boolean): Promise<string> {
+    if (isFiction) {
+      if (cachedFictionSystemPrompt) return cachedFictionSystemPrompt;
+      cachedFictionSystemPrompt = (await fs.readFile(FICTION_PROMPT_PATH, 'utf8')).trim();
+      return cachedFictionSystemPrompt;
+    } else {
+      if (cachedNonFictionSystemPrompt) return cachedNonFictionSystemPrompt;
+      cachedNonFictionSystemPrompt = (await fs.readFile(NON_FICTION_PROMPT_PATH, 'utf8')).trim();
+      return cachedNonFictionSystemPrompt;
+    }
   }
 
-  private createEmptyKnowledgeExtraction(
+  private pageCachePromptVersion(bookId: string): string {
+    return `${PROMPT_VERSION}:${this.promptVariantForBook(bookId)}`;
+  }
+
+  private promptVariantForBook(bookId: string): KnowledgePromptVariant {
+    const book = this.bookIngestionRepository.getBook(bookId);
+    const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
+    return asBoolean(metadataRecord.isFiction) === true ? 'fiction' : 'nonfiction';
+  }
+
+  private createEmptyKnowledgeExtractionGraph(
     chapterId: string,
     chapterTitle?: string,
-  ): AnalyzeKnowledgeExtractionData {
+  ): AnalyzeKnowledgeExtractionGraphData {
     return {
       title: chapterTitle ?? `Chapter ${chapterId}`,
       summary: '',
-      people: [],
-      ideas: [],
-      events: [],
-      entities: [],
-      themes: [],
-      relations: [],
+      nodes: [],
+      edges: [],
+      evidence: [],
+    };
+  }
+
+  private sanitizeKnowledgeExtractionGraph(
+    raw: unknown,
+    input: {
+      chapterId: string;
+      chapterTitle?: string;
+      chapterText?: string;
+      allowedPageRefs: KnowledgePageRef[];
+      promptVariant?: KnowledgePromptVariant;
+      memoryContext?: KnowledgeMemoryContext;
+      primaryPageText?: string;
+    },
+  ): AnalyzeKnowledgeExtractionGraphData {
+    const record = isPlainObject(raw) ? raw : {};
+    const workLikeIdeaIds = this.findWorkLikeIdeaNodeIds(record.nodes, record.edges);
+    const rawNodes = this.sanitizeGraphNodes(
+      record.nodes,
+      input.promptVariant,
+      input.memoryContext,
+      input.primaryPageText,
+      input.chapterText,
+      workLikeIdeaIds,
+    ) ?? [];
+    const {
+      nodes,
+      nodeIdRedirects,
+    } = input.promptVariant === 'fiction'
+      ? {
+        nodes: rawNodes,
+        nodeIdRedirects: new Map<string, string>(),
+      }
+      : this.deduplicateGraphNodes(rawNodes);
+    const nodesById = new Map(nodes.map((node) => [node.id, node]));
+    const edges = this.normalizeGraphEdges(
+      this.sanitizeGraphEdges(record.edges, nodesById, nodeIdRedirects) ?? [],
+      nodesById,
+    ) ?? [];
+    const edgeIds = new Set(edges.map((edge) => edge.id));
+    const explicitEvidence = this.sanitizeGraphEvidence(
+      record.evidence,
+      input.allowedPageRefs,
+      nodesById,
+      edgeIds,
+      nodeIdRedirects,
+    ) ?? [];
+    const embeddedEvidence = this.sanitizeEmbeddedGraphEvidence(
+      record,
+      input.allowedPageRefs,
+      nodesById,
+      edgeIds,
+      nodeIdRedirects,
+    ) ?? [];
+
+    return {
+      title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
+      summary: asString(record.summary) ?? '',
+      nodes,
+      edges,
+      evidence: this.mergeGraphEvidence(explicitEvidence, embeddedEvidence),
     };
   }
 
@@ -1085,20 +1532,34 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       chapterTitle?: string;
       chapterText: string;
       allowedPageRefs: KnowledgePageRef[];
+      promptVariant?: KnowledgePromptVariant;
     },
   ): AnalyzeKnowledgeExtractionData {
     const record = isPlainObject(raw) ? raw : {};
+    if (!Array.isArray(record.nodes) && !Array.isArray(record.edges) && !Array.isArray(record.evidence)) {
+      return {
+        title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
+        summary: asString(record.summary) ?? this.summarize(input.chapterText, 240),
+        people: this.sanitizePeople(record.people, input.allowedPageRefs) ?? [],
+        ideas: this.sanitizeIdeas(record.ideas, input.allowedPageRefs, input.promptVariant) ?? [],
+        events: this.sanitizeEvents(record.events, input.allowedPageRefs) ?? [],
+        entities: this.sanitizeEntities(record.entities, input.allowedPageRefs) ?? [],
+        themes: this.sanitizeThemes(record.themes, input.allowedPageRefs) ?? [],
+        relations: this.sanitizeRelations(record.relations, input.allowedPageRefs) ?? [],
+      };
+    }
 
-    return {
-      title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
-      summary: asString(record.summary) ?? this.summarize(input.chapterText, 240),
-      people: this.sanitizePeople(record.people, input.allowedPageRefs) ?? [],
-      ideas: this.sanitizeIdeas(record.ideas, input.allowedPageRefs) ?? [],
-      events: this.sanitizeEvents(record.events, input.allowedPageRefs) ?? [],
-      entities: this.sanitizeEntities(record.entities, input.allowedPageRefs) ?? [],
-      themes: this.sanitizeThemes(record.themes, input.allowedPageRefs) ?? [],
-      relations: this.sanitizeRelations(record.relations, input.allowedPageRefs) ?? [],
-    };
+    const graph = this.sanitizeKnowledgeExtractionGraph(raw, {
+      chapterId: input.chapterId,
+      chapterTitle: input.chapterTitle,
+      chapterText: input.chapterText,
+      allowedPageRefs: input.allowedPageRefs,
+      promptVariant: input.promptVariant,
+    });
+    return this.graphToKnowledgeExtractionData({
+      ...graph,
+      summary: graph.summary || this.summarize(input.chapterText, 240),
+    });
   }
 
   private sanitizeStringArray(value: unknown): string[] | undefined {
@@ -1137,7 +1598,1258 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     return evidence.length ? evidence : undefined;
   }
 
-  private buildMemoryContext(snapshot: AnalyzeKnowledgeExtractionData): KnowledgeMemoryContext {
+  private sanitizeGraphNodes(
+    value: unknown,
+    promptVariant: KnowledgePromptVariant = 'nonfiction',
+    memoryContext?: KnowledgeMemoryContext,
+    primaryPageText?: string,
+    chapterText?: string,
+    workLikeIdeaIds: Set<string> = new Set(),
+  ): KnowledgeGraphNode[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const nodes: KnowledgeGraphNode[] = [];
+    const seenIds = new Set<string>();
+
+    for (const [index, item] of value.entries()) {
+      if (!isPlainObject(item)) continue;
+      const type = asString(item.type);
+      const label = asString(item.label);
+      if (!type || !label || !NODE_TYPES.has(type)) continue;
+      const id = asString(item.id) ?? `${type[0]}${index + 1}`;
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+
+      switch (type) {
+        case 'person': {
+          const rawImportance = asString(item.importance);
+          const importance =
+            rawImportance === 'main' || rawImportance === 'supporting' || rawImportance === 'minor'
+              ? rawImportance
+              : undefined;
+          const person = this.normalizeGraphPersonIdentity({
+            id,
+            type,
+            label,
+            aliases: this.sanitizeStringArray(item.aliases),
+            importance,
+            description: asString(item.description),
+            roles: this.sanitizeStringArray(item.roles),
+            traits: this.sanitizeStringArray(item.traits),
+          }, memoryContext, primaryPageText, chapterText);
+          if (!this.shouldKeepGraphPersonNode(person)) continue;
+          nodes.push(person);
+          break;
+        }
+        case 'idea': {
+          const kind = asString(item.kind);
+          const normalizedKind = kind && IDEA_KINDS.has(kind) ? kind as KnowledgeIdea['kind'] : 'claim';
+          const description = asString(item.description);
+          if (workLikeIdeaIds.has(id) && this.isWorkLikeIdeaLabel(label, description)) {
+            nodes.push({
+              id,
+              type: 'entity',
+              label,
+              entity_type: 'object',
+              description,
+            });
+            break;
+          }
+          const ideaNode: KnowledgeGraphIdeaNode = {
+            id,
+            type,
+            label,
+            kind: normalizedKind,
+            description,
+          };
+          const idea: KnowledgeIdea = {
+            local_id: id,
+            label,
+            kind: normalizedKind,
+            description: ideaNode.description,
+          };
+          if (!this.shouldKeepIdea(idea, promptVariant)) continue;
+          nodes.push(ideaNode);
+          break;
+        }
+        case 'event':
+          nodes.push({
+            id,
+            type,
+            label,
+            description: asString(item.description),
+            participant_ids: this.sanitizeStringArray(item.participant_ids),
+            time_hint: asString(item.time_hint),
+            place_hint: asString(item.place_hint),
+          });
+          break;
+        case 'entity': {
+          const entityType = asString(item.entity_type);
+          if (!entityType || !ENTITY_TYPES.has(entityType)) continue;
+          const description = asString(item.description);
+          const normalizedEntityType = this.canonicalizeGraphEntityType(
+            label,
+            entityType as KnowledgeEntity['type'],
+            description,
+          );
+          if (this.shouldReclassifyEntityNodeAsIdea(label, normalizedEntityType, description)) {
+            nodes.push({
+              id,
+              type: 'idea',
+              label,
+              kind: 'principle',
+              description,
+            });
+            break;
+          }
+          nodes.push({
+            id,
+            type,
+            label,
+            entity_type: normalizedEntityType,
+            description,
+          });
+          break;
+        }
+        case 'theme': {
+          const strength = asNumber(item.strength);
+          nodes.push({
+            id,
+            type,
+            label,
+            strength: typeof strength === 'number' ? Math.max(0, Math.min(1, strength)) : undefined,
+            description: asString(item.description),
+          });
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    const nodeTypeById = new Map(nodes.map((node) => [node.id, node.type]));
+    return nodes.map((node) => {
+      if (node.type !== 'event') return node;
+      return {
+        ...node,
+        participant_ids: (node.participant_ids ?? []).filter((participantId) => nodeTypeById.get(participantId) === 'person'),
+      };
+    });
+  }
+
+  private sanitizeGraphEdges(
+    value: unknown,
+    nodesById: Map<string, KnowledgeGraphNode>,
+    nodeIdRedirects: Map<string, string> = new Map(),
+  ): KnowledgeGraphEdge[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const edges: KnowledgeGraphEdge[] = [];
+    const seenIds = new Set<string>();
+
+    for (const [index, item] of value.entries()) {
+      if (!isPlainObject(item)) continue;
+      const from = this.rewriteGraphNodeId(asString(item.from), nodeIdRedirects);
+      const to = this.rewriteGraphNodeId(asString(item.to), nodeIdRedirects);
+      if (!from || !to || !nodesById.has(from) || !nodesById.has(to)) continue;
+      const rawRelationType = asString(item.relation_type);
+      const relationType = rawRelationType && RELATION_TYPES.has(rawRelationType)
+        ? rawRelationType as KnowledgeRelation['relation_type']
+        : 'related_to';
+      const id = asString(item.id) ?? `r${index + 1}`;
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      const confidence = asNumber(item.confidence);
+      edges.push({
+        id,
+        from,
+        to,
+        relation_type: relationType,
+        description: asString(item.description),
+        confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
+      });
+    }
+
+    return edges.length ? edges : undefined;
+  }
+
+  private sanitizeGraphEvidence(
+    value: unknown,
+    allowedPageRefs: KnowledgePageRef[],
+    nodesById: Map<string, KnowledgeGraphNode>,
+    edgeIds: Set<string>,
+    nodeIdRedirects: Map<string, string> = new Map(),
+  ): KnowledgeGraphEvidence[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const allowedPageMap = new Map(allowedPageRefs.map((pageRef) => [pageRef.pageIndex, pageRef.pageNumber]));
+    const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
+    const evidence: KnowledgeGraphEvidence[] = [];
+    const seenIds = new Set<string>();
+
+    for (const [index, item] of value.entries()) {
+      if (!isPlainObject(item)) continue;
+      const ownerKind = asString(item.owner_kind);
+      const ownerId = ownerKind === 'node'
+        ? this.rewriteGraphNodeId(asString(item.owner_id), nodeIdRedirects)
+        : asString(item.owner_id);
+      const quote = asString(item.quote);
+      if (!ownerKind || !ownerId || !quote) continue;
+      if (ownerKind !== 'node' && ownerKind !== 'edge') continue;
+      if (ownerKind === 'node' && !nodesById.has(ownerId)) continue;
+      if (ownerKind === 'edge' && !edgeIds.has(ownerId)) continue;
+      const pageIndex = asNumber(item.pageIndex) ?? singleAllowedPage?.pageIndex;
+      const pageNumber = asNumber(item.pageNumber) ?? singleAllowedPage?.pageNumber;
+      if (pageIndex === undefined || pageNumber === undefined) continue;
+      if (allowedPageMap.get(pageIndex) !== pageNumber) continue;
+      const id = asString(item.id) ?? `ev${index + 1}`;
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      evidence.push({
+        id,
+        owner_kind: ownerKind,
+        owner_id: ownerId,
+        quote,
+        pageIndex,
+        pageNumber,
+      });
+    }
+
+    return evidence.length ? evidence : undefined;
+  }
+
+  private sanitizeEmbeddedGraphEvidence(
+    record: Record<string, unknown>,
+    allowedPageRefs: KnowledgePageRef[],
+    nodesById: Map<string, KnowledgeGraphNode>,
+    edgeIds: Set<string>,
+    nodeIdRedirects: Map<string, string> = new Map(),
+  ): KnowledgeGraphEvidence[] | undefined {
+    const evidence: KnowledgeGraphEvidence[] = [];
+
+    if (Array.isArray(record.nodes)) {
+      for (const [index, item] of record.nodes.entries()) {
+        if (!isPlainObject(item)) continue;
+        const ownerId = this.rewriteGraphNodeId(asString(item.id), nodeIdRedirects);
+        if (!ownerId || !nodesById.has(ownerId)) continue;
+        const sanitized = this.sanitizeEvidence(item.evidence, allowedPageRefs);
+        for (const [evidenceIndex, evidenceItem] of (sanitized ?? []).entries()) {
+          evidence.push({
+            id: `embedded-node-${index + 1}-${evidenceIndex + 1}`,
+            owner_kind: 'node',
+            owner_id: ownerId,
+            quote: evidenceItem.quote,
+            pageIndex: evidenceItem.pageIndex,
+            pageNumber: evidenceItem.pageNumber,
+          });
+        }
+      }
+    }
+
+    if (Array.isArray(record.edges)) {
+      for (const [index, item] of record.edges.entries()) {
+        if (!isPlainObject(item)) continue;
+        const ownerId = asString(item.id) ?? `r${index + 1}`;
+        if (!edgeIds.has(ownerId)) continue;
+        const sanitized = this.sanitizeEvidence(item.evidence, allowedPageRefs);
+        for (const [evidenceIndex, evidenceItem] of (sanitized ?? []).entries()) {
+          evidence.push({
+            id: `embedded-edge-${index + 1}-${evidenceIndex + 1}`,
+            owner_kind: 'edge',
+            owner_id: ownerId,
+            quote: evidenceItem.quote,
+            pageIndex: evidenceItem.pageIndex,
+            pageNumber: evidenceItem.pageNumber,
+          });
+        }
+      }
+    }
+
+    return evidence.length ? evidence : undefined;
+  }
+
+  private mergeGraphEvidence(
+    primary: KnowledgeGraphEvidence[],
+    fallback: KnowledgeGraphEvidence[],
+  ): KnowledgeGraphEvidence[] {
+    if (primary.length === 0) return fallback;
+    if (fallback.length === 0) return primary;
+
+    const merged: KnowledgeGraphEvidence[] = [];
+    const seen = new Set<string>();
+
+    for (const item of [...primary, ...fallback]) {
+      const key = [
+        item.owner_kind,
+        item.owner_id,
+        item.pageIndex,
+        item.pageNumber,
+        item.quote,
+      ].join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+
+    return merged;
+  }
+
+  private normalizeGraphPersonIdentity(
+    person: KnowledgeGraphPersonNode,
+    memoryContext?: KnowledgeMemoryContext,
+    primaryPageText?: string,
+    chapterText?: string,
+  ): KnowledgeGraphPersonNode {
+    const prepared = this.prepareGraphPersonLabel(person.label);
+    const fullName =
+      this.findFullPersonNameInText(prepared.lookupLabel, primaryPageText)
+      ?? this.findFullPersonNameInText(prepared.lookupLabel, chapterText)
+      ?? this.findFullPersonNameInMemory(prepared.lookupLabel, memoryContext);
+    if (!fullName) {
+      if (prepared.canonicalLabel === person.label) return person;
+      return {
+        ...person,
+        label: prepared.canonicalLabel,
+        aliases: this.sanitizeGraphPersonAliases(
+          prepared.canonicalLabel,
+          this.mergeNormalizedStringArrays(person.aliases, prepared.aliases),
+        ),
+      };
+    }
+
+    const aliases = this.sanitizeGraphPersonAliases(
+      fullName,
+      this.mergeNormalizedStringArrays(
+        person.aliases,
+        [
+          ...prepared.aliases,
+          prepared.canonicalLabel !== fullName ? prepared.canonicalLabel : '',
+        ],
+      ),
+    );
+    if (this.normalizePersonLabel(fullName) === this.normalizePersonLabel(prepared.canonicalLabel)) {
+      return {
+        ...person,
+        label: fullName,
+        aliases,
+      };
+    }
+    return {
+      ...person,
+      label: fullName,
+      aliases,
+    };
+  }
+
+  private prepareGraphPersonLabel(label: string): {
+    canonicalLabel: string;
+    lookupLabel: string;
+    aliases: string[];
+  } {
+    const trimmed = label.trim();
+    const aliases = new Set<string>();
+    let canonicalLabel = trimmed;
+
+    const reordered = this.reorderCommaSeparatedPersonName(canonicalLabel);
+    if (reordered && reordered !== canonicalLabel) {
+      aliases.add(canonicalLabel);
+      canonicalLabel = reordered;
+    }
+
+    const stripped = this.stripLeadingPersonTitle(canonicalLabel);
+    if (stripped && stripped !== canonicalLabel && !this.isSurnameLikePersonLabel(stripped)) {
+      aliases.add(canonicalLabel);
+      canonicalLabel = stripped;
+    }
+
+    return {
+      canonicalLabel,
+      lookupLabel: stripped ?? canonicalLabel,
+      aliases: Array.from(aliases),
+    };
+  }
+
+  private findFullPersonNameInText(
+    label: string,
+    text?: string,
+  ): string | undefined {
+    const uniqueMatches = this.findFullPersonNameCandidates(label, text);
+    return uniqueMatches.length === 1 ? uniqueMatches[0] : undefined;
+  }
+
+  private findFullPersonNameInMemory(
+    label: string,
+    memoryContext?: KnowledgeMemoryContext,
+  ): string | undefined {
+    const surname = this.surnameToken(label);
+    if (!surname || !memoryContext) return undefined;
+
+    const matches = memoryContext.people
+      .filter((item) => {
+        const canonicalLastToken = this.lastToken(item.canonical_label)?.toLowerCase();
+        if (canonicalLastToken === surname.toLowerCase()) return true;
+        return (item.aliases ?? []).some((alias) => this.normalizePersonLabel(alias) === surname.toLowerCase());
+      })
+      .map((item) => item.canonical_label);
+    const uniqueMatches = Array.from(new Set(matches));
+    return uniqueMatches.length === 1 ? uniqueMatches[0] : undefined;
+  }
+
+  private findFullPersonNameCandidates(
+    label: string,
+    text?: string,
+  ): string[] {
+    const surname = this.surnameToken(label);
+    if (!surname || !text) return [];
+
+    const candidatePattern = /\b([A-Z][a-z]+(?:\s+[A-Z]\.)?(?:\s+[A-Z][a-z]+){1,3})\b/g;
+    return Array.from(new Set(
+      Array.from(text.matchAll(candidatePattern))
+        .map((match) => match[1]?.trim())
+        .filter((candidate): candidate is string =>
+          Boolean(candidate)
+          && this.lastToken(candidate)?.toLowerCase() === surname.toLowerCase()),
+    ));
+  }
+
+  private normalizePersonLabel(label: string): string {
+    return label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s.]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private stripLeadingPersonTitle(label: string): string | undefined {
+    const stripped = label.trim().replace(PERSON_TITLE_PREFIX_PATTERN, '').trim();
+    return stripped && stripped !== label.trim() ? stripped : undefined;
+  }
+
+  private reorderCommaSeparatedPersonName(label: string): string | undefined {
+    const match = label.trim().match(/^([A-Z][A-Za-z'.-]+),\s*([A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+)*)$/);
+    if (!match) return undefined;
+    const last = match[1]?.trim();
+    const first = match[2]?.trim();
+    if (!last || !first) return undefined;
+    return `${first} ${last}`.trim();
+  }
+
+  private shouldKeepGraphPersonNode(person: KnowledgeGraphPersonNode): boolean {
+    const rawLabel = person.label.trim();
+    if (!rawLabel) return false;
+    if (PLACEHOLDER_PERSON_LABEL_PATTERN.test(rawLabel)) return false;
+
+    const normalized = this.normalizePersonLabel(rawLabel).replace(/\./g, '');
+    if (GENERIC_PERSON_LABELS.has(normalized) || GENERIC_PERSON_GROUP_PATTERN.test(normalized)) return false;
+
+    return true;
+  }
+
+  private findWorkLikeIdeaNodeIds(
+    rawNodes: unknown,
+    rawEdges: unknown,
+  ): Set<string> {
+    if (!Array.isArray(rawNodes) || !Array.isArray(rawEdges)) return new Set<string>();
+
+    const nodeTypeById = new Map<string, string>();
+    for (const item of rawNodes) {
+      if (!isPlainObject(item)) continue;
+      const id = asString(item.id);
+      const type = asString(item.type);
+      if (!id || !type) continue;
+      nodeTypeById.set(id, type);
+    }
+
+    const result = new Set<string>();
+    for (const item of rawEdges) {
+      if (!isPlainObject(item)) continue;
+      const from = asString(item.from);
+      const to = asString(item.to);
+      const relationType = asString(item.relation_type);
+      const description = asString(item.description);
+      if (!from || !to) continue;
+      const authoredLikeRelation = relationType === 'authored'
+        || Boolean(
+          description
+          && AUTHORED_RELATION_PATTERN.test(description)
+          && !MENTIONS_RELATION_PATTERN.test(description),
+        );
+      if (!authoredLikeRelation) continue;
+      if (nodeTypeById.get(from) === 'person' && nodeTypeById.get(to) === 'idea') {
+        result.add(to);
+      }
+    }
+    return result;
+  }
+
+  private sanitizeGraphPersonAliases(
+    canonicalLabel: string,
+    aliases: string[] | undefined,
+  ): string[] | undefined {
+    if (!aliases?.length) return undefined;
+
+    const canonicalNormalized = this.normalizePersonLabel(canonicalLabel);
+    const canonicalSurname = this.lastToken(this.prepareGraphPersonLabel(canonicalLabel).canonicalLabel)?.toLowerCase();
+    const sanitized = aliases.filter((alias) => {
+      const normalizedAlias = this.normalizePersonLabel(alias);
+      if (!normalizedAlias || normalizedAlias === canonicalNormalized) return false;
+
+      const preparedAlias = this.prepareGraphPersonLabel(alias).canonicalLabel;
+      if (!this.looksLikeFullPersonName(preparedAlias)) return true;
+
+      const aliasSurname = this.lastToken(preparedAlias)?.toLowerCase();
+      return !canonicalSurname || !aliasSurname || aliasSurname === canonicalSurname;
+    });
+
+    return sanitized.length ? sanitized : undefined;
+  }
+
+  private surnameToken(label: string): string | undefined {
+    if (!this.isSurnameLikePersonLabel(label)) return undefined;
+    return this.lastToken(label);
+  }
+
+  private isSurnameLikePersonLabel(label: string): boolean {
+    const words = label.trim().split(/\s+/).filter(Boolean);
+    return words.length === 1 && /^[A-Z][A-Za-z'.-]+$/.test(words[0] ?? '');
+  }
+
+  private looksLikeFullPersonName(label: string): boolean {
+    return /^[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+)+$/.test(label.trim());
+  }
+
+  private isWorkLikeIdeaLabel(
+    label: string,
+    description?: string,
+  ): boolean {
+    const trimmed = label.trim();
+    const normalizedDescription = description?.toLowerCase() ?? '';
+    if (/\b(book|report|paper|article|essay|text|work|journal|magazine|memoir|novel)\b/.test(normalizedDescription)) {
+      return true;
+    }
+    if (/^(the|a|an)\s+[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){1,6}$/.test(trimmed)) {
+      return true;
+    }
+    return /^[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){2,6}$/.test(trimmed);
+  }
+
+  private lastToken(label: string): string | undefined {
+    const words = label.trim().split(/\s+/).filter(Boolean);
+    return words.length ? words[words.length - 1] : undefined;
+  }
+
+  private mergeNormalizedStringArrays(
+    left: string[] | undefined,
+    right: string[] | undefined,
+  ): string[] | undefined {
+    const merged = [...(left ?? []), ...(right ?? [])]
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (merged.length === 0) return undefined;
+
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const item of merged) {
+      const normalized = item.toLowerCase();
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      result.push(item);
+    }
+    return result;
+  }
+
+  private deduplicateGraphNodes(nodes: KnowledgeGraphNode[]): {
+    nodes: KnowledgeGraphNode[];
+    nodeIdRedirects: Map<string, string>;
+  } {
+    const deduplicated: KnowledgeGraphNode[] = [];
+    const nodeIdRedirects = new Map<string, string>();
+
+    for (const node of nodes) {
+      if (node.type === 'person') {
+        const duplicateIndex = deduplicated.findIndex((candidate) =>
+          candidate.type === 'person' && this.areSamePersonNode(candidate, node));
+        if (duplicateIndex < 0) {
+          deduplicated.push(node);
+          continue;
+        }
+
+        const existing = deduplicated[duplicateIndex] as KnowledgeGraphPersonNode;
+        const merged = this.mergePersonNodes(existing, node);
+        deduplicated[duplicateIndex] = merged;
+        const canonicalId = merged.id;
+        nodeIdRedirects.set(existing.id, canonicalId);
+        nodeIdRedirects.set(node.id, canonicalId);
+        continue;
+      }
+
+      if (node.type !== 'idea') {
+        if (node.type !== 'entity') {
+          deduplicated.push(node);
+          continue;
+        }
+
+        const duplicateIndex = deduplicated.findIndex((candidate) =>
+          candidate.type === 'entity' && this.areSameEntityNode(candidate, node));
+        if (duplicateIndex < 0) {
+          deduplicated.push(node);
+          continue;
+        }
+
+        const existing = deduplicated[duplicateIndex] as KnowledgeGraphEntityNode;
+        const merged = this.mergeEntityNodes(existing, node);
+        deduplicated[duplicateIndex] = merged;
+        const canonicalId = merged.id;
+        nodeIdRedirects.set(existing.id, canonicalId);
+        nodeIdRedirects.set(node.id, canonicalId);
+        continue;
+      }
+
+      if (node.type !== 'idea') {
+        deduplicated.push(node);
+        continue;
+      }
+
+      const duplicateIndex = deduplicated.findIndex((candidate) =>
+        candidate.type === 'idea' && this.areNearDuplicateIdeas(candidate, node));
+      if (duplicateIndex < 0) {
+        deduplicated.push(node);
+        continue;
+      }
+
+      const existing = deduplicated[duplicateIndex] as KnowledgeGraphIdeaNode;
+      deduplicated[duplicateIndex] = this.mergeIdeaNodes(existing, node);
+      nodeIdRedirects.set(node.id, existing.id);
+    }
+
+    return {
+      nodes: deduplicated,
+      nodeIdRedirects,
+    };
+  }
+
+  private mergePersonNodes(
+    left: KnowledgeGraphPersonNode,
+    right: KnowledgeGraphPersonNode,
+  ): KnowledgeGraphPersonNode {
+    const preferred = this.preferPersonNode(left, right);
+    const fallback = preferred.id === left.id ? right : left;
+
+    return {
+      ...preferred,
+      aliases: this.sortStrings(this.sanitizeGraphPersonAliases(
+        preferred.label,
+        this.mergeNormalizedStringArrays(
+          preferred.aliases,
+          [
+            ...(fallback.aliases ?? []),
+            preferred.label !== fallback.label ? fallback.label : '',
+          ],
+        ),
+      )),
+      roles: this.sortStrings(this.mergeNormalizedStringArrays(preferred.roles, fallback.roles)),
+      traits: this.sortStrings(this.mergeNormalizedStringArrays(preferred.traits, fallback.traits)),
+      importance: this.strongestGraphPersonImportance(left.importance, right.importance),
+      description: preferred.description ?? fallback.description,
+    };
+  }
+
+  private preferPersonNode(
+    left: KnowledgeGraphPersonNode,
+    right: KnowledgeGraphPersonNode,
+  ): KnowledgeGraphPersonNode {
+    const leftWords = left.label.trim().split(/\s+/).filter(Boolean).length;
+    const rightWords = right.label.trim().split(/\s+/).filter(Boolean).length;
+    if (rightWords > leftWords) return right;
+    if (rightWords < leftWords) return left;
+    if ((right.description?.length ?? 0) > (left.description?.length ?? 0)) return right;
+    return left;
+  }
+
+  private strongestGraphPersonImportance(
+    left: KnowledgeGraphPersonNode['importance'],
+    right: KnowledgeGraphPersonNode['importance'],
+  ): KnowledgeGraphPersonNode['importance'] {
+    const rank = {
+      main: 3,
+      supporting: 2,
+      minor: 1,
+    } as const;
+    if (!left) return right;
+    if (!right) return left;
+    return rank[right] > rank[left] ? right : left;
+  }
+
+  private areSamePersonNode(
+    left: KnowledgeGraphPersonNode,
+    right: KnowledgeGraphPersonNode,
+  ): boolean {
+    const leftLabel = this.normalizePersonLabel(left.label);
+    const rightLabel = this.normalizePersonLabel(right.label);
+    if (!leftLabel || !rightLabel) return false;
+    if (leftLabel === rightLabel) return true;
+
+    const leftAliases = new Set((left.aliases ?? []).map((alias) => this.normalizePersonLabel(alias)));
+    const rightAliases = new Set((right.aliases ?? []).map((alias) => this.normalizePersonLabel(alias)));
+    if (leftAliases.has(rightLabel) || rightAliases.has(leftLabel)) return true;
+    if (Array.from(leftAliases).some((alias) => rightAliases.has(alias))) return true;
+
+    if (this.isSurnameLikePersonLabel(left.label) && this.personNodeContainsSurname(right, leftLabel)) {
+      return true;
+    }
+    if (this.isSurnameLikePersonLabel(right.label) && this.personNodeContainsSurname(left, rightLabel)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private personNodeContainsSurname(
+    node: KnowledgeGraphPersonNode,
+    surname: string,
+  ): boolean {
+    const normalizedSurname = surname.toLowerCase();
+    if (this.lastToken(node.label)?.toLowerCase() === normalizedSurname) return true;
+    return (node.aliases ?? []).some((alias) => this.normalizePersonLabel(alias) === normalizedSurname);
+  }
+
+  private mergeIdeaNodes(
+    left: KnowledgeGraphIdeaNode,
+    right: KnowledgeGraphIdeaNode,
+  ): KnowledgeGraphIdeaNode {
+    const preferred = this.preferIdeaNode(left, right);
+    const fallback = preferred.id === left.id ? right : left;
+    return {
+      ...left,
+      label: preferred.label,
+      kind: preferred.kind,
+      description: preferred.description ?? fallback.description ?? left.description ?? right.description,
+    };
+  }
+
+  private preferIdeaNode(
+    left: KnowledgeGraphIdeaNode,
+    right: KnowledgeGraphIdeaNode,
+  ): KnowledgeGraphIdeaNode {
+    const leftContextScore = this.ideaContextSpecificityScore(left.label);
+    const rightContextScore = this.ideaContextSpecificityScore(right.label);
+    if (rightContextScore < leftContextScore) return right;
+    if (rightContextScore > leftContextScore) return left;
+
+    const leftWords = left.label.trim().split(/\s+/).filter(Boolean).length;
+    const rightWords = right.label.trim().split(/\s+/).filter(Boolean).length;
+    if (rightWords < leftWords) return right;
+    if (rightWords > leftWords) return left;
+    if ((right.description?.length ?? 0) > (left.description?.length ?? 0)) return right;
+    return left;
+  }
+
+  private areNearDuplicateIdeas(
+    left: KnowledgeGraphIdeaNode,
+    right: KnowledgeGraphIdeaNode,
+  ): boolean {
+    const leftPhrase = this.normalizeIdeaPhrase(left.label);
+    const rightPhrase = this.normalizeIdeaPhrase(right.label);
+    if (!leftPhrase || !rightPhrase) return false;
+    if (leftPhrase === rightPhrase) return true;
+    if (this.isCorrelationCausationIdea(left.label) && this.isCorrelationCausationIdea(right.label)) {
+      return true;
+    }
+    if (leftPhrase.includes(rightPhrase) || rightPhrase.includes(leftPhrase)) return true;
+
+    const leftTokens = this.ideaDedupTokens(left.label);
+    const rightTokens = this.ideaDedupTokens(right.label);
+    if (leftTokens.length < 2 || rightTokens.length < 2) return false;
+
+    const rightTokenSet = new Set(rightTokens);
+    const overlap = leftTokens.filter((token) => rightTokenSet.has(token)).length;
+    if (overlap < 2) return false;
+
+    const smallerCoverage = overlap / Math.min(leftTokens.length, rightTokens.length);
+    const union = new Set([...leftTokens, ...rightTokens]).size;
+    const jaccard = union > 0 ? overlap / union : 0;
+
+    return smallerCoverage >= 0.8 && jaccard >= 0.45;
+  }
+
+  private normalizeIdeaPhrase(label: string): string {
+    return label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private ideaDedupTokens(label: string): string[] {
+    return this.normalizeIdeaPhrase(label)
+      .split(' ')
+      .map((token) => token.trim())
+      .filter((token) =>
+        token.length > 2
+        && !IDEA_DEDUP_STOPWORDS.has(token));
+  }
+
+  private ideaContextSpecificityScore(label: string): number {
+    const normalized = this.normalizeIdeaPhrase(label);
+    return CONTEXT_HEAVY_IDEA_TOKENS.filter((token) => normalized.includes(token)).length;
+  }
+
+  private isCorrelationCausationIdea(label: string): boolean {
+    return CORRELATION_CAUSATION_IDEA_PATTERN.test(label);
+  }
+
+  private rewriteGraphNodeId(
+    nodeId: string | undefined,
+    nodeIdRedirects: Map<string, string>,
+  ): string | undefined {
+    if (!nodeId) return undefined;
+    return nodeIdRedirects.get(nodeId) ?? nodeId;
+  }
+
+  private normalizeGraphEdges(
+    edges: KnowledgeGraphEdge[],
+    nodesById: Map<string, KnowledgeGraphNode>,
+  ): KnowledgeGraphEdge[] | undefined {
+    const normalized = edges
+      .map((edge) => this.normalizeGraphEdge(edge, nodesById))
+      .filter((edge): edge is KnowledgeGraphEdge => edge !== null);
+    return normalized.length ? normalized : undefined;
+  }
+
+  private normalizeGraphEdge(
+    edge: KnowledgeGraphEdge,
+    nodesById: Map<string, KnowledgeGraphNode>,
+  ): KnowledgeGraphEdge | null {
+    if (edge.from === edge.to) return null;
+
+    let normalized = edge;
+    let fromNode = nodesById.get(normalized.from);
+    let toNode = nodesById.get(normalized.to);
+    if (!fromNode || !toNode) return null;
+
+    normalized = {
+      ...normalized,
+      relation_type: this.normalizeSemanticRelationType(normalized, fromNode, toNode),
+    };
+
+    if (
+      normalized.relation_type === 'happens_at'
+      && toNode.type === 'event'
+      && fromNode.type !== 'event'
+    ) {
+      normalized = {
+        ...normalized,
+        from: edge.to,
+        to: edge.from,
+      };
+    } else if (
+      normalized.relation_type === 'located_in'
+      && fromNode.type === 'entity'
+      && (fromNode.entity_type === 'place' || fromNode.entity_type === 'time')
+      && toNode.type === 'event'
+    ) {
+      normalized = {
+        ...normalized,
+        from: edge.to,
+        to: edge.from,
+        relation_type: 'happens_at',
+      };
+    } else if (
+      normalized.relation_type === 'located_in'
+      && fromNode.type === 'event'
+      && toNode.type === 'entity'
+      && (toNode.entity_type === 'place' || toNode.entity_type === 'time')
+    ) {
+      normalized = {
+        ...normalized,
+        relation_type: 'happens_at',
+      };
+    } else if (
+      (normalized.relation_type === 'supports'
+        || normalized.relation_type === 'opposes'
+        || normalized.relation_type === 'illustrates'
+        || normalized.relation_type === 'reflects')
+      && this.isAbstractGraphNodeType(fromNode.type)
+      && this.isConcreteGraphNodeType(toNode.type)
+    ) {
+      normalized = {
+        ...normalized,
+        from: edge.to,
+        to: edge.from,
+      };
+    }
+
+    fromNode = nodesById.get(normalized.from);
+    toNode = nodesById.get(normalized.to);
+    if (!fromNode || !toNode) return null;
+    if (!this.shouldKeepGraphEdge(normalized, fromNode, toNode)) return null;
+    return normalized;
+  }
+
+  private shouldKeepGraphEdge(
+    edge: KnowledgeGraphEdge,
+    fromNode: KnowledgeGraphNode,
+    toNode: KnowledgeGraphNode,
+  ): boolean {
+    if (edge.from === edge.to) return false;
+
+    if (edge.relation_type === 'reflects' || edge.relation_type === 'illustrates') {
+      if (
+        this.isAbstractGraphNodeType(fromNode.type)
+        && this.isAbstractGraphNodeType(toNode.type)
+      ) {
+        return false;
+      }
+    }
+
+    if (edge.relation_type === 'happens_at' && toNode.type === 'person') {
+      return false;
+    }
+
+    if (edge.relation_type === 'happens_at') {
+      return fromNode.type === 'event'
+        && toNode.type === 'entity'
+        && (toNode.entity_type === 'place' || toNode.entity_type === 'time');
+    }
+
+    if (edge.relation_type === 'located_in') {
+      return false;
+    }
+
+    if (edge.relation_type === 'participates_in') {
+      return toNode.type === 'event' && !this.isAbstractGraphNodeType(fromNode.type);
+    }
+
+    if (
+      edge.relation_type === 'related_to'
+      && edge.description
+      && LOW_SIGNAL_RELATED_TO_PATTERN.test(edge.description)
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private canonicalizeGraphEntityType(
+    label: string,
+    entityType: KnowledgeEntity['type'],
+    description?: string,
+  ): KnowledgeEntity['type'] {
+    if (entityType !== 'other') return entityType;
+
+    const normalized = this.normalizeEntityLabel(label);
+    const normalizedDescription = description?.trim().toLowerCase() ?? '';
+
+    if (/(?:^|\s)(company|corporation|corp|inc|agency|association|committee|department|government|firm|organization|party|school|university|bank|club|union|board|office|press|publisher|team|police)(?:$|\s)/.test(normalized)) {
+      return 'organization';
+    }
+    if (/\b(agents|officers|mechanics|teachers|doctors|lawyers|judges|workers|students|voters|officials|economists|realtors|parents|drivers|editors|reporters)\b/.test(normalized)) {
+      return 'organization';
+    }
+    if (PLACE_ENTITY_HINT_PATTERN.test(normalizedDescription)) {
+      return 'place';
+    }
+    if (OBJECT_ENTITY_HINT_PATTERN.test(normalizedDescription)) {
+      return 'object';
+    }
+    return entityType;
+  }
+
+  private shouldReclassifyEntityNodeAsIdea(
+    label: string,
+    entityType: KnowledgeEntity['type'],
+    description?: string,
+  ): boolean {
+    if (entityType === 'object' || entityType === 'organization' || entityType === 'time') {
+      return false;
+    }
+
+    const normalizedLabel = this.normalizeEntityLabel(label);
+    const normalizedDescription = description?.trim().toLowerCase() ?? '';
+    if (PLACE_ENTITY_HINT_PATTERN.test(normalizedLabel) || PLACE_ENTITY_HINT_PATTERN.test(normalizedDescription)) {
+      return false;
+    }
+    if (OBJECT_ENTITY_HINT_PATTERN.test(normalizedLabel)) {
+      return false;
+    }
+    if (this.isWorkLikeIdeaLabel(label, description)) {
+      return false;
+    }
+
+    return ABSTRACT_ENTITY_IDEA_LABEL_PATTERN.test(label)
+      || ABSTRACT_ENTITY_IDEA_DESCRIPTION_PATTERN.test(normalizedDescription);
+  }
+
+  private normalizeEntityLabel(label: string): string {
+    return label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private areSameEntityNode(
+    left: KnowledgeGraphEntityNode,
+    right: KnowledgeGraphEntityNode,
+  ): boolean {
+    const leftLabel = this.normalizeEntityLabel(left.label);
+    const rightLabel = this.normalizeEntityLabel(right.label);
+    if (!leftLabel || !rightLabel || leftLabel !== rightLabel) return false;
+    if (left.entity_type === right.entity_type) return true;
+    return left.entity_type === 'other' || right.entity_type === 'other';
+  }
+
+  private mergeEntityNodes(
+    left: KnowledgeGraphEntityNode,
+    right: KnowledgeGraphEntityNode,
+  ): KnowledgeGraphEntityNode {
+    const preferred = this.preferEntityNode(left, right);
+    const fallback = preferred.id === left.id ? right : left;
+    return {
+      ...preferred,
+      description: preferred.description ?? fallback.description,
+    };
+  }
+
+  private preferEntityNode(
+    left: KnowledgeGraphEntityNode,
+    right: KnowledgeGraphEntityNode,
+  ): KnowledgeGraphEntityNode {
+    const leftPriority = ENTITY_TYPE_PRIORITY[left.entity_type];
+    const rightPriority = ENTITY_TYPE_PRIORITY[right.entity_type];
+    if (rightPriority > leftPriority) return right;
+    if (rightPriority < leftPriority) return left;
+    if ((right.description?.length ?? 0) > (left.description?.length ?? 0)) return right;
+    return left;
+  }
+
+  private normalizeSemanticRelationType(
+    edge: KnowledgeGraphEdge,
+    fromNode: KnowledgeGraphNode,
+    toNode: KnowledgeGraphNode,
+  ): KnowledgeGraphEdge['relation_type'] {
+    const description = edge.description?.trim();
+    const normalizedDescription = description?.toLowerCase();
+
+    if (edge.relation_type === 'authored') {
+      if (this.shouldUseFoundedRelation(description, fromNode, toNode)) {
+        return 'founded';
+      }
+      if (!this.shouldKeepAuthoredRelation(fromNode, toNode)) {
+        return 'related_to';
+      }
+      return edge.relation_type;
+    }
+
+    if (edge.relation_type !== 'related_to' && edge.relation_type !== 'reflects') {
+      return edge.relation_type;
+    }
+
+    if (
+      edge.relation_type === 'related_to'
+      && fromNode.type === 'person'
+      && toNode.type === 'entity'
+      && description
+      && AUTHORED_RELATION_PATTERN.test(description)
+      && !MENTIONS_RELATION_PATTERN.test(description)
+    ) {
+      if (this.shouldUseFoundedRelation(description, fromNode, toNode)) {
+        return 'founded';
+      }
+      if (!this.shouldKeepAuthoredRelation(fromNode, toNode)) {
+        return 'related_to';
+      }
+      return 'authored';
+    }
+
+    if (
+      edge.relation_type === 'related_to'
+      && fromNode.type === 'person'
+      && toNode.type === 'idea'
+      && description
+      && ARGUES_RELATION_PATTERN.test(description)
+    ) {
+      return 'argues';
+    }
+
+    if (
+      edge.relation_type === 'related_to'
+      && description
+      && MENTIONS_RELATION_PATTERN.test(description)
+    ) {
+      return 'mentions';
+    }
+
+    if (this.shouldUseIllustratesRelation(edge.relation_type, normalizedDescription, fromNode, toNode)) {
+      return 'illustrates';
+    }
+
+    return edge.relation_type;
+  }
+
+  private shouldUseFoundedRelation(
+    description: string | undefined,
+    fromNode: KnowledgeGraphNode,
+    toNode: KnowledgeGraphNode,
+  ): boolean {
+    return Boolean(
+      description
+      && fromNode.type === 'person'
+      && toNode.type === 'entity'
+      && toNode.entity_type !== 'object'
+      && FOUNDED_RELATION_PATTERN.test(description),
+    );
+  }
+
+  private shouldKeepAuthoredRelation(
+    fromNode: KnowledgeGraphNode,
+    toNode: KnowledgeGraphNode,
+  ): boolean {
+    return fromNode.type === 'person'
+      && toNode.type === 'entity'
+      && (toNode.entity_type === 'object' || this.isWorkLikeEntity(toNode));
+  }
+
+  private isWorkLikeEntity(node: KnowledgeGraphEntityNode): boolean {
+    const label = node.label.trim();
+    const description = node.description?.toLowerCase() ?? '';
+    if (node.entity_type === 'object') return true;
+    if (/\b(book|report|paper|article|essay|text|work|journal|magazine)\b/.test(description)) {
+      return true;
+    }
+    return /^[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){1,5}$/.test(label);
+  }
+
+  private shouldUseIllustratesRelation(
+    relationType: KnowledgeGraphEdge['relation_type'],
+    normalizedDescription: string | undefined,
+    fromNode: KnowledgeGraphNode,
+    toNode: KnowledgeGraphNode,
+  ): boolean {
+    if (!this.hasConcreteAbstractPair(fromNode, toNode)) return false;
+    if (relationType === 'reflects') return true;
+    return Boolean(normalizedDescription && ILLUSTRATES_RELATION_PATTERN.test(normalizedDescription));
+  }
+
+  private hasConcreteAbstractPair(
+    fromNode: KnowledgeGraphNode,
+    toNode: KnowledgeGraphNode,
+  ): boolean {
+    return (
+      (this.isConcreteGraphNodeType(fromNode.type) && this.isAbstractGraphNodeType(toNode.type))
+      || (this.isAbstractGraphNodeType(fromNode.type) && this.isConcreteGraphNodeType(toNode.type))
+    );
+  }
+
+  private isAbstractGraphNodeType(type: KnowledgeGraphNodeType): boolean {
+    return type === 'idea' || type === 'theme';
+  }
+
+  private isConcreteGraphNodeType(type: KnowledgeGraphNodeType): boolean {
+    return type === 'person' || type === 'event' || type === 'entity';
+  }
+
+  private countGraphNodes(nodes: KnowledgeGraphNode[], type: KnowledgeGraphNodeType): number {
+    return nodes.filter((node) => node.type === type).length;
+  }
+
+  private graphToKnowledgeExtractionData(
+    graph: AnalyzeKnowledgeExtractionGraphData,
+  ): AnalyzeKnowledgeExtractionData {
+    const nodeEvidence = new Map<string, KnowledgeEvidence[]>();
+    const edgeEvidence = new Map<string, KnowledgeEvidence[]>();
+    for (const item of graph.evidence) {
+      const target = item.owner_kind === 'node' ? nodeEvidence : edgeEvidence;
+      const existing = target.get(item.owner_id) ?? [];
+      existing.push({
+        quote: item.quote,
+        pageIndex: item.pageIndex,
+        pageNumber: item.pageNumber,
+      });
+      target.set(item.owner_id, existing);
+    }
+
+    const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+    const relations: KnowledgeRelation[] = [];
+    for (const edge of graph.edges) {
+      const fromNode = nodeById.get(edge.from);
+      const toNode = nodeById.get(edge.to);
+      if (!fromNode || !toNode) continue;
+      relations.push({
+        local_id: edge.id,
+        from_id: edge.from,
+        from_type: fromNode.type,
+        to_id: edge.to,
+        to_type: toNode.type,
+        relation_type: edge.relation_type,
+        description: edge.description,
+        confidence: edge.confidence,
+        evidence: edgeEvidence.get(edge.id),
+      });
+    }
+
+    return {
+      title: graph.title,
+      summary: graph.summary,
+      people: graph.nodes
+        .filter((node): node is KnowledgeGraphPersonNode => node.type === 'person')
+        .map((node) => ({
+          local_id: node.id,
+          name: node.label,
+          aliases: node.aliases,
+          importance: node.importance,
+          description: node.description,
+          roles: node.roles,
+          traits: node.traits,
+          evidence: nodeEvidence.get(node.id),
+        })),
+      ideas: graph.nodes
+        .filter((node): node is KnowledgeGraphIdeaNode => node.type === 'idea')
+        .map((node) => ({
+          local_id: node.id,
+          label: node.label,
+          description: node.description,
+          kind: node.kind,
+          evidence: nodeEvidence.get(node.id),
+        })),
+      events: graph.nodes
+        .filter((node): node is KnowledgeGraphEventNode => node.type === 'event')
+        .map((node) => ({
+          local_id: node.id,
+          label: node.label,
+          description: node.description,
+          participant_local_ids: node.participant_ids,
+          time_hint: node.time_hint,
+          place_hint: node.place_hint,
+          evidence: nodeEvidence.get(node.id),
+        })),
+      entities: graph.nodes
+        .filter((node): node is KnowledgeGraphEntityNode => node.type === 'entity')
+        .map((node) => ({
+          local_id: node.id,
+          label: node.label,
+          type: node.entity_type,
+          description: node.description,
+          evidence: nodeEvidence.get(node.id),
+        })),
+      themes: graph.nodes
+        .filter((node): node is KnowledgeGraphThemeNode => node.type === 'theme')
+        .map((node) => ({
+          local_id: node.id,
+          label: node.label,
+          strength: node.strength,
+          description: node.description,
+          evidence: nodeEvidence.get(node.id),
+        })),
+      relations,
+    };
+  }
+
+  private buildMemoryContext(
+    snapshot: AnalyzeKnowledgeExtractionData,
+    currentPageIndex?: number,
+  ): KnowledgeMemoryContext {
     const relationHintsByNode = new Map<string, string[]>();
     for (const relation of snapshot.relations) {
       const hint = `${relation.relation_type}:${relation.to_type}:${relation.to_id}`;
@@ -1151,38 +2863,86 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     }
 
     return {
-      people: snapshot.people.map((person) => ({
+      people: this.compactMemoryItems(snapshot.people.map((person) => ({
         local_id: person.local_id,
         canonical_label: person.name,
         aliases: person.aliases,
-        relation_hints: this.sortStrings(relationHintsByNode.get(person.local_id)),
-        seen_pages: this.collectSeenPages(person.evidence),
-      })),
-      ideas: snapshot.ideas.map((idea) => ({
+        importance: person.importance,
+        relation_hints: this.limitMemoryRelationHints(relationHintsByNode.get(person.local_id)),
+        seen_pages: this.limitMemorySeenPages(this.collectSeenPages(person.evidence)),
+      })), currentPageIndex, MEMORY_ITEM_LIMITS.people),
+      ideas: this.compactMemoryItems(snapshot.ideas.map((idea) => ({
         local_id: idea.local_id,
         canonical_label: idea.label,
-        relation_hints: this.sortStrings(relationHintsByNode.get(idea.local_id)),
-        seen_pages: this.collectSeenPages(idea.evidence),
-      })),
-      events: snapshot.events.map((event) => ({
+        relation_hints: this.limitMemoryRelationHints(relationHintsByNode.get(idea.local_id)),
+        seen_pages: this.limitMemorySeenPages(this.collectSeenPages(idea.evidence)),
+      })), currentPageIndex, MEMORY_ITEM_LIMITS.ideas),
+      events: this.compactMemoryItems(snapshot.events.map((event) => ({
         local_id: event.local_id,
         canonical_label: event.label,
-        relation_hints: this.sortStrings(relationHintsByNode.get(event.local_id)),
-        seen_pages: this.collectSeenPages(event.evidence),
-      })),
-      entities: snapshot.entities.map((entity) => ({
+        relation_hints: this.limitMemoryRelationHints(relationHintsByNode.get(event.local_id)),
+        seen_pages: this.limitMemorySeenPages(this.collectSeenPages(event.evidence)),
+      })), currentPageIndex, MEMORY_ITEM_LIMITS.events),
+      entities: this.compactMemoryItems(snapshot.entities.map((entity) => ({
         local_id: entity.local_id,
         canonical_label: entity.label,
-        relation_hints: this.sortStrings(relationHintsByNode.get(entity.local_id)),
-        seen_pages: this.collectSeenPages(entity.evidence),
-      })),
-      themes: snapshot.themes.map((theme) => ({
+        relation_hints: this.limitMemoryRelationHints(relationHintsByNode.get(entity.local_id)),
+        seen_pages: this.limitMemorySeenPages(this.collectSeenPages(entity.evidence)),
+      })), currentPageIndex, MEMORY_ITEM_LIMITS.entities),
+      themes: this.compactMemoryItems(snapshot.themes.map((theme) => ({
         local_id: theme.local_id,
         canonical_label: theme.label,
-        relation_hints: this.sortStrings(relationHintsByNode.get(theme.local_id)),
-        seen_pages: this.collectSeenPages(theme.evidence),
-      })),
+        relation_hints: this.limitMemoryRelationHints(relationHintsByNode.get(theme.local_id)),
+        seen_pages: this.limitMemorySeenPages(this.collectSeenPages(theme.evidence)),
+      })), currentPageIndex, MEMORY_ITEM_LIMITS.themes),
     };
+  }
+
+  private compactMemoryItems<T extends KnowledgeMemoryItem>(
+    items: T[],
+    currentPageIndex: number | undefined,
+    limit: number,
+  ): T[] {
+    if (items.length <= limit) return items;
+
+    const importanceRank = {
+      main: 3,
+      supporting: 2,
+      minor: 1,
+    } as const;
+
+    return [...items]
+      .sort((left, right) => {
+        const leftDistance = this.memoryDistance(left.seen_pages, currentPageIndex);
+        const rightDistance = this.memoryDistance(right.seen_pages, currentPageIndex);
+        if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+        const leftImportance = left.importance ? importanceRank[left.importance] : 0;
+        const rightImportance = right.importance ? importanceRank[right.importance] : 0;
+        if (leftImportance !== rightImportance) return rightImportance - leftImportance;
+        const leftHints = left.relation_hints?.length ?? 0;
+        const rightHints = right.relation_hints?.length ?? 0;
+        if (leftHints !== rightHints) return rightHints - leftHints;
+        return left.canonical_label.localeCompare(right.canonical_label);
+      })
+      .slice(0, limit);
+  }
+
+  private memoryDistance(
+    seenPages: number[] | undefined,
+    currentPageIndex: number | undefined,
+  ): number {
+    if (currentPageIndex === undefined || !seenPages || seenPages.length === 0) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    return Math.min(...seenPages.map((pageIndex) => Math.abs(pageIndex - currentPageIndex)));
+  }
+
+  private limitMemoryRelationHints(value: string[] | undefined): string[] | undefined {
+    return value?.slice(0, MAX_MEMORY_RELATION_HINTS);
+  }
+
+  private limitMemorySeenPages(value: number[]): number[] {
+    return value.slice(-MAX_MEMORY_SEEN_PAGES);
   }
 
   private collectSeenPages(evidence: KnowledgeEvidence[] | undefined): number[] {
@@ -1262,10 +3022,16 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         if (!isPlainObject(item)) return null;
         const name = asString(item.name);
         if (!name) return null;
+        const rawImportance = asString(item.importance);
+        const importance =
+          rawImportance === 'main' || rawImportance === 'supporting' || rawImportance === 'minor'
+            ? rawImportance
+            : undefined;
         return {
           local_id: asString(item.local_id) ?? `p${index + 1}`,
           name,
           aliases: this.sanitizeStringArray(item.aliases),
+          importance,
           description: asString(item.description),
           roles: this.sanitizeStringArray(item.roles),
           traits: this.sanitizeStringArray(item.traits),
@@ -1279,6 +3045,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizeIdeas(
     value: unknown,
     allowedPageRefs: KnowledgePageRef[],
+    promptVariant: KnowledgePromptVariant = 'nonfiction',
   ): KnowledgeIdea[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const ideas = value
@@ -1295,14 +3062,17 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           kind: normalizedKind,
           evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
         };
-        if (!this.shouldKeepIdea(idea)) return null;
+        if (!this.shouldKeepIdea(idea, promptVariant)) return null;
         return idea;
       })
       .filter((item): item is KnowledgeIdea => item !== null);
     return ideas.length ? ideas : undefined;
   }
 
-  private shouldKeepIdea(idea: KnowledgeIdea): boolean {
+  private shouldKeepIdea(
+    idea: KnowledgeIdea,
+    promptVariant: KnowledgePromptVariant = 'nonfiction',
+  ): boolean {
     const label = idea.label.trim();
     const normalized = label.toLowerCase();
     const words = normalized.split(/\s+/).filter(Boolean);
@@ -1310,6 +3080,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     if (words.length === 0) return false;
     if (label.length > 72 || words.length > 10) return false;
     if (/[.?!:]$/.test(label)) return false;
+    if (promptVariant === 'fiction') return true;
 
     if (idea.kind === 'claim' || idea.kind === 'belief') {
       if (words.length > 6) return false;
@@ -1318,6 +3089,11 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       if (CONTEXT_HEAVY_IDEA_TOKENS.some((token) => normalized.includes(token))) {
         return false;
       }
+    }
+
+    if (idea.kind === 'principle') {
+      if (normalized.includes('\'s') && words.length > 5) return false;
+      if (/\bwhen\b/.test(normalized) && words.length > 6) return false;
     }
 
     return true;
@@ -1532,6 +3308,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       resultAvailable: Boolean(run.output),
       error: run.error,
       progress: this.visibleProgressForStatus(run),
+      checkpoint: run.checkpoint,
     };
   }
 
@@ -1591,5 +3368,13 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       throw new BadRequestException(`${fieldName} must be a non-negative integer`);
     }
     return value;
+  }
+
+  private requireRestartMode(value: unknown): KnowledgeExtractionWorkflowRestartMode {
+    const result = asString(value);
+    if (result !== 'resume' && result !== 'from_start') {
+      throw new BadRequestException('mode must be "resume" or "from_start"');
+    }
+    return result;
   }
 }

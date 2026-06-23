@@ -329,8 +329,9 @@ describe('QuizWorkflowService', () => {
     expect(result.questions).toHaveLength(4);
     expect(result.questions).toEqual([
       expect.objectContaining({
-        type: 'short_answer',
-        acceptableAnswers: ['Freedom', 'Freedom answer'],
+        type: 'multiple_choice',
+        options: ['Freedom', 'Distractor A', 'Distractor B', 'Distractor C'],
+        correctAnswerIndex: 0,
         sourceUnitId: 'i_freedom',
         sourceUnitType: 'idea',
         sourceInsight: {
@@ -447,7 +448,7 @@ describe('QuizWorkflowService', () => {
     expect(prompts.some((prompt) => prompt.includes('sourceEvidence'))).toBe(true);
     expect(prompts.some((prompt) => prompt.includes('Generate a spoiler-light chapter pre-reading guide'))).toBe(false);
     expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash-lite',
       prefixCache: expect.objectContaining({
         cacheKey: `chapter_context.v1:book-1:chapter-1:${chapter.chapterContentHash}`,
         systemPromptMode: 'request',
@@ -514,8 +515,8 @@ describe('QuizWorkflowService', () => {
     expect(selectedUnits.map((unit) => unit.unitId)).toEqual([
       'i_freedom',
       'i_justice',
+      'i_unity',
       'e_speech',
-      't_resistance',
       'p_alice',
     ]);
 
@@ -524,10 +525,10 @@ describe('QuizWorkflowService', () => {
       targetQuestionType: string;
     }>;
     expect(plannedUnits.map((unit) => unit.targetQuestionType)).toEqual([
-      'short_answer',
-      'short_answer',
-      'true_false_not_given',
       'multiple_choice',
+      'multiple_choice',
+      'multiple_choice',
+      'true_false_not_given',
       'fill_in_blank',
     ]);
   });

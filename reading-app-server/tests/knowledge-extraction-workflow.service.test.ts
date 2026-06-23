@@ -10,6 +10,10 @@ import { KnowledgeExtractionWorkflowService } from '../src/modules/knowledge-ext
 import { QuizWorkflowRepository } from '../src/modules/quiz-workflow/quiz-workflow.repository';
 import { WorkflowQueueService } from '../src/modules/workflow-queue/workflow-queue.service';
 import * as llmService from '../services/llmService';
+import type {
+  AnalyzeKnowledgeExtractionData,
+  AnalyzeKnowledgeExtractionGraphData,
+} from '../../packages/contracts/src';
 
 const createBookRepository = async (): Promise<BookIngestionRepository> => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'knowledge-workflow-'));
@@ -24,10 +28,107 @@ const createDeferred = <T = void>() => {
   return { promise, resolve };
 };
 
+const toGraphExtraction = (
+  extraction: AnalyzeKnowledgeExtractionData,
+): AnalyzeKnowledgeExtractionGraphData => {
+  const evidence: AnalyzeKnowledgeExtractionGraphData['evidence'] = [];
+  const pushEvidence = (
+    ownerKind: 'node' | 'edge',
+    ownerId: string,
+    items: AnalyzeKnowledgeExtractionData['people'][number]['evidence'],
+  ) => {
+    for (const [index, item] of (items ?? []).entries()) {
+      evidence.push({
+        id: `ev_${ownerKind}_${ownerId}_${index}_${item.pageIndex ?? -1}_${item.pageNumber ?? -1}`,
+        owner_kind: ownerKind,
+        owner_id: ownerId,
+        quote: item.quote,
+        pageIndex: item.pageIndex,
+        pageNumber: item.pageNumber,
+      });
+    }
+  };
+
+  return {
+    title: extraction.title,
+    summary: extraction.summary,
+    nodes: [
+      ...extraction.people.map((person) => {
+        pushEvidence('node', person.local_id, person.evidence);
+        return {
+          id: person.local_id,
+          type: 'person' as const,
+          label: person.name,
+          aliases: person.aliases,
+          importance: person.importance,
+          description: person.description,
+          roles: person.roles,
+          traits: person.traits,
+        };
+      }),
+      ...extraction.ideas.map((idea) => {
+        pushEvidence('node', idea.local_id, idea.evidence);
+        return {
+          id: idea.local_id,
+          type: 'idea' as const,
+          label: idea.label,
+          kind: idea.kind,
+          description: idea.description,
+        };
+      }),
+      ...extraction.events.map((event) => {
+        pushEvidence('node', event.local_id, event.evidence);
+        return {
+          id: event.local_id,
+          type: 'event' as const,
+          label: event.label,
+          description: event.description,
+          participant_ids: event.participant_local_ids,
+          time_hint: event.time_hint,
+          place_hint: event.place_hint,
+        };
+      }),
+      ...extraction.entities.map((entity) => {
+        pushEvidence('node', entity.local_id, entity.evidence);
+        return {
+          id: entity.local_id,
+          type: 'entity' as const,
+          label: entity.label,
+          entity_type: entity.type,
+          description: entity.description,
+        };
+      }),
+      ...extraction.themes.map((theme) => {
+        pushEvidence('node', theme.local_id, theme.evidence);
+        return {
+          id: theme.local_id,
+          type: 'theme' as const,
+          label: theme.label,
+          strength: theme.strength,
+          description: theme.description,
+        };
+      }),
+    ],
+    edges: extraction.relations.map((relation) => {
+      pushEvidence('edge', relation.local_id, relation.evidence);
+      return {
+        id: relation.local_id,
+        from: relation.from_id,
+        to: relation.to_id,
+        relation_type: relation.relation_type,
+        description: relation.description,
+        confidence: relation.confidence,
+      };
+    }),
+    evidence,
+  };
+};
+
 describe('KnowledgeExtractionWorkflowService', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     delete process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE;
+    delete process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_TIMEOUT_MS;
     delete process.env.AUTO_SUBMIT_QUIZ_WORKFLOW;
   });
 
@@ -55,6 +156,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageParagraphs: {
         '0': 'Alice continues the speech about freedom at City Hall.',
       },
+      bookMetadata: { isFiction: true },
     });
     bookRepository.upsertPageFragment({
       bookId: 'book-1',
@@ -69,7 +171,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
     });
 
     const seenPageIndexes: number[] = [];
-    const pageCacheSpy = vi.spyOn(workflowRepository, 'setCachedPageExtraction');
+    const pageCacheSpy = vi.spyOn(workflowRepository, 'setCachedPageGraphExtraction');
     const replaceSpy = vi.spyOn(workflowRepository, 'replaceChapterExtraction');
     vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockImplementation(
       async (input: {
@@ -78,7 +180,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
         seenPageIndexes.push(input.piece.pageIndex);
 
         if (input.piece.pageIndex === 0) {
-          return {
+          return toGraphExtraction({
             title: 'ignored',
             summary: 'ignored',
             people: [
@@ -86,6 +188,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
                 local_id: 'p1',
                 name: 'Alice',
                 aliases: ['Al'],
+                importance: 'supporting',
                 roles: ['leader'],
                 traits: ['brave'],
                 evidence: [{ quote: 'Alice begins the speech', pageIndex: 0, pageNumber: 1 }],
@@ -137,10 +240,10 @@ describe('KnowledgeExtractionWorkflowService', () => {
                 evidence: [{ quote: 'Alice begins the speech about freedom', pageIndex: 0, pageNumber: 1 }],
               },
             ],
-          };
+          });
         }
 
-        return {
+        return toGraphExtraction({
           title: 'ignored again',
           summary: 'ignored again',
           people: [
@@ -148,6 +251,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
               local_id: 'p9',
               name: 'alice',
               aliases: ['Alice'],
+              importance: 'main',
               roles: [' strategist '],
               traits: ['Brave'],
               evidence: [{ quote: 'Alice continues the speech', pageIndex: 2, pageNumber: 3 }],
@@ -188,19 +292,19 @@ describe('KnowledgeExtractionWorkflowService', () => {
               evidence: [{ quote: 'freedom', pageIndex: 2, pageNumber: 3 }],
             },
           ],
-          relations: [
-            {
-              local_id: 'r9',
+            relations: [
+              {
+                local_id: 'r9',
               from_id: 'p9',
               from_type: 'person',
               to_id: 'i9',
               to_type: 'idea',
               relation_type: 'supports',
               confidence: 0.9,
-              evidence: [{ quote: 'Alice continues the speech about freedom', pageIndex: 2, pageNumber: 3 }],
-            },
-          ],
-        };
+                evidence: [{ quote: 'Alice continues the speech about freedom', pageIndex: 2, pageNumber: 3 }],
+              },
+            ],
+        });
       },
     );
 
@@ -217,10 +321,14 @@ describe('KnowledgeExtractionWorkflowService', () => {
 
     expect(seenPageIndexes).toEqual([0, 2]);
     expect(pageCacheSpy).toHaveBeenCalledTimes(2);
+    expect(pageCacheSpy).toHaveBeenCalledWith(expect.objectContaining({
+      promptVersion: 'knowledge_extraction.v2.7:fiction',
+    }));
     expect(replaceSpy).toHaveBeenCalledTimes(1);
 
     const result = service.getWorkflowResult(submit.workflowRunId).result;
     const latest = service.getLatestChapterKnowledgeExtraction('book-1', 'chapter-1').result;
+    const keyInformation = workflowRepository.buildBookKeyInformation('book-1');
     const personLocalId = result.people[0]?.local_id;
     const ideaLocalId = result.ideas[0]?.local_id;
     const eventLocalId = result.events[0]?.local_id;
@@ -242,6 +350,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(result.people[0]).toMatchObject({
       name: 'Alice',
       aliases: ['Al', 'Alice'],
+      importance: 'main',
       roles: ['leader', 'strategist'],
       traits: ['brave'],
       evidence: expectedEvidence,
@@ -284,6 +393,11 @@ describe('KnowledgeExtractionWorkflowService', () => {
         expect.objectContaining({ pageIndex: 2, pageNumber: 3 })
       ])
     );
+    expect(latest.people[0]?.importance).toBe('main');
+    expect(keyInformation.people[0]).toMatchObject({
+      canonicalName: 'Alice',
+      importance: 'main',
+    });
     expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
   });
 
@@ -449,7 +563,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
           await releaseSecondPiece.promise;
         }
 
-        return {
+        return toGraphExtraction({
           title: 'ignored',
           summary: 'ignored',
           people: [
@@ -468,7 +582,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
           entities: [],
           themes: [],
           relations: [],
-        };
+        });
       },
     );
 
@@ -645,7 +759,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       },
     });
 
-    const generateSpy = vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockResolvedValue({
+    const generateSpy = vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockResolvedValue(toGraphExtraction({
       title: 'ignored',
       summary: 'ignored',
       people: [
@@ -667,7 +781,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       entities: [],
       themes: [],
       relations: [],
-    });
+    }));
 
     const firstSubmit = service.submitKnowledgeExtractionWorkflow({
       bookId: 'book-3',
@@ -735,7 +849,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
     vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockImplementation(
       async (input: { piece: { pageIndex: number } }) => {
         if (input.piece.pageIndex === 0) {
-          return {
+          return toGraphExtraction({
             title: 'ignored',
             summary: 'ignored',
             people: [
@@ -750,7 +864,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
             entities: [],
             themes: [],
             relations: [],
-          };
+          });
         }
         throw new Error('synthetic extraction failure');
       },
@@ -862,7 +976,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       complete: vi.fn(),
       json: vi.fn(async (userPrompt: string) => {
         prompts.push(userPrompt);
-        const json = JSON.stringify({
+        const json = JSON.stringify(toGraphExtraction({
           title: 'Chapter Five',
           summary: 'Alice appears on the current page.',
           people: [
@@ -877,7 +991,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
           entities: [],
           themes: [],
           relations: [],
-        });
+        }));
         return {
           data: (async function* () {
             yield json;
@@ -920,7 +1034,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageIndex: 1,
       sourceHash: 'hash-1',
       chapterContentHash: 'chapter-hash-5',
-      promptVersion: 'knowledge_extraction.v2.3',
+      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
       extraction: first,
     });
     const second = await (service as never).generateKnowledgeExtractionForPiece({
@@ -960,11 +1074,89 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(prompts[0]).toContain('Use the primary evidence pages as the only source of evidence quotes.');
     expect(prompts[0]).toContain('Every evidence item must include quote, pageIndex, and pageNumber');
     expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'gemini-flash-lite-latest',
+      model: 'gemini-2.5-flash-lite',
+      timeoutMs: 3600000,
       prefixCache: expect.objectContaining({
         cacheKey: 'chapter_context.v1:book-5:chapter-5:chapter-hash-5',
         systemPromptMode: 'request',
       }),
+    }));
+  });
+
+  test('uses the fiction prompt when iOS uploads isFiction as a string metadata value', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-ios-fiction',
+      chapterId: 'chapter-ios-fiction',
+      chapterIndex: 1,
+      chapterTitle: 'Fiction Chapter',
+      pageIndex: 0,
+      sourceHash: 'hash-ios-fiction',
+      pageParagraphs: { '0': 'Alice stepped into the moonlit room.' },
+      bookMetadata: { title: 'Fiction Book', isFiction: 'true' },
+    });
+
+    const createLLMClientSpy = vi.spyOn(llmService, 'createLLMClient').mockReturnValue({
+      complete: vi.fn(),
+      json: vi.fn(async () => {
+        const json = JSON.stringify(toGraphExtraction({
+          title: 'Fiction Chapter',
+          summary: 'Alice enters a room.',
+          people: [],
+          ideas: [],
+          events: [],
+          entities: [],
+          themes: [],
+          relations: [],
+        }));
+        return {
+          data: (async function* () {
+            yield json;
+          })(),
+          usage: Promise.resolve({}),
+        };
+      }),
+    } as never);
+
+    await (service as never).generateKnowledgeExtractionForPiece({
+      bookId: 'book-ios-fiction',
+      chapterId: 'chapter-ios-fiction',
+      chapterIndex: 1,
+      chapterTitle: 'Fiction Chapter',
+      chapterText: 'Alice stepped into the moonlit room.',
+      chapterContentHash: 'chapter-hash-ios-fiction',
+      piece: {
+        pageIndex: 0,
+        pageNumber: 1,
+        rawText: 'Alice stepped into the moonlit room.',
+        sourceHash: 'hash-ios-fiction',
+        pieceIndex: 0,
+        totalPieces: 1,
+        pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      },
+      bookContext: bookContextService.buildBookContextBundle('book-ios-fiction', 'chapter-ios-fiction'),
+      chapterContext: bookContextService.buildChapterContextBundle('book-ios-fiction', 'chapter-ios-fiction'),
+      pageWindow: bookContextService.buildPageWindowContext('book-ios-fiction', 'chapter-ios-fiction', 0),
+      memoryContext: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    });
+
+    expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
+      systemPrompt: expect.stringContaining('Fiction Knowledge Extraction Prompt'),
     }));
   });
 
@@ -994,7 +1186,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       complete: vi.fn(),
       json: vi.fn(async (userPrompt: string) => {
         prompts.push(userPrompt);
-        const json = JSON.stringify({
+        const json = JSON.stringify(toGraphExtraction({
           title: 'Chapter Six',
           summary: 'Alice appears on the current page.',
           people: [],
@@ -1003,7 +1195,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
           entities: [],
           themes: [],
           relations: [],
-        });
+        }));
         return {
           data: (async function* () {
             yield json;
@@ -1019,7 +1211,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageIndex: 1,
       sourceHash: 'hash-1',
       chapterContentHash: 'chapter-hash-old',
-      promptVersion: 'knowledge_extraction.v2.3',
+      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
       extraction: {
         title: 'Stale',
         summary: 'stale',
@@ -1067,6 +1259,103 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(prompts).toHaveLength(1);
   });
 
+  test('does not reuse nonfiction page cache for a fiction book', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-fiction-cache',
+      chapterId: 'chapter-fiction-cache',
+      chapterIndex: 1,
+      chapterTitle: 'Fiction Cache',
+      pageIndex: 0,
+      sourceHash: 'same-source-hash',
+      pageParagraphs: { '0': 'Alice finds a letter.' },
+      bookMetadata: { isFiction: true },
+    });
+
+    workflowRepository.setCachedPageExtraction({
+      bookId: 'book-fiction-cache',
+      chapterId: 'chapter-fiction-cache',
+      pageIndex: 0,
+      sourceHash: 'same-source-hash',
+      chapterContentHash: 'same-chapter-hash',
+      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
+      extraction: {
+        title: 'Stale nonfiction cache',
+        summary: 'stale',
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+    });
+
+    const prompts: string[] = [];
+    vi.spyOn(llmService, 'createLLMClient').mockReturnValue({
+      complete: vi.fn(),
+      json: vi.fn(async (userPrompt: string) => {
+        prompts.push(userPrompt);
+        const json = JSON.stringify(toGraphExtraction({
+          title: 'Fiction Cache',
+          summary: 'Alice finds a letter.',
+          people: [],
+          ideas: [],
+          events: [],
+          entities: [],
+          themes: [],
+          relations: [],
+        }));
+        return {
+          data: (async function* () {
+            yield json;
+          })(),
+          usage: Promise.resolve({}),
+        };
+      }),
+    } as never);
+
+    const result = await (service as never).generateKnowledgeExtractionForPiece({
+      bookId: 'book-fiction-cache',
+      chapterId: 'chapter-fiction-cache',
+      chapterIndex: 1,
+      chapterTitle: 'Fiction Cache',
+      chapterText: 'Alice finds a letter.',
+      chapterContentHash: 'same-chapter-hash',
+      piece: {
+        pageIndex: 0,
+        pageNumber: 1,
+        rawText: 'Alice finds a letter.',
+        sourceHash: 'same-source-hash',
+        pieceIndex: 0,
+        totalPieces: 1,
+        pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      },
+      bookContext: bookContextService.buildBookContextBundle('book-fiction-cache', 'chapter-fiction-cache'),
+      chapterContext: bookContextService.buildChapterContextBundle('book-fiction-cache', 'chapter-fiction-cache'),
+      pageWindow: bookContextService.buildPageWindowContext('book-fiction-cache', 'chapter-fiction-cache', 0),
+      memoryContext: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    });
+
+    expect(result.title).toBe('Fiction Cache');
+    expect(prompts).toHaveLength(1);
+  });
+
   test('retries transient 503 errors for a piece and eventually succeeds', async () => {
     const bookRepository = await createBookRepository();
     const workflowRepository = new KnowledgeExtractionWorkflowRepository();
@@ -1103,7 +1392,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
             },
           }));
         }
-        const json = JSON.stringify({
+        const json = JSON.stringify(toGraphExtraction({
           title: 'Retry Chapter',
           summary: 'Alice returns.',
           people: [
@@ -1118,7 +1407,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
           entities: [],
           themes: [],
           relations: [],
-        });
+        }));
         return {
           data: (async function* () {
             yield json;
@@ -1160,10 +1449,19 @@ describe('KnowledgeExtractionWorkflowService', () => {
       },
     });
 
-    expect(result.people[0]).toMatchObject({
-      name: 'Alice',
-      evidence: [{ quote: 'Alice returns to the square.', pageIndex: 1, pageNumber: 2 }],
+    expect(result.nodes[0]).toMatchObject({
+      type: 'person',
+      label: 'Alice',
     });
+    expect(result.evidence).toEqual([
+      expect.objectContaining({
+        owner_kind: 'node',
+        owner_id: 'p1',
+        quote: 'Alice returns to the square.',
+        pageIndex: 1,
+        pageNumber: 2,
+      }),
+    ]);
     expect(attempts).toBe(3);
     expect(sleepSpy).toHaveBeenCalledTimes(2);
   });
@@ -1292,6 +1590,317 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(sleepSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('stores piece checkpoint after failure and resumes from the next piece', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-piece-resume',
+      chapterId: 'chapter-piece-resume',
+      chapterIndex: 10,
+      chapterTitle: 'Piece Resume Chapter',
+      pageIndex: 0,
+      sourceHash: 'piece-resume-0',
+      pageParagraphs: { '0': 'Alice appears first.' },
+    });
+    bookRepository.upsertPageFragment({
+      bookId: 'book-piece-resume',
+      chapterId: 'chapter-piece-resume',
+      chapterIndex: 10,
+      chapterTitle: 'Piece Resume Chapter',
+      pageIndex: 2,
+      sourceHash: 'piece-resume-2',
+      pageParagraphs: { '0': 'Bob appears second.' },
+    });
+
+    const seenPageIndexes: number[] = [];
+    let secondPieceAttempts = 0;
+    vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockImplementation(
+      async (input: { piece: { pageIndex: number; pageNumber: number } }) => {
+        seenPageIndexes.push(input.piece.pageIndex);
+        if (input.piece.pageIndex === 0) {
+          return toGraphExtraction({
+            title: 'ignored',
+            summary: 'ignored',
+            people: [
+              {
+                local_id: 'p1',
+                name: 'Alice',
+                evidence: [{ quote: 'Alice appears first.', pageIndex: 0, pageNumber: 1 }],
+              },
+            ],
+            ideas: [],
+            events: [],
+            entities: [],
+            themes: [],
+            relations: [],
+          });
+        }
+
+        secondPieceAttempts += 1;
+        if (secondPieceAttempts === 1) {
+          throw new Error('synthetic piece failure');
+        }
+
+        return toGraphExtraction({
+          title: 'ignored',
+          summary: 'ignored',
+          people: [
+            {
+              local_id: 'p2',
+              name: 'Bob',
+              evidence: [{ quote: 'Bob appears second.', pageIndex: 2, pageNumber: 3 }],
+            },
+          ],
+          ideas: [],
+          events: [],
+          entities: [],
+          themes: [],
+          relations: [],
+        });
+      },
+    );
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-piece-resume',
+      chapterId: 'chapter-piece-resume',
+      chapterIndex: 10,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('failed');
+    });
+
+    expect(service.getWorkflowStatus(submit.workflowRunId).checkpoint).toMatchObject({
+      totalPieces: 2,
+      lastCompletedPieceIndex: 0,
+      nextPieceIndex: 1,
+      nextPrimaryPageIndex: 2,
+      nextPrimaryPageNumber: 3,
+    });
+
+    const restart = service.restartWorkflow(submit.workflowRunId, { mode: 'resume' });
+    expect(restart.status).toBe('queued');
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+    });
+
+    expect(seenPageIndexes).toEqual([0, 2, 2]);
+  });
+
+  test('resumes from persisted piece cache when run partial results are missing', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-piece-cache-resume',
+      chapterId: 'chapter-piece-cache-resume',
+      chapterIndex: 12,
+      chapterTitle: 'Piece Cache Resume Chapter',
+      pageIndex: 0,
+      sourceHash: 'piece-cache-resume-0',
+      pageParagraphs: { '0': 'Alice appears first.' },
+    });
+    bookRepository.upsertPageFragment({
+      bookId: 'book-piece-cache-resume',
+      chapterId: 'chapter-piece-cache-resume',
+      chapterIndex: 12,
+      chapterTitle: 'Piece Cache Resume Chapter',
+      pageIndex: 2,
+      sourceHash: 'piece-cache-resume-2',
+      pageParagraphs: { '0': 'Bob appears second.' },
+    });
+
+    const seenPageIndexes: number[] = [];
+    let secondPieceAttempts = 0;
+    vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockImplementation(
+      async (input: { piece: { pageIndex: number; pageNumber: number } }) => {
+        seenPageIndexes.push(input.piece.pageIndex);
+        if (input.piece.pageIndex === 0) {
+          return toGraphExtraction({
+            title: 'ignored',
+            summary: 'ignored',
+            people: [
+              {
+                local_id: 'p1',
+                name: 'Alice',
+                evidence: [{ quote: 'Alice appears first.', pageIndex: 0, pageNumber: 1 }],
+              },
+            ],
+            ideas: [],
+            events: [],
+            entities: [],
+            themes: [],
+            relations: [],
+          });
+        }
+
+        secondPieceAttempts += 1;
+        if (secondPieceAttempts === 1) {
+          throw new Error('synthetic piece failure');
+        }
+
+        return toGraphExtraction({
+          title: 'ignored',
+          summary: 'ignored',
+          people: [
+            {
+              local_id: 'p2',
+              name: 'Bob',
+              evidence: [{ quote: 'Bob appears second.', pageIndex: 2, pageNumber: 3 }],
+            },
+          ],
+          ideas: [],
+          events: [],
+          entities: [],
+          themes: [],
+          relations: [],
+        });
+      },
+    );
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-piece-cache-resume',
+      chapterId: 'chapter-piece-cache-resume',
+      chapterIndex: 12,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('failed');
+    });
+
+    workflowRepository.clearPartialPieceResults(submit.workflowRunId);
+
+    service.restartWorkflow(submit.workflowRunId, { mode: 'resume' });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+    });
+
+    expect(seenPageIndexes).toEqual([0, 2, 2]);
+  });
+
+  test('restarts knowledge extraction from the first piece when requested', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-piece-restart',
+      chapterId: 'chapter-piece-restart',
+      chapterIndex: 11,
+      chapterTitle: 'Piece Restart Chapter',
+      pageIndex: 0,
+      sourceHash: 'piece-restart-0',
+      pageParagraphs: { '0': 'Alice appears first.' },
+    });
+    bookRepository.upsertPageFragment({
+      bookId: 'book-piece-restart',
+      chapterId: 'chapter-piece-restart',
+      chapterIndex: 11,
+      chapterTitle: 'Piece Restart Chapter',
+      pageIndex: 2,
+      sourceHash: 'piece-restart-2',
+      pageParagraphs: { '0': 'Bob appears second.' },
+    });
+
+    const seenPageIndexes: number[] = [];
+    let secondPieceAttempts = 0;
+    vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockImplementation(
+      async (input: { piece: { pageIndex: number; pageNumber: number } }) => {
+        seenPageIndexes.push(input.piece.pageIndex);
+        if (input.piece.pageIndex === 0) {
+          return toGraphExtraction({
+            title: 'ignored',
+            summary: 'ignored',
+            people: [
+              {
+                local_id: 'p1',
+                name: 'Alice',
+                evidence: [{ quote: 'Alice appears first.', pageIndex: 0, pageNumber: 1 }],
+              },
+            ],
+            ideas: [],
+            events: [],
+            entities: [],
+            themes: [],
+            relations: [],
+          });
+        }
+
+        secondPieceAttempts += 1;
+        if (secondPieceAttempts === 1) {
+          throw new Error('synthetic piece failure');
+        }
+
+        return toGraphExtraction({
+          title: 'ignored',
+          summary: 'ignored',
+          people: [
+            {
+              local_id: 'p2',
+              name: 'Bob',
+              evidence: [{ quote: 'Bob appears second.', pageIndex: 2, pageNumber: 3 }],
+            },
+          ],
+          ideas: [],
+          events: [],
+          entities: [],
+          themes: [],
+          relations: [],
+        });
+      },
+    );
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-piece-restart',
+      chapterId: 'chapter-piece-restart',
+      chapterIndex: 11,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('failed');
+    });
+
+    service.restartWorkflow(submit.workflowRunId, { mode: 'from_start' });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+    });
+
+    expect(seenPageIndexes).toEqual([0, 2, 0, 2]);
+  });
+
   test('omits progress when a running workflow becomes stale', async () => {
     process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
 
@@ -1387,6 +1996,1137 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(result.people[0]?.evidence).toEqual([
       { quote: 'Alice on page one', pageIndex: 0, pageNumber: 1 },
     ]);
+  });
+
+  test('keeps fiction ideas even when nonfiction filters would remove them', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Fiction Chapter',
+      summary: 'summary',
+      ideas: [
+        {
+          local_id: 'i1',
+          label: 'Alice should abandon the family mission',
+          kind: 'belief',
+          evidence: [{ quote: 'She should abandon the mission', pageIndex: 0, pageNumber: 1 }],
+        },
+      ],
+    }, {
+      chapterId: 'chapter-fiction-ideas',
+      chapterTitle: 'Fiction Chapter',
+      chapterText: 'She should abandon the mission.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      promptVariant: 'fiction',
+    });
+
+    expect(result.ideas).toEqual([
+      expect.objectContaining({
+        local_id: 'i1',
+        label: 'Alice should abandon the family mission',
+        kind: 'belief',
+      }),
+    ]);
+  });
+
+  test('normalizes graph edge directions toward canonical abstract/concrete flow', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Direction Rules',
+      summary: 'summary',
+      nodes: [
+        { id: 'i1', type: 'idea', label: 'Campaign finance incentives', kind: 'principle' },
+        { id: 'e1', type: 'entity', label: 'political campaigns', entity_type: 'other' },
+        { id: 'p1', type: 'entity', label: 'United States', entity_type: 'place' },
+        { id: 'ev1', type: 'event', label: 'Crime wave predictions' },
+        { id: 't1', type: 'theme', label: 'Hidden side of everything', strength: 0.8 },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'i1',
+          to: 'e1',
+          relation_type: 'reflects',
+          description: 'The abstract claim points at the concrete example.',
+        },
+        {
+          id: 'r2',
+          from: 'i1',
+          to: 'e1',
+          relation_type: 'supports',
+          description: 'The abstract claim points at the concrete evidence.',
+        },
+        {
+          id: 'r3',
+          from: 'i1',
+          to: 'e1',
+          relation_type: 'opposes',
+          description: 'The abstract claim points at the concrete opposing force.',
+        },
+        {
+          id: 'r4',
+          from: 'p1',
+          to: 'ev1',
+          relation_type: 'happens_at',
+          description: 'The place points at the event.',
+        },
+        {
+          id: 'r5',
+          from: 'i1',
+          to: 't1',
+          relation_type: 'illustrates',
+          description: 'Low-signal abstract-to-theme edge.',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-direction-rules',
+      chapterTitle: 'Direction Rules',
+      chapterText: 'Political campaigns illustrate campaign finance incentives.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.relations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        local_id: 'r1',
+        from_id: 'e1',
+        to_id: 'i1',
+        relation_type: 'illustrates',
+      }),
+      expect.objectContaining({
+        local_id: 'r2',
+        from_id: 'e1',
+        to_id: 'i1',
+        relation_type: 'supports',
+      }),
+      expect.objectContaining({
+        local_id: 'r3',
+        from_id: 'e1',
+        to_id: 'i1',
+        relation_type: 'opposes',
+      }),
+      expect.objectContaining({
+        local_id: 'r4',
+        from_id: 'ev1',
+        to_id: 'p1',
+        relation_type: 'happens_at',
+      }),
+    ]));
+    expect(result.relations.find((relation) => relation.local_id === 'r5')).toBeUndefined();
+  });
+
+  test('rewrites vague graph relations into more specific semantics', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Semantic Rewrites',
+      summary: 'summary',
+      nodes: [
+        { id: 'p1', type: 'person', label: 'Robert Heilbroner' },
+        { id: 'n1', type: 'entity', label: 'The Worldly Philosophers', entity_type: 'object' },
+        { id: 'i1', type: 'idea', label: 'Economics as a set of tools', kind: 'claim' },
+        { id: 'e1', type: 'event', label: 'Campaign spending example' },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'p1',
+          to: 'n1',
+          relation_type: 'related_to',
+          description: 'wrote',
+        },
+        {
+          id: 'r2',
+          from: 'p1',
+          to: 'i1',
+          relation_type: 'related_to',
+          description: 'argued that economics is a toolkit',
+        },
+        {
+          id: 'r3',
+          from: 'p1',
+          to: 'i1',
+          relation_type: 'related_to',
+          description: 'wrote about',
+        },
+        {
+          id: 'r4',
+          from: 'i1',
+          to: 'e1',
+          relation_type: 'related_to',
+          description: 'illustrated by the spending example',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-semantic-rewrites',
+      chapterTitle: 'Semantic Rewrites',
+      chapterText: 'Robert Heilbroner wrote The Worldly Philosophers and argued that economics is a toolkit.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.relations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        local_id: 'r1',
+        relation_type: 'authored',
+      }),
+      expect.objectContaining({
+        local_id: 'r2',
+        relation_type: 'argues',
+      }),
+      expect.objectContaining({
+        local_id: 'r3',
+        relation_type: 'mentions',
+      }),
+      expect.objectContaining({
+        local_id: 'r4',
+        from_id: 'e1',
+        to_id: 'i1',
+        relation_type: 'illustrates',
+      }),
+    ]));
+  });
+
+  test('normalizes surname-only people from page, chapter, and memory context plus founded-style authored relations', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const graph = (service as never).sanitizeKnowledgeExtractionGraph({
+      title: 'Identity Recovery',
+      summary: 'summary',
+      nodes: [
+        { id: 'p1', type: 'person', label: 'Forbes' },
+        { id: 'p2', type: 'person', label: 'Huffington' },
+        { id: 'p3', type: 'person', label: 'Golisano', aliases: ['Michael Huffington', 'Steve Forbes', 'Golisano'] },
+        { id: 'n1', type: 'entity', label: 'Classical economics', entity_type: 'other' },
+        { id: 'i1', type: 'idea', label: 'Campaign spending and voter appeal', kind: 'principle' },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'p1',
+          to: 'i1',
+          relation_type: 'related_to',
+          description: 'argued that money cannot significantly alter voter perception',
+        },
+        {
+          id: 'r2',
+          from: 'p2',
+          to: 'n1',
+          relation_type: 'authored',
+          description: 'founder of a political tradition',
+        },
+        {
+          id: 'r3',
+          from: 'p3',
+          to: 'i1',
+          relation_type: 'related_to',
+          description: 'mentioned as a wealthy candidate who spent heavily without winning',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-identity-recovery',
+      chapterTitle: 'Identity Recovery',
+      chapterText: 'Steve Forbes debated campaign spending while Arianna Huffington and especially Thomas Golisano spent heavily in losing campaigns. Later, Messrs. Forbes, Huffington, and Golisano already knew this.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      promptVariant: 'nonfiction',
+      primaryPageText: 'Messrs. Forbes, Huffington, and Golisano already knew this.',
+      memoryContext: {
+        people: [
+          {
+            local_id: 'p-memory-1',
+            canonical_label: 'Arianna Huffington',
+            aliases: ['Huffington'],
+            seen_pages: [0],
+          },
+        ],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    });
+
+    expect(graph.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'p1',
+        type: 'person',
+        label: 'Steve Forbes',
+        aliases: ['Forbes'],
+      }),
+      expect.objectContaining({
+        id: 'p2',
+        type: 'person',
+        label: 'Arianna Huffington',
+        aliases: ['Huffington'],
+      }),
+      expect.objectContaining({
+        id: 'p3',
+        type: 'person',
+        label: 'Thomas Golisano',
+        aliases: ['Golisano'],
+      }),
+    ]));
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'r1',
+        relation_type: 'argues',
+      }),
+      expect.objectContaining({
+        id: 'r2',
+        relation_type: 'founded',
+      }),
+      expect.objectContaining({
+        id: 'r3',
+        relation_type: 'mentions',
+      }),
+    ]));
+  });
+
+  test('normalizes titled and reversed person names and rewrites located_in event edges', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const graph = (service as never).sanitizeKnowledgeExtractionGraph({
+      title: 'Name Cleanup',
+      summary: 'summary',
+      nodes: [
+        { id: 'p1', type: 'person', label: 'President Clinton' },
+        { id: 'p2', type: 'person', label: 'Heilbroner, Robert' },
+        { id: 'n1', type: 'entity', label: 'Denver', entity_type: 'place' },
+        { id: 'e1', type: 'event', label: 'Police and murder correlation example' },
+        { id: 'n2', type: 'entity', label: 'The Worldly Philosophers', entity_type: 'other' },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'n1',
+          to: 'e1',
+          relation_type: 'located_in',
+          description: 'Denver is where the comparison is observed.',
+        },
+        {
+          id: 'r2',
+          from: 'p2',
+          to: 'n2',
+          relation_type: 'related_to',
+          description: 'authored',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-name-cleanup',
+      chapterTitle: 'Name Cleanup',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      promptVariant: 'nonfiction',
+      primaryPageText: 'Bill Clinton warned of chaos while Robert Heilbroner wrote The Worldly Philosophers.',
+      memoryContext: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    });
+
+    expect(graph.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'p1',
+        label: 'Bill Clinton',
+        aliases: ['President Clinton'],
+      }),
+      expect.objectContaining({
+        id: 'p2',
+        label: 'Robert Heilbroner',
+        aliases: ['Heilbroner, Robert'],
+      }),
+    ]));
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'r1',
+        from: 'e1',
+        to: 'n1',
+        relation_type: 'happens_at',
+      }),
+      expect.objectContaining({
+        id: 'r2',
+        relation_type: 'authored',
+      }),
+    ]));
+  });
+
+  test('reclassifies authored work-like ideas into object entities', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const graph = (service as never).sanitizeKnowledgeExtractionGraph({
+      title: 'Work Reclassification',
+      summary: 'summary',
+      nodes: [
+        { id: 'p1', type: 'person', label: 'Robert Heilbroner' },
+        { id: 'i1', type: 'idea', label: 'The Worldly Philosophers', kind: 'claim', description: 'A book about economists.' },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'p1',
+          to: 'i1',
+          relation_type: 'related_to',
+          description: 'wrote',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-work-reclassification',
+      chapterTitle: 'Work Reclassification',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      promptVariant: 'nonfiction',
+      primaryPageText: 'Robert Heilbroner wrote The Worldly Philosophers.',
+      memoryContext: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    });
+
+    expect(graph.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'i1',
+        type: 'entity',
+        entity_type: 'object',
+        label: 'The Worldly Philosophers',
+      }),
+    ]));
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'r1',
+        relation_type: 'authored',
+      }),
+    ]));
+  });
+
+  test('deduplicates near-duplicate nonfiction ideas and rewrites graph references', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Idea Dedupe',
+      summary: 'summary',
+      nodes: [
+        {
+          id: 'i1',
+          type: 'idea',
+          label: 'Correlation vs. Causation',
+          kind: 'principle',
+        },
+        {
+          id: 'i2',
+          type: 'idea',
+          label: 'Correlation vs. Causation in Politics',
+          kind: 'claim',
+        },
+        {
+          id: 'e1',
+          type: 'event',
+          label: 'Campaign spending example',
+        },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'e1',
+          to: 'i2',
+          relation_type: 'reflects',
+          description: 'The event illustrates the contextualized duplicate idea.',
+        },
+      ],
+      evidence: [
+        {
+          id: 'ev1',
+          owner_kind: 'node',
+          owner_id: 'i2',
+          quote: 'Money and victory are correlated.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
+      ],
+    }, {
+      chapterId: 'chapter-idea-dedupe',
+      chapterTitle: 'Idea Dedupe',
+      chapterText: 'Money and victory are correlated.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.ideas).toEqual([
+      expect.objectContaining({
+        local_id: 'i1',
+        label: 'Correlation vs. Causation',
+      }),
+    ]);
+    expect(result.relations).toEqual([
+      expect.objectContaining({
+        local_id: 'r1',
+        from_id: 'e1',
+        to_id: 'i1',
+      }),
+    ]);
+    expect(result.ideas[0]?.evidence).toEqual([
+      {
+        quote: 'Money and victory are correlated.',
+        pageIndex: 0,
+        pageNumber: 1,
+      },
+    ]);
+  });
+
+  test('deduplicates same-label entities across generic and specific types and rewrites graph references', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Entity Dedupe',
+      summary: 'summary',
+      nodes: [
+        {
+          id: 'n1',
+          type: 'entity',
+          label: 'Real-estate agents',
+          entity_type: 'other',
+        },
+        {
+          id: 'n2',
+          type: 'entity',
+          label: 'Real-estate agents',
+          entity_type: 'organization',
+          description: 'A professional group discussed in the chapter.',
+        },
+        {
+          id: 'e1',
+          type: 'event',
+          label: 'Housing market example',
+        },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'e1',
+          to: 'n1',
+          relation_type: 'illustrates',
+          description: 'The example illustrates real-estate agent incentives.',
+        },
+      ],
+      evidence: [
+        {
+          id: 'ev1',
+          owner_kind: 'node',
+          owner_id: 'n1',
+          quote: 'Real-estate agents benefit from more transactions.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
+      ],
+    }, {
+      chapterId: 'chapter-entity-dedupe',
+      chapterTitle: 'Entity Dedupe',
+      chapterText: 'Real-estate agents benefit from more transactions.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.entities).toEqual([
+      expect.objectContaining({
+        local_id: 'n2',
+        label: 'Real-estate agents',
+        type: 'organization',
+        description: 'A professional group discussed in the chapter.',
+        evidence: [
+          {
+            quote: 'Real-estate agents benefit from more transactions.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+        ],
+      }),
+    ]);
+    expect(result.relations).toEqual([
+      expect.objectContaining({
+        local_id: 'r1',
+        to_id: 'n2',
+        to_type: 'entity',
+      }),
+    ]);
+  });
+
+  test('falls back to embedded graph evidence when top-level evidence is missing', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Embedded Evidence',
+      summary: 'summary',
+      nodes: [
+        {
+          id: 'p1',
+          type: 'person',
+          label: 'Alice',
+          evidence: [
+            {
+              quote: 'Alice speaks at City Hall.',
+              pageIndex: 0,
+              pageNumber: 1,
+            },
+          ],
+        },
+        {
+          id: 'i1',
+          type: 'idea',
+          label: 'Freedom matters',
+          kind: 'claim',
+          evidence: [
+            {
+              quote: 'Freedom matters',
+              pageIndex: 0,
+              pageNumber: 1,
+            },
+          ],
+        },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'p1',
+          to: 'i1',
+          relation_type: 'argues',
+          description: 'Alice argues that freedom matters.',
+          evidence: [
+            {
+              quote: 'Alice says freedom matters.',
+              pageIndex: 0,
+              pageNumber: 1,
+            },
+          ],
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-embedded-evidence',
+      chapterTitle: 'Embedded Evidence',
+      chapterText: 'Alice speaks at City Hall. Freedom matters.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.people).toEqual([
+      expect.objectContaining({
+        local_id: 'p1',
+        evidence: [
+          {
+            quote: 'Alice speaks at City Hall.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+        ],
+      }),
+    ]);
+    expect(result.ideas).toEqual([
+      expect.objectContaining({
+        local_id: 'i1',
+        evidence: [
+          {
+            quote: 'Freedom matters',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+        ],
+      }),
+    ]);
+    expect(result.relations).toEqual([
+      expect.objectContaining({
+        local_id: 'r1',
+        evidence: [
+          {
+            quote: 'Alice says freedom matters.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+        ],
+      }),
+    ]);
+  });
+
+  test('reclassifies abstract entity labels into ideas and drops context-only related edges', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Abstract Entity Reclassification',
+      summary: 'summary',
+      nodes: [
+        {
+          id: 'p1',
+          type: 'person',
+          label: 'Adam Smith',
+        },
+        {
+          id: 'n1',
+          type: 'entity',
+          label: 'Classical economics',
+          entity_type: 'place',
+          description: 'A school of thought associated with Adam Smith.',
+        },
+        {
+          id: 'n2',
+          type: 'entity',
+          label: 'Campaign finance',
+          entity_type: 'other',
+        },
+        {
+          id: 'n3',
+          type: 'entity',
+          label: 'Chewing gum',
+          entity_type: 'other',
+        },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'p1',
+          to: 'n1',
+          relation_type: 'founded',
+          description: 'Adam Smith is identified as the founder of classical economics.',
+        },
+        {
+          id: 'r2',
+          from: 'n3',
+          to: 'n2',
+          relation_type: 'related_to',
+          description: 'The amount spent on chewing gum is used to contextualize campaign finance.',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-abstract-entity-reclassification',
+      chapterTitle: 'Abstract Entity Reclassification',
+      chapterText: 'Adam Smith founded classical economics.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.ideas).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        local_id: 'n1',
+        label: 'Classical economics',
+      }),
+      expect.objectContaining({
+        local_id: 'n2',
+        label: 'Campaign finance',
+      }),
+    ]));
+    expect(result.entities).toEqual([
+      expect.objectContaining({
+        local_id: 'n3',
+        label: 'Chewing gum',
+      }),
+    ]);
+    expect(result.relations).toEqual([
+      expect.objectContaining({
+        local_id: 'r1',
+        from_id: 'p1',
+        to_id: 'n1',
+        to_type: 'idea',
+        relation_type: 'founded',
+      }),
+    ]);
+  });
+
+  test('deduplicates contextualized correlation and causation principle variants', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Correlation Dedupe',
+      summary: 'summary',
+      nodes: [
+        {
+          id: 'i1',
+          type: 'idea',
+          label: 'Correlation does not imply causation',
+          kind: 'principle',
+        },
+        {
+          id: 'i2',
+          type: 'idea',
+          label: 'Correlation vs. Causation in elections',
+          kind: 'principle',
+        },
+        {
+          id: 'e1',
+          type: 'event',
+          label: 'Campaign spending example',
+        },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'e1',
+          to: 'i2',
+          relation_type: 'illustrates',
+          description: 'The campaign spending example illustrates the broader principle.',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-correlation-dedupe',
+      chapterTitle: 'Correlation Dedupe',
+      chapterText: 'Campaign spending is an example of correlation not implying causation.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.ideas).toEqual([
+      expect.objectContaining({
+        local_id: 'i1',
+        label: 'Correlation does not imply causation',
+      }),
+    ]);
+    expect(result.relations).toEqual([
+      expect.objectContaining({
+        local_id: 'r1',
+        from_id: 'e1',
+        to_id: 'i1',
+        relation_type: 'illustrates',
+      }),
+    ]);
+  });
+
+  test('drops placeholder people and low-signal graph edges', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const graph = (service as never).sanitizeKnowledgeExtractionGraph({
+      title: 'Quality Guardrails',
+      summary: 'summary',
+      nodes: [
+        { id: 'p1', type: 'person', label: 'Candidate A' },
+        { id: 'p2', type: 'person', label: 'Real-estate agent' },
+        { id: 'p3', type: 'person', label: 'Adam Smith' },
+        { id: 'p4', type: 'person', label: 'California auto mechanics' },
+        { id: 'p5', type: 'person', label: 'Police officers' },
+        { id: 'p6', type: 'person', label: 'Candidate' },
+        { id: 'p7', type: 'person', label: 'Czar' },
+        { id: 'p8', type: 'person', label: 'Unknown observer' },
+        { id: 'i1', type: 'idea', label: 'Markets reflect incentives', kind: 'principle' },
+        { id: 'e1', type: 'event', label: 'Campaign debate' },
+        { id: 'n1', type: 'entity', label: 'Chewing gum', entity_type: 'other' },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'p1',
+          to: 'e1',
+          relation_type: 'participates_in',
+          description: 'Candidate A participates in the hypothetical election.',
+        },
+        {
+          id: 'r2',
+          from: 'p2',
+          to: 'i1',
+          relation_type: 'related_to',
+          description: 'Real-estate agents are a type of expert whose incentives matter.',
+        },
+        {
+          id: 'r3',
+          from: 'n1',
+          to: 'i1',
+          relation_type: 'related_to',
+          description: 'Chewing gum is used as a comparison to frame campaign spending.',
+        },
+        {
+          id: 'r4',
+          from: 'p3',
+          to: 'i1',
+          relation_type: 'related_to',
+          description: 'argued that incentives drive market behavior',
+        },
+        {
+          id: 'r5',
+          from: 'n1',
+          to: 'e1',
+          relation_type: 'related_to',
+          description: 'Chewing gum is compared to campaign spending to mock excess.',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-quality-guardrails',
+      chapterTitle: 'Quality Guardrails',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      promptVariant: 'nonfiction',
+      primaryPageText: 'Adam Smith argued that incentives drive market behavior.',
+      memoryContext: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    });
+
+    expect(graph.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'p3',
+        type: 'person',
+        label: 'Adam Smith',
+      }),
+    ]));
+    expect(graph.nodes.find((node: { id: string }) => node.id === 'p1')).toBeUndefined();
+    expect(graph.nodes.find((node: { id: string }) => node.id === 'p2')).toBeUndefined();
+    expect(graph.nodes.find((node: { id: string }) => node.id === 'p4')).toBeUndefined();
+    expect(graph.nodes.find((node: { id: string }) => node.id === 'p5')).toBeUndefined();
+    expect(graph.nodes.find((node: { id: string }) => node.id === 'p6')).toBeUndefined();
+    expect(graph.nodes.find((node: { id: string }) => node.id === 'p7')).toBeUndefined();
+    expect(graph.nodes.find((node: { id: string }) => node.id === 'p8')).toBeUndefined();
+    expect(graph.edges).toEqual([
+      expect.objectContaining({
+        id: 'r4',
+        relation_type: 'argues',
+      }),
+    ]);
+  });
+
+  test('drops residual located_in edges after event-location rewrites', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Location Noise',
+      summary: 'summary',
+      nodes: [
+        { id: 'i1', type: 'idea', label: 'Freakonomics', kind: 'principle' },
+        { id: 'n1', type: 'entity', label: 'New York City', entity_type: 'place' },
+        { id: 'e1', type: 'event', label: 'Data analysis example' },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'i1',
+          to: 'n1',
+          relation_type: 'located_in',
+          description: 'An abstract idea should not be placed in a city.',
+        },
+        {
+          id: 'r2',
+          from: 'e1',
+          to: 'n1',
+          relation_type: 'located_in',
+          description: 'The example takes place in New York City.',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-location-noise',
+      chapterTitle: 'Location Noise',
+      chapterText: 'The idea appears in New York City.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.relations).toEqual([
+      expect.objectContaining({
+        local_id: 'r2',
+        from_id: 'e1',
+        to_id: 'n1',
+        relation_type: 'happens_at',
+      }),
+    ]);
+  });
+
+  test('drops non-event happens_at edges even when the LLM emits them directly', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Invalid Happens At',
+      summary: 'summary',
+      nodes: [
+        { id: 'i1', type: 'idea', label: 'Campaign finance', kind: 'principle' },
+        { id: 'n1', type: 'entity', label: 'United States', entity_type: 'place' },
+        { id: 'e1', type: 'event', label: 'Election example' },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'n1',
+          to: 'i1',
+          relation_type: 'happens_at',
+          description: 'A place should not point at an idea via happens_at.',
+        },
+        {
+          id: 'r2',
+          from: 'i1',
+          to: 'n1',
+          relation_type: 'happens_at',
+          description: 'An idea should not happen at a place.',
+        },
+        {
+          id: 'r3',
+          from: 'e1',
+          to: 'n1',
+          relation_type: 'happens_at',
+          description: 'An event can happen in the United States.',
+        },
+      ],
+      evidence: [],
+    }, {
+      chapterId: 'chapter-invalid-happens-at',
+      chapterTitle: 'Invalid Happens At',
+      chapterText: 'An election example happened in the United States.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.relations).toEqual([
+      expect.objectContaining({
+        local_id: 'r3',
+        from_id: 'e1',
+        to_id: 'n1',
+        relation_type: 'happens_at',
+      }),
+    ]);
+  });
+
+  test('limits memory continuity to compact high-signal items', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const memory = (service as never).buildMemoryContext({
+      title: 'Memory Snapshot',
+      summary: 'summary',
+      people: Array.from({ length: 20 }, (_, index) => ({
+        local_id: `p${index}`,
+        name: `Person ${index}`,
+        importance: index === 19 ? 'main' : 'minor',
+        evidence: [{ quote: `Person ${index}`, pageIndex: index, pageNumber: index + 1 }],
+      })),
+      ideas: [],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [],
+    }, 19);
+
+    expect(memory.people).toHaveLength(12);
+    expect(memory.people[0]).toMatchObject({
+      local_id: 'p19',
+      canonical_label: 'Person 19',
+    });
+    expect(memory.people.every((item: { seen_pages: number[] }) => item.seen_pages.length <= 4)).toBe(true);
   });
 
   test('auto-submits quiz after knowledge extraction completes', async () => {

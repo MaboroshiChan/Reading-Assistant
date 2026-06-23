@@ -46,10 +46,12 @@ const shared_1 = require("./shared");
 const logger_1 = require("./logger");
 const CACHE_PREFIX = 'knowledge-extraction';
 const CACHE_VERSION = 'v2';
-const PROMPT_VERSION = 'knowledge_extraction.v2.1';
-const PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('knowledge_extraction.txt');
+const PROMPT_VERSION = 'knowledge_extraction.v2.7';
+const FICTION_PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('knowledge_extraction_fiction.txt');
+const NON_FICTION_PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('knowledge_extraction_nonfiction.txt');
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
 const NODE_TYPES = new Set(['person', 'idea', 'event', 'entity', 'theme']);
+const PERSON_IMPORTANCE = new Set(['main', 'supporting', 'minor']);
 const RELATION_TYPES = new Set([
     'knows',
     'supports',
@@ -59,10 +61,21 @@ const RELATION_TYPES = new Set([
     'participates_in',
     'located_in',
     'happens_at',
+    'founded',
+    'authored',
+    'mentions',
+    'argues',
+    'illustrates',
     'reflects',
     'related_to',
 ]);
 const IDEA_KINDS = new Set(['claim', 'belief', 'question', 'principle', 'conflict']);
+const asPersonImportance = (value) => {
+    const importance = asString(value);
+    return importance && PERSON_IMPORTANCE.has(importance)
+        ? importance
+        : undefined;
+};
 const asIdeaKind = (value) => {
     const kind = asString(value);
     return kind && IDEA_KINDS.has(kind) ? kind : undefined;
@@ -119,6 +132,7 @@ const sanitizePeople = (value) => {
             local_id: asString(item.local_id) ?? `p${index + 1}`,
             name,
             aliases: sanitizeStringArray(item.aliases),
+            importance: asPersonImportance(item.importance),
             description: asString(item.description),
             roles: sanitizeStringArray(item.roles),
             traits: sanitizeStringArray(item.traits),
@@ -271,19 +285,48 @@ const sanitizeKnowledgeExtraction = (raw, req) => {
     };
 };
 const buildCacheKey = (req) => {
+    const promptVariant = getPromptVariant(req);
     return (0, shared_1.buildStableCacheKey)(CACHE_PREFIX, CACHE_VERSION, {
         payload: req.payload,
         context: req.context ?? {},
         prompt_version: PROMPT_VERSION,
+        prompt_variant: promptVariant,
         model: config_1.config.model,
     });
 };
-let cachedSystemPrompt = null;
-const loadSystemPrompt = async () => {
-    if (cachedSystemPrompt)
-        return cachedSystemPrompt;
-    cachedSystemPrompt = (await promises_1.default.readFile(PROMPT_PATH, 'utf8')).trim();
-    return cachedSystemPrompt;
+const cachedSystemPrompts = {};
+const asBoolean = (value) => {
+    if (typeof value === 'boolean')
+        return value;
+    if (typeof value !== 'string')
+        return undefined;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true')
+        return true;
+    if (normalized === 'false')
+        return false;
+    return undefined;
+};
+const getPromptVariant = (req) => {
+    const meta = isRecord(req.meta) ? req.meta : {};
+    const bookMetadata = isRecord(meta.bookMetadata) ? meta.bookMetadata : {};
+    const payload = req.payload;
+    const isFiction = asBoolean(bookMetadata.isFiction)
+        ?? asBoolean(meta.isFiction)
+        ?? asBoolean(meta.is_fiction)
+        ?? asBoolean(payload.isFiction)
+        ?? asBoolean(payload.is_fiction)
+        ?? false;
+    return isFiction ? 'fiction' : 'nonfiction';
+};
+const loadSystemPrompt = async (variant) => {
+    const cached = cachedSystemPrompts[variant];
+    if (cached)
+        return cached;
+    const promptPath = variant === 'fiction' ? FICTION_PROMPT_PATH : NON_FICTION_PROMPT_PATH;
+    const prompt = (await promises_1.default.readFile(promptPath, 'utf8')).trim();
+    cachedSystemPrompts[variant] = prompt;
+    return prompt;
 };
 const buildPrompt = (req) => {
     const sections = [
@@ -316,8 +359,9 @@ const buildKnowledgeExtractionData = async (req, signal) => {
         chunkId: req.payload.chunk_id,
         promptVersion: PROMPT_VERSION,
     });
+    const promptVariant = getPromptVariant(req);
     const [systemPrompt, userPrompt] = await Promise.all([
-        loadSystemPrompt(),
+        loadSystemPrompt(promptVariant),
         Promise.resolve(buildPrompt(req)),
     ]);
     const llmClient = (0, llmService_1.createLLMClient)({ systemPrompt });
@@ -325,6 +369,7 @@ const buildKnowledgeExtractionData = async (req, signal) => {
         requestId: req.request_id,
         chapterId: req.payload.chapter_id,
         promptVersion: PROMPT_VERSION,
+        promptVariant,
         systemPromptLength: systemPrompt.length,
         userPromptLength: userPrompt.length,
     });
@@ -336,6 +381,7 @@ const handleKnowledgeExtraction = async (req, signal) => {
         chapterId: req.payload.chapter_id,
         chunkId: req.payload.chunk_id,
         promptVersion: PROMPT_VERSION,
+        promptVariant: getPromptVariant(req),
     });
     const cacheKey = buildCacheKey(req);
     const cached = cache.get(cacheKey);

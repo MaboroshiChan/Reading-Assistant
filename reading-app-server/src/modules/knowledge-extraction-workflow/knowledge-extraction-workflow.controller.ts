@@ -3,6 +3,7 @@ import type {
   GetKnowledgeExtractionWorkflowResultResponseDto,
   GetKnowledgeExtractionWorkflowStatusResponseDto,
   GetLatestChapterKnowledgeExtractionResponseDto,
+  RestartKnowledgeExtractionWorkflowResponseDto,
   SubmitKnowledgeExtractionWorkflowResponseDto,
 } from './knowledge-extraction-workflow.dto';
 import { KnowledgeExtractionWorkflowService } from './knowledge-extraction-workflow.service';
@@ -38,6 +39,15 @@ export class KnowledgeExtractionWorkflowController {
     @Param('workflowRunId') workflowRunId: string,
   ): GetKnowledgeExtractionWorkflowResultResponseDto {
     return this.knowledgeExtractionWorkflowService.getWorkflowResult(workflowRunId);
+  }
+
+  @Post('workflows/knowledge-extraction/:workflowRunId/restart')
+  restartWorkflow(
+    @Param('workflowRunId') workflowRunId: string,
+    @Body() rawBody: string | undefined,
+  ): RestartKnowledgeExtractionWorkflowResponseDto {
+    const request = this.knowledgeExtractionWorkflowService.parseRestartRequest(rawBody);
+    return this.knowledgeExtractionWorkflowService.restartWorkflow(workflowRunId, request);
   }
 
   @Get('books/:bookId/chapters/:chapterId/knowledge-extraction')

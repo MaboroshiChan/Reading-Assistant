@@ -441,6 +441,7 @@ export interface KnowledgePerson {
   local_id: string;
   name: string;
   aliases?: string[];
+  importance?: 'main' | 'supporting' | 'minor';
   description?: string;
   roles?: string[];
   traits?: string[];
@@ -496,11 +497,100 @@ export interface KnowledgeRelation {
     | 'participates_in'
     | 'located_in'
     | 'happens_at'
+    | 'founded'
+    | 'authored'
+    | 'mentions'
+    | 'argues'
+    | 'illustrates'
     | 'reflects'
     | 'related_to';
   description?: string;
   confidence?: number;
   evidence?: KnowledgeEvidence[];
+}
+
+export type KnowledgeGraphNodeType = 'person' | 'idea' | 'event' | 'entity' | 'theme';
+
+export interface KnowledgeGraphNodeBase {
+  id: string;
+  type: KnowledgeGraphNodeType;
+  label: string;
+  description?: string;
+}
+
+export interface KnowledgeGraphPersonNode extends KnowledgeGraphNodeBase {
+  type: 'person';
+  aliases?: string[];
+  importance?: 'main' | 'supporting' | 'minor';
+  roles?: string[];
+  traits?: string[];
+}
+
+export interface KnowledgeGraphIdeaNode extends KnowledgeGraphNodeBase {
+  type: 'idea';
+  kind: 'claim' | 'belief' | 'question' | 'principle' | 'conflict';
+}
+
+export interface KnowledgeGraphEventNode extends KnowledgeGraphNodeBase {
+  type: 'event';
+  participant_ids?: string[];
+  time_hint?: string;
+  place_hint?: string;
+}
+
+export interface KnowledgeGraphEntityNode extends KnowledgeGraphNodeBase {
+  type: 'entity';
+  entity_type: 'organization' | 'place' | 'time' | 'object' | 'other';
+}
+
+export interface KnowledgeGraphThemeNode extends KnowledgeGraphNodeBase {
+  type: 'theme';
+  strength?: number;
+}
+
+export type KnowledgeGraphNode =
+  | KnowledgeGraphPersonNode
+  | KnowledgeGraphIdeaNode
+  | KnowledgeGraphEventNode
+  | KnowledgeGraphEntityNode
+  | KnowledgeGraphThemeNode;
+
+export interface KnowledgeGraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  relation_type:
+    | 'knows'
+    | 'supports'
+    | 'opposes'
+    | 'extends'
+    | 'causes'
+    | 'participates_in'
+    | 'located_in'
+    | 'happens_at'
+    | 'founded'
+    | 'authored'
+    | 'mentions'
+    | 'argues'
+    | 'illustrates'
+    | 'reflects'
+    | 'related_to';
+  description?: string;
+  confidence?: number;
+}
+
+export interface KnowledgeGraphEvidence extends KnowledgeEvidence {
+  id: string;
+  owner_kind: 'node' | 'edge';
+  owner_id: string;
+}
+
+export interface AnalyzeKnowledgeExtractionGraphData {
+  title: string;
+  summary: string;
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  evidence: KnowledgeGraphEvidence[];
 }
 
 export interface AnalyzeKnowledgeExtractionData {

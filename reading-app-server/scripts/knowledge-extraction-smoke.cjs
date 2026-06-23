@@ -2,6 +2,9 @@ const { randomUUID } = require('node:crypto');
 
 const LIVE_SERVER_URL = process.env.LIVE_SERVER_URL && process.env.LIVE_SERVER_URL.trim();
 const VALIDATION_MODE = normalizeMode(process.env.VALIDATION_MODE);
+const AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW = normalizeOptionalBooleanFlag(
+  process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW,
+);
 const POLL_INTERVAL_MS = Number(process.env.SMOKE_POLL_INTERVAL_MS ?? 2_000);
 const POLL_TIMEOUT_MS = Number(process.env.SMOKE_POLL_TIMEOUT_MS ?? 120_000);
 
@@ -10,6 +13,21 @@ function normalizeMode(value) {
     return value;
   }
   return 'both';
+}
+
+function normalizeOptionalBooleanFlag(value) {
+  if (value === undefined) {
+    return null;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true') {
+    return true;
+  }
+  if (normalized === '0' || normalized === 'false') {
+    return false;
+  }
+  return null;
 }
 
 function requireLiveServerUrl() {
@@ -81,6 +99,7 @@ function buildScenario(name) {
         '0': 'The chapter describes a committee revising its rules after public criticism and debate.',
         '1': 'That sequence is presented as evidence of institutional adaptation and practical learning.',
       },
+    bookIngestionCompleted: name === 'auto' ? true : undefined,
   };
 }
 
@@ -99,6 +118,9 @@ async function uploadPage(baseUrl, scenario) {
       pageIndex: scenario.pageIndex,
       sourceHash: scenario.sourceHash,
       pageParagraphs: scenario.pageParagraphs,
+      ...(typeof scenario.bookIngestionCompleted === 'boolean'
+        ? { bookIngestionCompleted: scenario.bookIngestionCompleted }
+        : {}),
     }),
   });
 
@@ -391,6 +413,7 @@ async function main() {
   logStep('config', {
     liveServerUrl: baseUrl,
     validationMode: VALIDATION_MODE,
+    autoSubmitKnowledgeExtractionWorkflow: AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW,
     pollIntervalMs: POLL_INTERVAL_MS,
     pollTimeoutMs: POLL_TIMEOUT_MS,
   });
@@ -399,7 +422,14 @@ async function main() {
     await runManualScenario(baseUrl);
   }
 
-  if (VALIDATION_MODE === 'auto' || VALIDATION_MODE === 'both') {
+  if (
+    (VALIDATION_MODE === 'auto' || VALIDATION_MODE === 'both')
+    && AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === false
+  ) {
+    logStep('auto.skipped', {
+      reason: 'AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW disabled',
+    });
+  } else if (VALIDATION_MODE === 'auto' || VALIDATION_MODE === 'both') {
     await runAutoScenario(baseUrl);
   }
 

@@ -30,6 +30,10 @@ let ChapterKeywordsWorkflowController = class ChapterKeywordsWorkflowController 
     getWorkflowResult(workflowRunId) {
         return this.chapterKeywordsWorkflowService.getWorkflowResult(workflowRunId);
     }
+    restartWorkflow(workflowRunId, rawBody) {
+        const request = this.chapterKeywordsWorkflowService.parseRestartRequest(rawBody);
+        return this.chapterKeywordsWorkflowService.restartWorkflow(workflowRunId, request);
+    }
     getLatestChapterKeywords(bookId, chapterId) {
         return this.chapterKeywordsWorkflowService.getLatestChapterKeywords(bookId, chapterId);
     }
@@ -56,6 +60,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Object)
 ], ChapterKeywordsWorkflowController.prototype, "getWorkflowResult", null);
+__decorate([
+    (0, common_1.Post)('workflows/chapter-keywords/:workflowRunId/restart'),
+    __param(0, (0, common_1.Param)('workflowRunId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Object)
+], ChapterKeywordsWorkflowController.prototype, "restartWorkflow", null);
 __decorate([
     (0, common_1.Get)('books/:bookId/chapters/:chapterId/chapter-keywords'),
     __param(0, (0, common_1.Param)('bookId')),

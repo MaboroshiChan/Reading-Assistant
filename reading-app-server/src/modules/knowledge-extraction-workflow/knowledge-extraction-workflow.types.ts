@@ -1,4 +1,8 @@
-import type { AnalyzeKnowledgeExtractionData } from '../../../../packages/contracts/src';
+import type {
+  AnalyzeKnowledgeExtractionData,
+  AnalyzeKnowledgeExtractionGraphData,
+  KnowledgePageRef,
+} from '../../../../packages/contracts/src';
 
 export type KnowledgeExtractionWorkflowKind = 'knowledge_extraction';
 
@@ -12,6 +16,15 @@ export type KnowledgeExtractionWorkflowStatus =
 export type KnowledgeExtractionWorkflowProducer = 'server';
 export type KnowledgeExtractionWorkflowQualityTier = 'server_final';
 export type KnowledgeExtractionWorkflowResultPayload = AnalyzeKnowledgeExtractionData;
+
+export interface KnowledgeExtractionWorkflowPersistedSummary {
+  title: string;
+  summary: string;
+}
+
+export type KnowledgeExtractionWorkflowPersistedResult =
+  | KnowledgeExtractionWorkflowResultPayload
+  | KnowledgeExtractionWorkflowPersistedSummary;
 
 export interface SubmitKnowledgeExtractionWorkflowInput {
   bookId: string;
@@ -35,6 +48,26 @@ export interface KnowledgeExtractionWorkflowProgress {
   message?: string;
 }
 
+export type KnowledgeExtractionWorkflowRestartMode = 'resume' | 'from_start';
+
+export interface KnowledgeExtractionWorkflowCheckpoint {
+  totalPieces: number;
+  lastCompletedPieceIndex: number;
+  nextPieceIndex: number;
+  nextPrimaryPageIndex?: number;
+  nextPrimaryPageNumber?: number;
+  updatedAt: string;
+}
+
+export interface KnowledgeExtractionWorkflowPartialPieceResult {
+  pieceIndex: number;
+  pageIndex: number;
+  pageNumber: number;
+  sourceHash: string;
+  pageRefs: KnowledgePageRef[];
+  extraction: AnalyzeKnowledgeExtractionGraphData;
+}
+
 export interface KnowledgeExtractionWorkflowRunRecord {
   id: string;
   kind: KnowledgeExtractionWorkflowKind;
@@ -54,12 +87,19 @@ export interface KnowledgeExtractionWorkflowRunRecord {
   output?: KnowledgeExtractionWorkflowResultPayload;
   error?: KnowledgeExtractionWorkflowErrorInfo;
   progress?: KnowledgeExtractionWorkflowProgress;
+  checkpoint?: KnowledgeExtractionWorkflowCheckpoint;
+  partialPieceResults?: KnowledgeExtractionWorkflowPartialPieceResult[];
   createdAt: string;
   updatedAt: string;
   startedAt?: string;
   completedAt?: string;
   snapshotVersion?: number;
   chapterContentHash?: string;
+}
+
+export interface KnowledgeExtractionWorkflowPersistedRunRecord
+  extends Omit<KnowledgeExtractionWorkflowRunRecord, 'output'> {
+  output?: KnowledgeExtractionWorkflowPersistedResult;
 }
 
 export interface KnowledgeExtractionWorkflowStoredResult {
@@ -78,6 +118,11 @@ export interface KnowledgeExtractionWorkflowStoredResult {
   updatedAt: string;
 }
 
+export interface KnowledgeExtractionWorkflowPersistedStoredResult
+  extends Omit<KnowledgeExtractionWorkflowStoredResult, 'result'> {
+  result: KnowledgeExtractionWorkflowPersistedResult;
+}
+
 export interface PageExtractionCacheRecord {
   cacheKey: string;
   bookId: string;
@@ -86,7 +131,17 @@ export interface PageExtractionCacheRecord {
   sourceHash: string;
   chapterContentHash: string;
   promptVersion: string;
-  extraction: AnalyzeKnowledgeExtractionData;
+  status: 'cached';
+  nodeCount?: number;
+  edgeCount?: number;
+  evidenceCount?: number;
+  responseHash?: string;
   createdAt: string;
   updatedAt: string;
+  extraction?: AnalyzeKnowledgeExtractionGraphData;
+}
+
+export interface PageExtractionCacheValue {
+  record: PageExtractionCacheRecord;
+  extraction: AnalyzeKnowledgeExtractionGraphData;
 }

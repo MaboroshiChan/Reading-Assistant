@@ -14,6 +14,8 @@ import { resolvePromptPath } from '../../utils/prompt-path';
 const PROMPT_VERSION = 'chapter_keywords.v1';
 const PROMPT_PATH = resolvePromptPath('chapter_keywords.txt');
 
+export type ChapterKeywordsPromptVariant = 'fiction' | 'nonfiction';
+
 export interface ChapterKeywordSentenceInput {
   ref: SentenceRef;
   text: string;
@@ -29,6 +31,7 @@ export interface ChapterKeywordsLLMInput {
   chunkText: string;
   sentences: ChapterKeywordSentenceInput[];
   contentHash?: string;
+  promptVariant?: ChapterKeywordsPromptVariant;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -176,6 +179,13 @@ export const buildChapterKeywordsPrompt = (input: ChapterKeywordsLLMInput): stri
     `Chunk Index: ${input.chunkIndex}`,
     `Total Chunks: ${input.totalChunks}`,
     `Prompt Version: ${PROMPT_VERSION}`,
+    `Prompt Variant: ${input.promptVariant ?? 'nonfiction'}`,
+    input.promptVariant === 'fiction'
+      ? 'This chapter is fiction. Only select sentences that mark plot-critical events, decisive turns, major revelations, irreversible choices, or consequential confrontations.'
+      : 'This chapter is nonfiction. Select sentences that best capture the chunk\'s key ideas or arguments.',
+    input.promptVariant === 'fiction'
+      ? 'For fiction, avoid selecting atmospheric description, routine motion, minor reactions, setup details, or lines that are merely vivid unless they clearly change what happens next.'
+      : 'For nonfiction, prefer claims, definitions, contrasts, causes, conclusions, or representative examples.',
     '',
     'Sentence payload JSON:',
     '```json',
@@ -199,7 +209,7 @@ export const buildChapterKeywordsCall = async (
     model: config.chapterKeywordsWorkflowModel,
     prefixCache: buildChunkPrefixCache({
       task: 'chapter_keywords',
-      version: PROMPT_VERSION,
+      version: `${PROMPT_VERSION}:${input.promptVariant ?? 'nonfiction'}`,
       docId: input.docId,
       chapterId: input.chapterId,
       chunkId: input.chunkId,
@@ -244,6 +254,7 @@ export const toLLMInputFromEnvelope = (
   chunkText: req.payload.chunk_text,
   sentences: req.payload.sentences,
   contentHash: req.context?.doc.content_hash,
+  promptVariant: 'nonfiction',
 });
 
 export const toCachedResponseText = (

@@ -910,15 +910,7 @@ async function persistNormalizedSentenceStructure(
   req: RequestEnvelopeSentenceStructure,
   data: AnalyzeSentenceStructureData,
 ): Promise<void> {
-  const dir = NORMALIZED_RESPONSE_DIR;
-  try {
-    await fs.mkdir(dir, { recursive: true });
-    const name = `${Date.now()}_${req.payload.doc_id}_${req.payload.sentence_id}.json`;
-    const target = path.join(dir, name);
-    await fs.writeFile(target, JSON.stringify({ request: req, response: data }, null, 2));
-  } catch (error) {
-    console.warn('[sentence_structure] failed to persist normalization', error);
-  }
+  return;
 }
 
 /**

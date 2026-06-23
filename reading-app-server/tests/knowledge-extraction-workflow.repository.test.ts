@@ -72,23 +72,19 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     expect(workflowPersist?.record.output).toMatchObject({
       title: 'Chapter One',
       summary: 'A full in-memory result.',
-      people: [],
-      ideas: [],
-      events: [],
-      entities: [],
-      themes: [],
-      relations: [],
     });
+    expect(Object.keys((workflowPersist?.record.output as Record<string, unknown>) ?? {}).sort()).toEqual([
+      'summary',
+      'title',
+    ]);
     expect(snapshotPersist?.record.result).toMatchObject({
       title: 'Chapter One',
       summary: 'A full in-memory result.',
-      people: [],
-      ideas: [],
-      events: [],
-      entities: [],
-      themes: [],
-      relations: [],
     });
+    expect(Object.keys((snapshotPersist?.record.result as Record<string, unknown>) ?? {}).sort()).toEqual([
+      'summary',
+      'title',
+    ]);
   });
 
   test('truncates oversized persisted summaries while keeping the full result in memory', async () => {
@@ -194,6 +190,49 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     expect(terminalPersist?.record.progress).toBeUndefined();
   });
 
+  test('keeps oversized page cache records in memory when Surreal returns HTTP 413', async () => {
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async (table: string) => {
+        if (table === 'page_knowledge_extraction_cache') {
+          throw new Error('SurrealDB write failed with HTTP 413: length limit exceeded');
+        }
+      },
+      putRelationRecord: async () => {},
+      selectTable: async () => [],
+    };
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+
+    repository.setCachedPageExtraction({
+      bookId: 'book-cache',
+      chapterId: 'chapter-cache',
+      pageIndex: 0,
+      sourceHash: 'hash-cache',
+      chapterContentHash: 'chapter-hash-cache',
+      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
+      extraction: {
+        title: 'Cached Chapter',
+        summary: 'Cached page extraction still remains available in memory.',
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+    });
+
+    await expect((repository as never).pendingPersist).resolves.toBeUndefined();
+    expect(repository.getCachedPageExtraction(
+      'book-cache',
+      'chapter-cache',
+      0,
+      'hash-cache',
+      'chapter-hash-cache',
+      'knowledge_extraction.v2.7:nonfiction',
+    )?.summary).toBe('Cached page extraction still remains available in memory.');
+  });
+
   test('loads persisted runs without progress for backward compatibility', async () => {
     const surrealStub = {
       query: async () => [],
@@ -258,6 +297,105 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     expect(run?.progress).toBeUndefined();
     expect(run?.output?.title).toBe('Legacy Chapter');
     expect(repository.getLatestResult('book-legacy', 'chapter-legacy')?.result.summary).toBe('Legacy summary');
+  });
+
+  test('rebuilds full results from graph tables when persisted workflow records are slim', async () => {
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async () => {},
+      putRelationRecord: async () => {},
+      selectTable: async (table: string) => {
+        if (table === 'workflow_run') {
+          return [{
+            id: 'wr_slim',
+            kind: 'knowledge_extraction',
+            status: 'completed',
+            bookId: 'book-slim',
+            chapterId: 'chapter-slim',
+            chapterIndex: 1,
+            workflowVersion: 'v1',
+            idempotencyKey: 'knowledge-extraction:v1:book-slim:chapter-slim:hash-slim',
+            producer: 'server',
+            qualityTier: 'server_final',
+            deduped: false,
+            resultVersion: 'v1',
+            output: {
+              title: 'Slim Chapter',
+              summary: 'Slim summary',
+            },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:01:00.000Z',
+            completedAt: '2026-01-01T00:01:00.000Z',
+            snapshotVersion: 1,
+            chapterContentHash: 'hash-slim',
+          }];
+        }
+        if (table === 'chapter_knowledge_snapshot') {
+          return [{
+            workflowRunId: 'wr_slim',
+            bookId: 'book-slim',
+            chapterId: 'chapter-slim',
+            chapterIndex: 1,
+            workflowVersion: 'v1',
+            resultVersion: 'v1',
+            producer: 'server',
+            qualityTier: 'server_final',
+            snapshotVersion: 1,
+            chapterContentHash: 'hash-slim',
+            result: {
+              title: 'Slim Chapter',
+              summary: 'Slim summary',
+            },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:01:00.000Z',
+          }];
+        }
+        if (table === 'chapter') {
+          return [{
+            recordId: 'chapter_slim',
+            bookId: 'book-slim',
+            chapterId: 'chapter-slim',
+            chapterIndex: 1,
+            title: 'Graph Chapter Title',
+          }];
+        }
+        if (table === 'person') {
+          return [{
+            recordId: 'person_slim',
+            localId: 'person_local',
+            name: 'Alice',
+            normalizedName: 'alice',
+          }];
+        }
+        if (table === 'appears_in') {
+          return [{
+            recordId: 'appears_slim',
+            in: 'person:person_slim',
+            out: 'chapter:chapter_slim',
+            chapterRecordId: 'chapter_slim',
+            nodeRecordId: 'person_slim',
+            nodeType: 'person',
+            localId: 'person_local',
+            name: 'Alice',
+          }];
+        }
+        return [];
+      },
+    };
+
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    await repository.onModuleInit();
+
+    expect(repository.getRun('wr_slim')?.output).toMatchObject({
+      title: 'Slim Chapter',
+      summary: 'Slim summary',
+      people: [{ local_id: 'person_local', name: 'Alice' }],
+    });
+    expect(repository.getLatestResult('book-slim', 'chapter-slim')?.result).toMatchObject({
+      title: 'Slim Chapter',
+      summary: 'Slim summary',
+      people: [{ local_id: 'person_local', name: 'Alice' }],
+    });
   });
 
   test('normalizes persisted Surreal record ids after reload', async () => {
@@ -327,7 +465,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     expect(repository.getRun('workflow_run:wr_restart_case')?.id).toBe('wr_restart_case');
   });
 
-  test('skips Surreal persistence for oversized page cache records', async () => {
+  test('persists slim page cache metadata even when the source extraction is large', async () => {
     const persisted: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
     const repository = new KnowledgeExtractionWorkflowRepository({
       query: async () => [],
@@ -358,7 +496,17 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     });
     await (repository as never).pendingPersist;
 
-    expect(persisted).toEqual([]);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]).toMatchObject({
+      table: 'page_knowledge_extraction_cache',
+      record: {
+        status: 'cached',
+        nodeCount: 0,
+        edgeCount: 0,
+        evidenceCount: 0,
+      },
+    });
+    expect('extraction' in persisted[0].record).toBe(false);
     expect(repository.getCachedPageExtraction(
       'book-cache',
       'chapter-cache',
@@ -367,6 +515,66 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       'chapter-hash',
       'v1',
     )?.summary).toHaveLength(950_000);
+  });
+
+  test('ignores legacy persisted page cache extraction payloads during reload', async () => {
+    const persisted = new Map<string, Record<string, unknown>>();
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async (table: string, id: string, record: Record<string, unknown>) => {
+        persisted.set(`${table}:${id}`, record);
+      },
+      putRelationRecord: async () => {},
+      selectTable: async (table: string) => {
+        if (table === 'page_knowledge_extraction_cache') {
+          return Array.from(persisted.entries())
+            .filter(([key]) => key.startsWith('page_knowledge_extraction_cache:'))
+            .map(([, record]) => record);
+        }
+        return [];
+      },
+    };
+
+    const writerRepository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    writerRepository.setCachedPageGraphExtraction({
+      bookId: 'book-cache-reload',
+      chapterId: 'chapter-cache-reload',
+      pageIndex: 0,
+      sourceHash: 'source-hash-reload',
+      chapterContentHash: 'chapter-hash-reload',
+      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
+      extraction: {
+        title: 'Cache Reload Chapter',
+        summary: 'Persisted piece graph.',
+        nodes: [{
+          id: 'p1',
+          type: 'person',
+          label: 'Alice',
+        }],
+        edges: [],
+        evidence: [{
+          id: 'ev1',
+          owner_kind: 'node',
+          owner_id: 'p1',
+          quote: 'Alice appears first.',
+          pageIndex: 0,
+          pageNumber: 1,
+        }],
+      },
+    });
+    await (writerRepository as never).pendingPersist;
+
+    const readerRepository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    await readerRepository.onModuleInit();
+
+    expect(readerRepository.getCachedPageGraphExtraction(
+      'book-cache-reload',
+      'chapter-cache-reload',
+      0,
+      'source-hash-reload',
+      'chapter-hash-reload',
+      'knowledge_extraction.v2.7:nonfiction',
+    )).toBeNull();
   });
 
   test('stores evidence quotes as a bounded prefix', async () => {
@@ -449,6 +657,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
             local_id: 'p1',
             name: 'Alice',
             aliases: ['Al'],
+            importance: 'supporting',
             roles: ['leader'],
             traits: ['brave'],
             evidence: [{ quote: 'Alice begins the speech', pageIndex: 0, pageNumber: 1 }],
@@ -516,6 +725,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
             local_id: 'p9',
             name: 'alice',
             aliases: ['Alice'],
+            importance: 'main',
             roles: [' strategist '],
             traits: ['Brave'],
             evidence: [{ quote: 'Alice continues the speech', pageIndex: 2, pageNumber: 3 }],
@@ -572,6 +782,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     });
 
     const snapshot = await repository.buildChapterSnapshot('book-1', 'chapter-1');
+    const keyInformation = repository.buildBookKeyInformation('book-1');
     const personLocalId = snapshot.people[0]?.local_id;
     const ideaLocalId = snapshot.ideas[0]?.local_id;
 
@@ -587,6 +798,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     expect(snapshot.people[0]).toMatchObject({
       name: 'Alice',
       aliases: ['Al', 'Alice'],
+      importance: 'main',
       roles: ['leader', 'strategist'],
       traits: ['brave'],
       evidence: [
@@ -615,6 +827,10 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
         { quote: 'Alice begins the speech about freedom', pageIndex: 0, pageNumber: 1 },
         { quote: 'Alice continues the speech about freedom', pageIndex: 2, pageNumber: 3 },
       ],
+    });
+    expect(keyInformation.people[0]).toMatchObject({
+      canonicalName: 'Alice',
+      importance: 'main',
     });
   });
 
@@ -679,6 +895,227 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     expect(secondSnapshot.events[0]?.evidence).toEqual([
       { quote: 'chapter two speech', pageIndex: 0, pageNumber: 1 },
     ]);
+  });
+
+  test('merges concept labels that differ only by lightweight function words', async () => {
+    const repository = new KnowledgeExtractionWorkflowRepository();
+
+    await repository.upsertPageGraphExtraction({
+      bookId: 'book-idea-merge',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Chapter One',
+      extraction: {
+        title: 'ignored',
+        summary: 'ignored',
+        nodes: [
+          {
+            id: 'i1',
+            type: 'idea',
+            label: 'Incentives are the cornerstone of modern life',
+            kind: 'claim',
+          },
+        ],
+        edges: [],
+        evidence: [
+          {
+            id: 'ev1',
+            owner_kind: 'node',
+            owner_id: 'i1',
+            quote: 'Incentives are the cornerstone of modern life.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+        ],
+      },
+    });
+
+    await repository.upsertPageGraphExtraction({
+      bookId: 'book-idea-merge',
+      chapterId: 'chapter-2',
+      chapterIndex: 2,
+      chapterTitle: 'Chapter Two',
+      extraction: {
+        title: 'ignored',
+        summary: 'ignored',
+        nodes: [
+          {
+            id: 'i2',
+            type: 'idea',
+            label: 'Incentives as the cornerstone of modern life',
+            kind: 'principle',
+          },
+        ],
+        edges: [],
+        evidence: [
+          {
+            id: 'ev2',
+            owner_kind: 'node',
+            owner_id: 'i2',
+            quote: 'Incentives as the cornerstone of modern life frames the argument.',
+            pageIndex: 1,
+            pageNumber: 2,
+          },
+        ],
+      },
+    });
+
+    const keyInformation = repository.buildBookKeyInformation('book-idea-merge');
+
+    expect(keyInformation.ideas).toHaveLength(1);
+    expect(keyInformation.ideas[0]).toMatchObject({
+      canonicalLabel: 'Incentives are the cornerstone of modern life',
+      mentionedIn: [1, 2],
+    });
+    expect(keyInformation.ideas[0]?.evidence).toEqual([
+      { chapterIndex: 1, chapterId: 'chapter-1', pageIndex: 0, pageNumber: 1, quote: 'Incentives are the cornerstone of modern life.' },
+      { chapterIndex: 2, chapterId: 'chapter-2', pageIndex: 1, pageNumber: 2, quote: 'Incentives as the cornerstone of modern life frames the argument.' },
+    ]);
+  });
+
+  test('merges correlation-causation concept variants across chapters', async () => {
+    const repository = new KnowledgeExtractionWorkflowRepository();
+
+    await repository.upsertPageGraphExtraction({
+      bookId: 'book-correlation-merge',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Chapter One',
+      extraction: {
+        title: 'ignored',
+        summary: 'ignored',
+        nodes: [
+          {
+            id: 'i1',
+            type: 'idea',
+            label: 'Correlation does not imply causation',
+            kind: 'principle',
+          },
+        ],
+        edges: [],
+        evidence: [
+          {
+            id: 'ev1',
+            owner_kind: 'node',
+            owner_id: 'i1',
+            quote: 'Correlation does not imply causation.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+        ],
+      },
+    });
+
+    await repository.upsertPageGraphExtraction({
+      bookId: 'book-correlation-merge',
+      chapterId: 'chapter-2',
+      chapterIndex: 2,
+      chapterTitle: 'Chapter Two',
+      extraction: {
+        title: 'ignored',
+        summary: 'ignored',
+        nodes: [
+          {
+            id: 'i2',
+            type: 'idea',
+            label: 'Correlation vs. Causation in elections',
+            kind: 'principle',
+          },
+        ],
+        edges: [],
+        evidence: [
+          {
+            id: 'ev2',
+            owner_kind: 'node',
+            owner_id: 'i2',
+            quote: 'Election spending shows why correlation is not causation.',
+            pageIndex: 1,
+            pageNumber: 2,
+          },
+        ],
+      },
+    });
+
+    const keyInformation = repository.buildBookKeyInformation('book-correlation-merge');
+
+    expect(keyInformation.ideas).toHaveLength(1);
+    expect(keyInformation.ideas[0]).toMatchObject({
+      canonicalLabel: 'Correlation does not imply causation',
+      mentionedIn: [1, 2],
+    });
+  });
+
+  test('reuses the same entity record when a later page provides a more specific type', async () => {
+    const repository = new KnowledgeExtractionWorkflowRepository();
+
+    await repository.upsertPageGraphExtraction({
+      bookId: 'book-entity-merge',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Chapter One',
+      extraction: {
+        title: 'ignored',
+        summary: 'ignored',
+        nodes: [
+          {
+            id: 'n1',
+            type: 'entity',
+            label: 'Real-estate agents',
+            entity_type: 'other',
+          },
+        ],
+        edges: [],
+        evidence: [
+          {
+            id: 'ev1',
+            owner_kind: 'node',
+            owner_id: 'n1',
+            quote: 'Real-estate agents appear early in the chapter.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+        ],
+      },
+    });
+
+    await repository.upsertPageGraphExtraction({
+      bookId: 'book-entity-merge',
+      chapterId: 'chapter-2',
+      chapterIndex: 2,
+      chapterTitle: 'Chapter Two',
+      extraction: {
+        title: 'ignored',
+        summary: 'ignored',
+        nodes: [
+          {
+            id: 'n2',
+            type: 'entity',
+            label: 'Real-estate agents',
+            entity_type: 'organization',
+          },
+        ],
+        edges: [],
+        evidence: [
+          {
+            id: 'ev2',
+            owner_kind: 'node',
+            owner_id: 'n2',
+            quote: 'Real-estate agents operate as a structured profession.',
+            pageIndex: 1,
+            pageNumber: 2,
+          },
+        ],
+      },
+    });
+
+    const keyInformation = repository.buildBookKeyInformation('book-entity-merge');
+
+    expect(keyInformation.entities).toHaveLength(1);
+    expect(keyInformation.entities[0]).toMatchObject({
+      canonicalLabel: 'Real-estate agents',
+      type: 'organization',
+      mentionedIn: [1, 2],
+    });
   });
 
   test('dedupes repeated page evidence and relation updates', async () => {

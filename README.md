@@ -31,10 +31,11 @@ npm install
 
 ```bash
 export GEMINI_API_KEY=your_key_here
-export MODEL_ID=gemma-3-27b-it         # optional
-export QUIZ_WORKFLOW_MODEL_ID=gemini-2.5-flash
-export KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID=gemini-flash-lite-latest
-export CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID=gemini-flash-lite-latest
+export LLM_PROVIDER=gemini
+export MODEL_ID=gemini-2.5-flash-lite         # optional
+export QUIZ_WORKFLOW_MODEL_ID=gemini-2.5-flash-lite
+export KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID=gemini-2.5-flash-lite
+export CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID=gemini-2.5-flash-lite
 npm run dev
 ```
 
@@ -45,10 +46,11 @@ Environment variables (`reading-app-server/src/config/runtime-config.ts`):
 | Variable         | Default            | Description                                  |
 | ---------------- | ------------------ | -------------------------------------------- |
 | `PORT`           | `8787`             | API server listen port                       |
-| `MODEL_ID`       | `gemini-flash-lite-latest` | Legacy handler default LLM model identifier |
-| `QUIZ_WORKFLOW_MODEL_ID` | `gemini-2.5-flash` | Quiz workflow model |
-| `KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID` | `gemini-flash-lite-latest` | Knowledge extraction workflow model |
-| `CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID` | `gemini-flash-lite-latest` | Chapter keywords workflow model |
+| `LLM_PROVIDER`   | `gemini`           | LLM provider (`gemini` or `openrouter`)      |
+| `MODEL_ID`       | `gemini-2.5-flash-lite` | Legacy handler default LLM model identifier |
+| `QUIZ_WORKFLOW_MODEL_ID` | `gemini-2.5-flash-lite` | Quiz workflow model |
+| `KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID` | `gemini-2.5-flash-lite` | Knowledge extraction workflow model |
+| `CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID` | `gemini-2.5-flash-lite` | Chapter keywords workflow model |
 | `GEMINI_API_KEY` | `""`               | Google Gemini API key                        |
 | `LLM_DEBUG`      | `0`                | When truthy, log full prompts/responses      |
 | `CACHE_TTL_MS`   | `7 days`           | TTL for in-memory response cache             |

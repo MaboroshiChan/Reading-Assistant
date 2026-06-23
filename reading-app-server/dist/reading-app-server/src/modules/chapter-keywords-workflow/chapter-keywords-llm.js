@@ -127,6 +127,13 @@ const buildChapterKeywordsPrompt = (input) => {
         `Chunk Index: ${input.chunkIndex}`,
         `Total Chunks: ${input.totalChunks}`,
         `Prompt Version: ${PROMPT_VERSION}`,
+        `Prompt Variant: ${input.promptVariant ?? 'nonfiction'}`,
+        input.promptVariant === 'fiction'
+            ? 'This chapter is fiction. Only select sentences that mark plot-critical events, decisive turns, major revelations, irreversible choices, or consequential confrontations.'
+            : 'This chapter is nonfiction. Select sentences that best capture the chunk\'s key ideas or arguments.',
+        input.promptVariant === 'fiction'
+            ? 'For fiction, avoid selecting atmospheric description, routine motion, minor reactions, setup details, or lines that are merely vivid unless they clearly change what happens next.'
+            : 'For nonfiction, prefer claims, definitions, contrasts, causes, conclusions, or representative examples.',
         '',
         'Sentence payload JSON:',
         '```json',
@@ -147,7 +154,7 @@ const buildChapterKeywordsCall = async (input, signal) => {
         model: runtime_config_1.config.chapterKeywordsWorkflowModel,
         prefixCache: (0, chapter_prefix_cache_1.buildChunkPrefixCache)({
             task: 'chapter_keywords',
-            version: PROMPT_VERSION,
+            version: `${PROMPT_VERSION}:${input.promptVariant ?? 'nonfiction'}`,
             docId: input.docId,
             chapterId: input.chapterId,
             chunkId: input.chunkId,
@@ -186,6 +193,7 @@ const toLLMInputFromEnvelope = (req) => ({
     chunkText: req.payload.chunk_text,
     sentences: req.payload.sentences,
     contentHash: req.context?.doc.content_hash,
+    promptVariant: 'nonfiction',
 });
 exports.toLLMInputFromEnvelope = toLLMInputFromEnvelope;
 const toCachedResponseText = (cached) => JSON.stringify({ ...cached, served_from: 'cache' });

@@ -30,6 +30,10 @@ let KnowledgeExtractionWorkflowController = class KnowledgeExtractionWorkflowCon
     getWorkflowResult(workflowRunId) {
         return this.knowledgeExtractionWorkflowService.getWorkflowResult(workflowRunId);
     }
+    restartWorkflow(workflowRunId, rawBody) {
+        const request = this.knowledgeExtractionWorkflowService.parseRestartRequest(rawBody);
+        return this.knowledgeExtractionWorkflowService.restartWorkflow(workflowRunId, request);
+    }
     getLatestChapterKnowledgeExtraction(bookId, chapterId) {
         return this.knowledgeExtractionWorkflowService.getLatestChapterKnowledgeExtraction(bookId, chapterId);
     }
@@ -56,6 +60,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Object)
 ], KnowledgeExtractionWorkflowController.prototype, "getWorkflowResult", null);
+__decorate([
+    (0, common_1.Post)('workflows/knowledge-extraction/:workflowRunId/restart'),
+    __param(0, (0, common_1.Param)('workflowRunId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Object)
+], KnowledgeExtractionWorkflowController.prototype, "restartWorkflow", null);
 __decorate([
     (0, common_1.Get)('books/:bookId/chapters/:chapterId/knowledge-extraction'),
     __param(0, (0, common_1.Param)('bookId')),

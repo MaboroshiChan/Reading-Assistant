@@ -8,6 +8,8 @@ export type BookModelIdeaStatus = 'introduced' | 'expanded' | 'challenged' | 're
 
 export type BookModelIdeaFlowStatus = 'emerging' | 'developing' | 'contested' | 'stabilized';
 
+export type BookModelPersonImportance = 'main' | 'supporting' | 'minor';
+
 export type BookModelRelationType =
   | 'knows'
   | 'supports'
@@ -17,6 +19,11 @@ export type BookModelRelationType =
   | 'participates_in'
   | 'located_in'
   | 'happens_at'
+  | 'founded'
+  | 'authored'
+  | 'mentions'
+  | 'argues'
+  | 'illustrates'
   | 'reflects'
   | 'related_to';
 
@@ -45,6 +52,7 @@ export interface ChapterPersonDto {
   localId: string;
   name: string;
   aliases: string[];
+  importance?: BookModelPersonImportance;
   description?: string;
   roles: string[];
   traits: string[];
@@ -117,6 +125,7 @@ export interface GlobalPersonDto {
   personId: string;
   canonicalName: string;
   aliases: string[];
+  importance?: BookModelPersonImportance;
   description?: string;
   roles: string[];
   traits: string[];

@@ -1,6 +1,8 @@
 import type {
+  ChapterKeywordsWorkflowCheckpoint,
   ChapterKeywordsWorkflowErrorInfo,
   ChapterKeywordsWorkflowQualityTier,
+  ChapterKeywordsWorkflowRestartMode,
   ChapterKeywordsWorkflowResultPayload,
   ChapterKeywordsWorkflowStatus,
 } from './chapter-keywords-workflow.types';
@@ -55,6 +57,16 @@ export interface GetChapterKeywordsWorkflowStatusResponseDto {
   completedAt?: string;
   resultAvailable: boolean;
   error?: ChapterKeywordsWorkflowErrorInfo;
+  checkpoint?: ChapterKeywordsWorkflowCheckpoint;
+}
+
+export interface RestartChapterKeywordsWorkflowRequestDto {
+  mode?: ChapterKeywordsWorkflowRestartMode;
+}
+
+export interface RestartChapterKeywordsWorkflowResponseDto
+  extends GetChapterKeywordsWorkflowStatusResponseDto {
+  restartMode: ChapterKeywordsWorkflowRestartMode;
 }
 
 export interface GetChapterKeywordsWorkflowResultResponseDto {

@@ -1,0 +1,3 @@
+display_name: Book Data Cleanup
+short_description: Reset one book's ingestion and derived data locally or in Railway production.
+default_prompt: Reset or dry-run cleanup for a single book's stored data, including ingestion and derived workflow state.

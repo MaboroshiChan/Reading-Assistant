@@ -27,6 +27,7 @@ const OVERLAP_PARAGRAPHS = 1;
 const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 const asString = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
 const asNumber = (value) => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+const asBoolean = (value) => typeof value === 'boolean' ? value : undefined;
 const refKey = (ref) => `${ref.page_index}:${ref.paragraph_index}:${ref.paragraph_id}:${ref.sentence_id}`;
 const paragraphKey = (ref) => `${ref.page_index}:${ref.paragraph_index}:${ref.paragraph_id}`;
 const compareSentenceRefs = (left, right) => {
@@ -80,6 +81,20 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
         this.bookIngestionRepository = bookIngestionRepository;
         this.chapterKeywordsWorkflowRepository = chapterKeywordsWorkflowRepository;
         this.workflowQueueService = workflowQueueService;
+    }
+    onApplicationBootstrap() {
+        for (const run of this.chapterKeywordsWorkflowRepository.listRecoverableRuns()) {
+            (0, workflow_logger_1.workflowLog)('run.recovered', {
+                workflowKind: run.kind,
+                workflowRunId: run.id,
+                bookId: run.bookId,
+                chapterId: run.chapterId,
+                chapterIndex: run.chapterIndex,
+                workflowVersion: run.workflowVersion,
+                status: run.status,
+            });
+            this.workflowQueueService.enqueue(() => this.executeRun(run.id));
+        }
     }
     parseSubmitRequest(rawBody) {
         if (!rawBody || rawBody.trim() === '') {
@@ -141,6 +156,23 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
         });
         return request;
     }
+    parseRestartRequest(rawBody) {
+        if (!rawBody || rawBody.trim() === '') {
+            return { mode: 'resume' };
+        }
+        let parsed;
+        try {
+            parsed = JSON.parse(rawBody);
+        }
+        catch (error) {
+            throw new common_1.BadRequestException(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (!isPlainObject(parsed)) {
+            throw new common_1.BadRequestException('Request body must be a JSON object');
+        }
+        const mode = parsed.mode === undefined ? 'resume' : this.requireRestartMode(parsed.mode);
+        return { mode };
+    }
     submitChapterKeywordsWorkflow(request) {
         const book = this.bookIngestionRepository.getBook(request.bookId);
         const chapter = this.bookIngestionRepository.getChapter(request.bookId, request.chapterId);
@@ -189,6 +221,44 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
     getWorkflowStatus(workflowRunId) {
         const run = this.requireRun(workflowRunId);
         return this.toStatusResponse(run);
+    }
+    restartWorkflow(workflowRunId, request) {
+        const run = this.requireRun(workflowRunId);
+        const restartMode = request.mode ?? 'resume';
+        if (run.status === 'queued' || run.status === 'running') {
+            return {
+                ...this.toStatusResponse(run),
+                restartMode,
+            };
+        }
+        if (run.status === 'completed') {
+            throw new common_1.ConflictException('Chapter keywords workflow is already completed and cannot be restarted');
+        }
+        if (run.status === 'stale') {
+            throw new common_1.ConflictException('Chapter keywords workflow is stale and cannot be restarted');
+        }
+        const book = this.bookIngestionRepository.getBook(run.bookId);
+        const chapter = this.bookIngestionRepository.getChapter(run.bookId, run.chapterId);
+        if (!book || !chapter) {
+            throw new common_1.NotFoundException('Chapter not found in canonical ingestion state');
+        }
+        if (run.expectedSnapshotVersion !== undefined
+            && run.expectedSnapshotVersion !== book.snapshotVersion) {
+            throw new common_1.ConflictException('Canonical book snapshot changed; submit a new chapter keywords workflow');
+        }
+        if (run.expectedChapterContentHash !== undefined
+            && run.expectedChapterContentHash !== chapter.chapterContentHash) {
+            throw new common_1.ConflictException('Canonical chapter content changed; submit a new chapter keywords workflow');
+        }
+        const restarted = this.chapterKeywordsWorkflowRepository.restartFailedRun(workflowRunId, restartMode);
+        if (!restarted) {
+            throw new common_1.ConflictException('Chapter keywords workflow cannot be restarted from its current state');
+        }
+        this.workflowQueueService.enqueue(() => this.executeRun(restarted.id));
+        return {
+            ...this.toStatusResponse(restarted),
+            restartMode,
+        };
     }
     getWorkflowResult(workflowRunId) {
         const run = this.requireRun(workflowRunId);
@@ -252,8 +322,14 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
                 this.chapterKeywordsWorkflowRepository.failRun(workflowRunId, 'CHAPTER_KEYWORDS_NO_SENTENCES', 'No text sentences were found in the canonical chapter state.');
                 return;
             }
-            const mergedByParagraph = new Map();
-            for (const chunk of chunks) {
+            const promptVariant = this.promptVariantForBook(runningRun.bookId);
+            const totalParagraphCount = new Set(chunks.flatMap((chunk) => chunk.sentences.map((sentence) => paragraphKey(sentence.ref)))).size;
+            const resumeState = this.restoreChunkProgress(workflowRunId, runningRun, chunks);
+            const mergedByParagraph = resumeState.mergedByParagraph;
+            if (resumeState.startChunkIndex === 0) {
+                this.chapterKeywordsWorkflowRepository.updateRunCheckpoint(workflowRunId, this.buildChunkCheckpoint(chunks, -1));
+            }
+            for (const chunk of chunks.slice(resumeState.startChunkIndex)) {
                 const result = await (0, chapter_keywords_llm_1.analyzeChapterKeywordsChunk)({
                     docId: runningRun.bookId,
                     chapterId: runningRun.chapterId,
@@ -264,40 +340,18 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
                     chunkText: chunk.chunkText,
                     sentences: chunk.sentences,
                     contentHash: chapter.chapterContentHash,
+                    promptVariant,
                 });
-                for (const item of result.key_sentences) {
-                    const key = paragraphKey(item.sentence_ref);
-                    const existing = mergedByParagraph.get(key);
-                    if (!existing
-                        || item.importance > existing.importance
-                        || (item.importance === existing.importance
-                            && compareSentenceRefs(item.sentence_ref, existing.ref) < 0)) {
-                        mergedByParagraph.set(key, {
-                            ref: item.sentence_ref,
-                            text: item.sentence_text,
-                            importance: item.importance,
-                            reason: item.reason,
-                        });
-                    }
-                }
+                const normalizedChunkResult = {
+                    chunkIndex: chunk.index,
+                    keySentences: this.filterChunkKeySentences(result.key_sentences, promptVariant),
+                };
+                this.chapterKeywordsWorkflowRepository.updatePartialChunkResult(workflowRunId, normalizedChunkResult);
+                this.applyChunkResultToMergedParagraphs(mergedByParagraph, normalizedChunkResult);
+                this.chapterKeywordsWorkflowRepository.updateRunCheckpoint(workflowRunId, this.buildChunkCheckpoint(chunks, chunk.index));
             }
             const mergedResult = {
-                key_sentences: Array.from(mergedByParagraph.values())
-                    .sort((left, right) => {
-                    if (left.ref.page_index !== right.ref.page_index) {
-                        return left.ref.page_index - right.ref.page_index;
-                    }
-                    if (left.ref.paragraph_index !== right.ref.paragraph_index) {
-                        return left.ref.paragraph_index - right.ref.paragraph_index;
-                    }
-                    return left.ref.sentence_id - right.ref.sentence_id;
-                })
-                    .map((item) => ({
-                    sentence_ref: item.ref,
-                    sentence_text: item.text,
-                    importance: item.importance,
-                    reason: item.reason,
-                })),
+                key_sentences: this.finalizeMergedKeySentences(Array.from(mergedByParagraph.values()), promptVariant, totalParagraphCount),
                 sentence_keywords: [],
             };
             this.chapterKeywordsWorkflowRepository.completeRun({
@@ -386,6 +440,124 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
             };
         });
     }
+    promptVariantForBook(bookId) {
+        const book = this.bookIngestionRepository.getBook(bookId);
+        const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
+        return asBoolean(metadataRecord.isFiction) === true ? 'fiction' : 'nonfiction';
+    }
+    filterChunkKeySentences(keySentences, promptVariant) {
+        if (promptVariant !== 'fiction')
+            return keySentences;
+        return [...keySentences]
+            .filter((item) => item.importance >= 0.86)
+            .sort((left, right) => {
+            if (right.importance !== left.importance) {
+                return right.importance - left.importance;
+            }
+            return compareSentenceRefs(left.sentence_ref, right.sentence_ref);
+        })
+            .slice(0, 1);
+    }
+    restoreChunkProgress(workflowRunId, run, chunks) {
+        const mergedByParagraph = new Map();
+        const checkpoint = run.checkpoint;
+        if (!checkpoint || checkpoint.nextChunkIndex <= 0) {
+            return {
+                startChunkIndex: 0,
+                mergedByParagraph,
+            };
+        }
+        const partialChunkResults = run.partialChunkResults ?? [];
+        const expectedChunkCount = Math.min(checkpoint.nextChunkIndex, chunks.length);
+        const replayableResults = partialChunkResults
+            .filter((item) => item.chunkIndex >= 0 && item.chunkIndex < expectedChunkCount)
+            .sort((left, right) => left.chunkIndex - right.chunkIndex);
+        const isSequential = replayableResults.length === expectedChunkCount
+            && replayableResults.every((item, index) => item.chunkIndex === index);
+        const isCompatibleCheckpoint = checkpoint.totalChunks === chunks.length
+            && checkpoint.nextChunkIndex <= chunks.length;
+        if (!isSequential || !isCompatibleCheckpoint) {
+            (0, workflow_logger_1.workflowLog)('run.resume_fallback_to_start', {
+                workflowKind: run.kind,
+                workflowRunId,
+                bookId: run.bookId,
+                chapterId: run.chapterId,
+                chapterIndex: run.chapterIndex,
+                workflowVersion: run.workflowVersion,
+                reason: !isCompatibleCheckpoint ? 'checkpoint_mismatch' : 'missing_partial_chunks',
+            });
+            this.chapterKeywordsWorkflowRepository.clearRunCheckpoint(workflowRunId);
+            this.chapterKeywordsWorkflowRepository.clearPartialChunkResults(workflowRunId);
+            return {
+                startChunkIndex: 0,
+                mergedByParagraph,
+            };
+        }
+        for (const partialChunkResult of replayableResults) {
+            this.applyChunkResultToMergedParagraphs(mergedByParagraph, partialChunkResult);
+        }
+        return {
+            startChunkIndex: checkpoint.nextChunkIndex,
+            mergedByParagraph,
+        };
+    }
+    applyChunkResultToMergedParagraphs(mergedByParagraph, partialChunkResult) {
+        for (const item of partialChunkResult.keySentences) {
+            const key = paragraphKey(item.sentence_ref);
+            const existing = mergedByParagraph.get(key);
+            if (!existing
+                || item.importance > existing.importance
+                || (item.importance === existing.importance
+                    && compareSentenceRefs(item.sentence_ref, existing.ref) < 0)) {
+                mergedByParagraph.set(key, {
+                    ref: item.sentence_ref,
+                    text: item.sentence_text,
+                    importance: item.importance,
+                    reason: item.reason,
+                });
+            }
+        }
+    }
+    buildChunkCheckpoint(chunks, completedChunkIndex) {
+        return {
+            totalChunks: chunks.length,
+            lastCompletedChunkIndex: completedChunkIndex,
+            nextChunkIndex: completedChunkIndex + 1,
+            updatedAt: new Date().toISOString(),
+        };
+    }
+    finalizeMergedKeySentences(items, promptVariant, totalParagraphCount) {
+        const sortedByReadingOrder = items
+            .sort((left, right) => {
+            if (left.ref.page_index !== right.ref.page_index) {
+                return left.ref.page_index - right.ref.page_index;
+            }
+            if (left.ref.paragraph_index !== right.ref.paragraph_index) {
+                return left.ref.paragraph_index - right.ref.paragraph_index;
+            }
+            return left.ref.sentence_id - right.ref.sentence_id;
+        });
+        let selected = sortedByReadingOrder;
+        if (promptVariant === 'fiction') {
+            const maxHighlights = Math.max(1, Math.ceil(totalParagraphCount / 6));
+            selected = [...sortedByReadingOrder]
+                .filter((item) => item.importance >= 0.86)
+                .sort((left, right) => {
+                if (right.importance !== left.importance) {
+                    return right.importance - left.importance;
+                }
+                return compareSentenceRefs(left.ref, right.ref);
+            })
+                .slice(0, maxHighlights)
+                .sort((left, right) => compareSentenceRefs(left.ref, right.ref));
+        }
+        return selected.map((item) => ({
+            sentence_ref: item.ref,
+            sentence_text: item.text,
+            importance: item.importance,
+            reason: item.reason,
+        }));
+    }
     buildDefaultIdempotencyKey(bookId, chapterId, workflowVersion, chapterContentHash) {
         return `chapter-keywords:${workflowVersion}:${bookId}:${chapterId}:${chapterContentHash}`;
     }
@@ -437,6 +609,7 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
             completedAt: run.completedAt,
             resultAvailable: Boolean(run.output),
             error: run.error,
+            checkpoint: run.checkpoint,
         };
     }
     toLatestResponse(result) {
@@ -466,6 +639,13 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
         const result = asNumber(value);
         if (result === undefined || !Number.isInteger(result) || result < 0) {
             throw new common_1.BadRequestException(`${field} must be a non-negative integer`);
+        }
+        return result;
+    }
+    requireRestartMode(value) {
+        const result = asString(value);
+        if (result !== 'resume' && result !== 'from_start') {
+            throw new common_1.BadRequestException('mode must be "resume" or "from_start"');
         }
         return result;
     }

@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { SentenceRef } from '../../../../packages/contracts/src';
 import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
@@ -7,16 +14,22 @@ import { workflowLog } from '../workflow.logger';
 import {
   analyzeChapterKeywordsChunk,
   type ChapterKeywordSentenceInput,
+  type ChapterKeywordsPromptVariant,
 } from './chapter-keywords-llm';
 import type {
   GetChapterKeywordsWorkflowResultResponseDto,
   GetChapterKeywordsWorkflowStatusResponseDto,
   GetLatestChapterKeywordsResponseDto,
+  RestartChapterKeywordsWorkflowRequestDto,
+  RestartChapterKeywordsWorkflowResponseDto,
   SubmitChapterKeywordsWorkflowRequestDto,
   SubmitChapterKeywordsWorkflowResponseDto,
 } from './chapter-keywords-workflow.dto';
 import { ChapterKeywordsWorkflowRepository } from './chapter-keywords-workflow.repository';
 import type {
+  ChapterKeywordsWorkflowCheckpoint,
+  ChapterKeywordsWorkflowPartialChunkResult,
+  ChapterKeywordsWorkflowRestartMode,
   ChapterKeywordsWorkflowRunRecord,
   ChapterKeywordsWorkflowStoredResult,
   SubmitChapterKeywordsWorkflowInput,
@@ -51,6 +64,9 @@ const asString = (value: unknown): string | undefined =>
 
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const asBoolean = (value: unknown): boolean | undefined =>
+  typeof value === 'boolean' ? value : undefined;
 
 const refKey = (ref: SentenceRef): string =>
   `${ref.page_index}:${ref.paragraph_index}:${ref.paragraph_id}:${ref.sentence_id}`;
@@ -104,7 +120,7 @@ const sortParagraphEntries = (pageParagraphs: Record<string, string>): Array<{ k
     .map(([key, value]) => ({ key, value }));
 
 @Injectable()
-export class ChapterKeywordsWorkflowService {
+export class ChapterKeywordsWorkflowService implements OnApplicationBootstrap {
   constructor(
     @Inject(BookIngestionRepository)
     private readonly bookIngestionRepository: BookIngestionRepository,
@@ -113,6 +129,21 @@ export class ChapterKeywordsWorkflowService {
     @Inject(WorkflowQueueService)
     private readonly workflowQueueService: WorkflowQueueService,
   ) {}
+
+  onApplicationBootstrap(): void {
+    for (const run of this.chapterKeywordsWorkflowRepository.listRecoverableRuns()) {
+      workflowLog('run.recovered', {
+        workflowKind: run.kind,
+        workflowRunId: run.id,
+        bookId: run.bookId,
+        chapterId: run.chapterId,
+        chapterIndex: run.chapterIndex,
+        workflowVersion: run.workflowVersion,
+        status: run.status,
+      });
+      this.workflowQueueService.enqueue(() => this.executeRun(run.id));
+    }
+  }
 
   parseSubmitRequest(rawBody: string | undefined): SubmitChapterKeywordsWorkflowRequestDto {
     if (!rawBody || rawBody.trim() === '') {
@@ -181,6 +212,28 @@ export class ChapterKeywordsWorkflowService {
     return request;
   }
 
+  parseRestartRequest(rawBody: string | undefined): RestartChapterKeywordsWorkflowRequestDto {
+    if (!rawBody || rawBody.trim() === '') {
+      return { mode: 'resume' };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch (error) {
+      throw new BadRequestException(
+        `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    if (!isPlainObject(parsed)) {
+      throw new BadRequestException('Request body must be a JSON object');
+    }
+
+    const mode = parsed.mode === undefined ? 'resume' : this.requireRestartMode(parsed.mode);
+    return { mode };
+  }
+
   submitChapterKeywordsWorkflow(
     request: SubmitChapterKeywordsWorkflowRequestDto,
   ): SubmitChapterKeywordsWorkflowResponseDto {
@@ -247,6 +300,56 @@ export class ChapterKeywordsWorkflowService {
   getWorkflowStatus(workflowRunId: string): GetChapterKeywordsWorkflowStatusResponseDto {
     const run = this.requireRun(workflowRunId);
     return this.toStatusResponse(run);
+  }
+
+  restartWorkflow(
+    workflowRunId: string,
+    request: RestartChapterKeywordsWorkflowRequestDto,
+  ): RestartChapterKeywordsWorkflowResponseDto {
+    const run = this.requireRun(workflowRunId);
+    const restartMode = request.mode ?? 'resume';
+
+    if (run.status === 'queued' || run.status === 'running') {
+      return {
+        ...this.toStatusResponse(run),
+        restartMode,
+      };
+    }
+    if (run.status === 'completed') {
+      throw new ConflictException('Chapter keywords workflow is already completed and cannot be restarted');
+    }
+    if (run.status === 'stale') {
+      throw new ConflictException('Chapter keywords workflow is stale and cannot be restarted');
+    }
+
+    const book = this.bookIngestionRepository.getBook(run.bookId);
+    const chapter = this.bookIngestionRepository.getChapter(run.bookId, run.chapterId);
+    if (!book || !chapter) {
+      throw new NotFoundException('Chapter not found in canonical ingestion state');
+    }
+    if (
+      run.expectedSnapshotVersion !== undefined
+      && run.expectedSnapshotVersion !== book.snapshotVersion
+    ) {
+      throw new ConflictException('Canonical book snapshot changed; submit a new chapter keywords workflow');
+    }
+    if (
+      run.expectedChapterContentHash !== undefined
+      && run.expectedChapterContentHash !== chapter.chapterContentHash
+    ) {
+      throw new ConflictException('Canonical chapter content changed; submit a new chapter keywords workflow');
+    }
+
+    const restarted = this.chapterKeywordsWorkflowRepository.restartFailedRun(workflowRunId, restartMode);
+    if (!restarted) {
+      throw new ConflictException('Chapter keywords workflow cannot be restarted from its current state');
+    }
+
+    this.workflowQueueService.enqueue(() => this.executeRun(restarted.id));
+    return {
+      ...this.toStatusResponse(restarted),
+      restartMode,
+    };
   }
 
   getWorkflowResult(workflowRunId: string): GetChapterKeywordsWorkflowResultResponseDto {
@@ -343,14 +446,21 @@ export class ChapterKeywordsWorkflowService {
         return;
       }
 
-      const mergedByParagraph = new Map<string, {
-        ref: SentenceRef;
-        text: string;
-        importance: number;
-        reason: string;
-      }>();
+      const promptVariant = this.promptVariantForBook(runningRun.bookId);
+      const totalParagraphCount = new Set(
+        chunks.flatMap((chunk) => chunk.sentences.map((sentence) => paragraphKey(sentence.ref))),
+      ).size;
+      const resumeState = this.restoreChunkProgress(workflowRunId, runningRun, chunks);
+      const mergedByParagraph = resumeState.mergedByParagraph;
 
-      for (const chunk of chunks) {
+      if (resumeState.startChunkIndex === 0) {
+        this.chapterKeywordsWorkflowRepository.updateRunCheckpoint(
+          workflowRunId,
+          this.buildChunkCheckpoint(chunks, -1),
+        );
+      }
+
+      for (const chunk of chunks.slice(resumeState.startChunkIndex)) {
         const result = await analyzeChapterKeywordsChunk({
           docId: runningRun.bookId,
           chapterId: runningRun.chapterId,
@@ -361,46 +471,27 @@ export class ChapterKeywordsWorkflowService {
           chunkText: chunk.chunkText,
           sentences: chunk.sentences,
           contentHash: chapter.chapterContentHash,
+          promptVariant,
         });
 
-        for (const item of result.key_sentences) {
-          const key = paragraphKey(item.sentence_ref);
-          const existing = mergedByParagraph.get(key);
-          if (
-            !existing
-            || item.importance > existing.importance
-            || (
-              item.importance === existing.importance
-              && compareSentenceRefs(item.sentence_ref, existing.ref) < 0
-            )
-          ) {
-            mergedByParagraph.set(key, {
-              ref: item.sentence_ref,
-              text: item.sentence_text,
-              importance: item.importance,
-              reason: item.reason,
-            });
-          }
-        }
+        const normalizedChunkResult: ChapterKeywordsWorkflowPartialChunkResult = {
+          chunkIndex: chunk.index,
+          keySentences: this.filterChunkKeySentences(result.key_sentences, promptVariant),
+        };
+        this.chapterKeywordsWorkflowRepository.updatePartialChunkResult(workflowRunId, normalizedChunkResult);
+        this.applyChunkResultToMergedParagraphs(mergedByParagraph, normalizedChunkResult);
+        this.chapterKeywordsWorkflowRepository.updateRunCheckpoint(
+          workflowRunId,
+          this.buildChunkCheckpoint(chunks, chunk.index),
+        );
       }
 
       const mergedResult = {
-        key_sentences: Array.from(mergedByParagraph.values())
-          .sort((left, right) => {
-            if (left.ref.page_index !== right.ref.page_index) {
-              return left.ref.page_index - right.ref.page_index;
-            }
-            if (left.ref.paragraph_index !== right.ref.paragraph_index) {
-              return left.ref.paragraph_index - right.ref.paragraph_index;
-            }
-            return left.ref.sentence_id - right.ref.sentence_id;
-          })
-          .map((item) => ({
-            sentence_ref: item.ref,
-            sentence_text: item.text,
-            importance: item.importance,
-            reason: item.reason,
-          })),
+        key_sentences: this.finalizeMergedKeySentences(
+          Array.from(mergedByParagraph.values()),
+          promptVariant,
+          totalParagraphCount,
+        ),
         sentence_keywords: [],
       };
 
@@ -499,6 +590,195 @@ export class ChapterKeywordsWorkflowService {
     });
   }
 
+  private promptVariantForBook(bookId: string): ChapterKeywordsPromptVariant {
+    const book = this.bookIngestionRepository.getBook(bookId);
+    const metadataRecord = isPlainObject(book?.bookMetadata) ? book.bookMetadata : {};
+    return asBoolean(metadataRecord.isFiction) === true ? 'fiction' : 'nonfiction';
+  }
+
+  private filterChunkKeySentences(
+    keySentences: Array<{
+      sentence_ref: SentenceRef;
+      sentence_text: string;
+      importance: number;
+      reason: string;
+    }>,
+    promptVariant: ChapterKeywordsPromptVariant,
+  ): Array<{
+      sentence_ref: SentenceRef;
+      sentence_text: string;
+      importance: number;
+      reason: string;
+    }> {
+    if (promptVariant !== 'fiction') return keySentences;
+
+    return [...keySentences]
+      .filter((item) => item.importance >= 0.86)
+      .sort((left, right) => {
+        if (right.importance !== left.importance) {
+          return right.importance - left.importance;
+        }
+        return compareSentenceRefs(left.sentence_ref, right.sentence_ref);
+      })
+      .slice(0, 1);
+  }
+
+  private restoreChunkProgress(
+    workflowRunId: string,
+    run: ChapterKeywordsWorkflowRunRecord,
+    chunks: PlannedChunk[],
+  ): {
+    startChunkIndex: number;
+    mergedByParagraph: Map<string, {
+      ref: SentenceRef;
+      text: string;
+      importance: number;
+      reason: string;
+    }>;
+  } {
+    const mergedByParagraph = new Map<string, {
+      ref: SentenceRef;
+      text: string;
+      importance: number;
+      reason: string;
+    }>();
+
+    const checkpoint = run.checkpoint;
+    if (!checkpoint || checkpoint.nextChunkIndex <= 0) {
+      return {
+        startChunkIndex: 0,
+        mergedByParagraph,
+      };
+    }
+
+    const partialChunkResults = run.partialChunkResults ?? [];
+    const expectedChunkCount = Math.min(checkpoint.nextChunkIndex, chunks.length);
+    const replayableResults = partialChunkResults
+      .filter((item) => item.chunkIndex >= 0 && item.chunkIndex < expectedChunkCount)
+      .sort((left, right) => left.chunkIndex - right.chunkIndex);
+
+    const isSequential = replayableResults.length === expectedChunkCount
+      && replayableResults.every((item, index) => item.chunkIndex === index);
+    const isCompatibleCheckpoint = checkpoint.totalChunks === chunks.length
+      && checkpoint.nextChunkIndex <= chunks.length;
+    if (!isSequential || !isCompatibleCheckpoint) {
+      workflowLog('run.resume_fallback_to_start', {
+        workflowKind: run.kind,
+        workflowRunId,
+        bookId: run.bookId,
+        chapterId: run.chapterId,
+        chapterIndex: run.chapterIndex,
+        workflowVersion: run.workflowVersion,
+        reason: !isCompatibleCheckpoint ? 'checkpoint_mismatch' : 'missing_partial_chunks',
+      });
+      this.chapterKeywordsWorkflowRepository.clearRunCheckpoint(workflowRunId);
+      this.chapterKeywordsWorkflowRepository.clearPartialChunkResults(workflowRunId);
+      return {
+        startChunkIndex: 0,
+        mergedByParagraph,
+      };
+    }
+
+    for (const partialChunkResult of replayableResults) {
+      this.applyChunkResultToMergedParagraphs(mergedByParagraph, partialChunkResult);
+    }
+    return {
+      startChunkIndex: checkpoint.nextChunkIndex,
+      mergedByParagraph,
+    };
+  }
+
+  private applyChunkResultToMergedParagraphs(
+    mergedByParagraph: Map<string, {
+      ref: SentenceRef;
+      text: string;
+      importance: number;
+      reason: string;
+    }>,
+    partialChunkResult: ChapterKeywordsWorkflowPartialChunkResult,
+  ): void {
+    for (const item of partialChunkResult.keySentences) {
+      const key = paragraphKey(item.sentence_ref);
+      const existing = mergedByParagraph.get(key);
+      if (
+        !existing
+        || item.importance > existing.importance
+        || (
+          item.importance === existing.importance
+          && compareSentenceRefs(item.sentence_ref, existing.ref) < 0
+        )
+      ) {
+        mergedByParagraph.set(key, {
+          ref: item.sentence_ref,
+          text: item.sentence_text,
+          importance: item.importance,
+          reason: item.reason,
+        });
+      }
+    }
+  }
+
+  private buildChunkCheckpoint(
+    chunks: PlannedChunk[],
+    completedChunkIndex: number,
+  ): ChapterKeywordsWorkflowCheckpoint {
+    return {
+      totalChunks: chunks.length,
+      lastCompletedChunkIndex: completedChunkIndex,
+      nextChunkIndex: completedChunkIndex + 1,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  private finalizeMergedKeySentences(
+    items: Array<{
+      ref: SentenceRef;
+      text: string;
+      importance: number;
+      reason: string;
+    }>,
+    promptVariant: ChapterKeywordsPromptVariant,
+    totalParagraphCount: number,
+  ): Array<{
+      sentence_ref: SentenceRef;
+      sentence_text: string;
+      importance: number;
+      reason: string;
+    }> {
+    const sortedByReadingOrder = items
+      .sort((left, right) => {
+        if (left.ref.page_index !== right.ref.page_index) {
+          return left.ref.page_index - right.ref.page_index;
+        }
+        if (left.ref.paragraph_index !== right.ref.paragraph_index) {
+          return left.ref.paragraph_index - right.ref.paragraph_index;
+        }
+        return left.ref.sentence_id - right.ref.sentence_id;
+      });
+
+    let selected = sortedByReadingOrder;
+    if (promptVariant === 'fiction') {
+      const maxHighlights = Math.max(1, Math.ceil(totalParagraphCount / 6));
+      selected = [...sortedByReadingOrder]
+        .filter((item) => item.importance >= 0.86)
+        .sort((left, right) => {
+          if (right.importance !== left.importance) {
+            return right.importance - left.importance;
+          }
+          return compareSentenceRefs(left.ref, right.ref);
+        })
+        .slice(0, maxHighlights)
+        .sort((left, right) => compareSentenceRefs(left.ref, right.ref));
+    }
+
+    return selected.map((item) => ({
+      sentence_ref: item.ref,
+      sentence_text: item.text,
+      importance: item.importance,
+      reason: item.reason,
+    }));
+  }
+
   private buildDefaultIdempotencyKey(
     bookId: string,
     chapterId: string,
@@ -561,6 +841,7 @@ export class ChapterKeywordsWorkflowService {
       completedAt: run.completedAt,
       resultAvailable: Boolean(run.output),
       error: run.error,
+      checkpoint: run.checkpoint,
     };
   }
 
@@ -593,6 +874,14 @@ export class ChapterKeywordsWorkflowService {
     const result = asNumber(value);
     if (result === undefined || !Number.isInteger(result) || result < 0) {
       throw new BadRequestException(`${field} must be a non-negative integer`);
+    }
+    return result;
+  }
+
+  private requireRestartMode(value: unknown): ChapterKeywordsWorkflowRestartMode {
+    const result = asString(value);
+    if (result !== 'resume' && result !== 'from_start') {
+      throw new BadRequestException('mode must be "resume" or "from_start"');
     }
     return result;
   }

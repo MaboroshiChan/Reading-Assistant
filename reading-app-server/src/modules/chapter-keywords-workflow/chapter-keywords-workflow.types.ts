@@ -1,4 +1,7 @@
-import type { AnalyzeChapterKeywordsData } from '../../../../packages/contracts/src';
+import type {
+  AnalyzeChapterKeywordsData,
+  ChunkKeySentence,
+} from '../../../../packages/contracts/src';
 
 export type ChapterKeywordsWorkflowKind = 'chapter_keywords';
 
@@ -12,6 +15,7 @@ export type ChapterKeywordsWorkflowStatus =
 export type ChapterKeywordsWorkflowProducer = 'server';
 export type ChapterKeywordsWorkflowQualityTier = 'server_final';
 export type ChapterKeywordsWorkflowResultPayload = AnalyzeChapterKeywordsData;
+export type ChapterKeywordsWorkflowRestartMode = 'resume' | 'from_start';
 
 export interface SubmitChapterKeywordsWorkflowInput {
   bookId: string;
@@ -27,6 +31,18 @@ export interface SubmitChapterKeywordsWorkflowInput {
 export interface ChapterKeywordsWorkflowErrorInfo {
   code: string;
   message: string;
+}
+
+export interface ChapterKeywordsWorkflowCheckpoint {
+  totalChunks: number;
+  lastCompletedChunkIndex: number;
+  nextChunkIndex: number;
+  updatedAt: string;
+}
+
+export interface ChapterKeywordsWorkflowPartialChunkResult {
+  chunkIndex: number;
+  keySentences: ChunkKeySentence[];
 }
 
 export interface ChapterKeywordsWorkflowRunRecord {
@@ -47,6 +63,8 @@ export interface ChapterKeywordsWorkflowRunRecord {
   resultVersion: string;
   output?: ChapterKeywordsWorkflowResultPayload;
   error?: ChapterKeywordsWorkflowErrorInfo;
+  checkpoint?: ChapterKeywordsWorkflowCheckpoint;
+  partialChunkResults?: ChapterKeywordsWorkflowPartialChunkResult[];
   createdAt: string;
   updatedAt: string;
   startedAt?: string;
@@ -70,3 +88,6 @@ export interface ChapterKeywordsWorkflowStoredResult {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ChapterKeywordsWorkflowPersistedRunRecord
+  extends ChapterKeywordsWorkflowRunRecord {}

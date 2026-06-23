@@ -1,7 +1,9 @@
 import type {
+  KnowledgeExtractionWorkflowCheckpoint,
   KnowledgeExtractionWorkflowErrorInfo,
   KnowledgeExtractionWorkflowProgress,
   KnowledgeExtractionWorkflowQualityTier,
+  KnowledgeExtractionWorkflowRestartMode,
   KnowledgeExtractionWorkflowResultPayload,
   KnowledgeExtractionWorkflowStatus,
 } from './knowledge-extraction-workflow.types';
@@ -57,6 +59,16 @@ export interface GetKnowledgeExtractionWorkflowStatusResponseDto {
   resultAvailable: boolean;
   error?: KnowledgeExtractionWorkflowErrorInfo;
   progress?: KnowledgeExtractionWorkflowProgress;
+  checkpoint?: KnowledgeExtractionWorkflowCheckpoint;
+}
+
+export interface RestartKnowledgeExtractionWorkflowRequestDto {
+  mode?: KnowledgeExtractionWorkflowRestartMode;
+}
+
+export interface RestartKnowledgeExtractionWorkflowResponseDto
+  extends GetKnowledgeExtractionWorkflowStatusResponseDto {
+  restartMode: KnowledgeExtractionWorkflowRestartMode;
 }
 
 export interface GetKnowledgeExtractionWorkflowResultResponseDto {

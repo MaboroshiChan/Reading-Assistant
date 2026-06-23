@@ -4,14 +4,14 @@ import { resolvePromptPath } from '../src/utils/prompt-path';
 
 describe('resolvePromptPath', () => {
   test('finds versioned prompts under reading-app-server/prompts/v1', () => {
-    const resolved = resolvePromptPath('knowledge_extraction.txt');
+    const resolved = resolvePromptPath('knowledge_extraction_nonfiction.txt');
 
     expect(resolved).toBe(path.resolve(
       process.cwd(),
       'reading-app-server',
       'prompts',
       'v1',
-      'knowledge_extraction.txt',
+      'knowledge_extraction_nonfiction.txt',
     ));
   });
 });

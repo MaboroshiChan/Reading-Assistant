@@ -788,16 +788,7 @@ function pickTextForSpan(span, ctx, fallback) {
  * @param data - The normalized analysis data.
  */
 async function persistNormalizedSentenceStructure(req, data) {
-    const dir = NORMALIZED_RESPONSE_DIR;
-    try {
-        await promises_1.default.mkdir(dir, { recursive: true });
-        const name = `${Date.now()}_${req.payload.doc_id}_${req.payload.sentence_id}.json`;
-        const target = node_path_1.default.join(dir, name);
-        await promises_1.default.writeFile(target, JSON.stringify({ request: req, response: data }, null, 2));
-    }
-    catch (error) {
-        console.warn('[sentence_structure] failed to persist normalization', error);
-    }
+    return;
 }
 /**
  * Derives the backbone structure by searching for units with subject/predicate/object roles.

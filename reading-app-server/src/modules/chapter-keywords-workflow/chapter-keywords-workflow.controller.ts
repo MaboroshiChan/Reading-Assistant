@@ -3,6 +3,7 @@ import type {
   GetChapterKeywordsWorkflowResultResponseDto,
   GetChapterKeywordsWorkflowStatusResponseDto,
   GetLatestChapterKeywordsResponseDto,
+  RestartChapterKeywordsWorkflowResponseDto,
   SubmitChapterKeywordsWorkflowResponseDto,
 } from './chapter-keywords-workflow.dto';
 import { ChapterKeywordsWorkflowService } from './chapter-keywords-workflow.service';
@@ -38,6 +39,15 @@ export class ChapterKeywordsWorkflowController {
     @Param('workflowRunId') workflowRunId: string,
   ): GetChapterKeywordsWorkflowResultResponseDto {
     return this.chapterKeywordsWorkflowService.getWorkflowResult(workflowRunId);
+  }
+
+  @Post('workflows/chapter-keywords/:workflowRunId/restart')
+  restartWorkflow(
+    @Param('workflowRunId') workflowRunId: string,
+    @Body() rawBody: string | undefined,
+  ): RestartChapterKeywordsWorkflowResponseDto {
+    const request = this.chapterKeywordsWorkflowService.parseRestartRequest(rawBody);
+    return this.chapterKeywordsWorkflowService.restartWorkflow(workflowRunId, request);
   }
 
   @Get('books/:bookId/chapters/:chapterId/chapter-keywords')

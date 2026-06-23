@@ -908,7 +908,7 @@ export class QuizWorkflowService {
   private selectQuestionType(unit: KnowledgeUnit): QuizWorkflowQuestionType {
     switch (unit.type) {
       case 'idea':
-        return 'short_answer';
+        return 'multiple_choice';
       case 'event':
         return 'true_false_not_given';
       case 'theme':

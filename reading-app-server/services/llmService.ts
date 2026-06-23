@@ -87,17 +87,15 @@ export interface LLMChatClient {
 // Public API
 // -----------------------------
 
-import { createOpenRouterLLMClient, createOpenRouterLLMChatClient } from './openrouterService';
-
 /**
  * Creates a reusable LLM client bound to a stable system prompt.
  */
 export function createLLMClient(factoryOptions: LLMClientFactoryOptions): LLMClient {
-  return createOpenRouterLLMClient(factoryOptions);
+  return createGeminiLLMClient(factoryOptions);
 }
 
 // -----------------------------
-// Legacy Gemini implementation (Disconnected)
+// Gemini implementation
 // -----------------------------
 export function createGeminiLLMClient(factoryOptions: LLMClientFactoryOptions): LLMClient {
   const systemPrompt = factoryOptions.systemPrompt.trim();
@@ -150,7 +148,7 @@ export function createGeminiLLMClient(factoryOptions: LLMClientFactoryOptions): 
  * It uses the SDK's startChat method to preserve conversation history.
  */
 export function createLLMChatClient(factoryOptions: LLMClientFactoryOptions): LLMChatClient {
-  return createOpenRouterLLMChatClient(factoryOptions);
+  return createGeminiLLMChatClient(factoryOptions);
 }
 
 export function createGeminiLLMChatClient(factoryOptions: LLMClientFactoryOptions): LLMChatClient {
@@ -316,7 +314,7 @@ async function callLLM(args: CallArgs): Promise<CallReturn<string>> {
 
     return callLLMDirect(args, apiKey, useDeveloperInstruction);
   } catch (error: unknown) {
-    throw normalizeError(error);
+    throw normalizeError(error, args);
   }
 }
 
@@ -332,12 +330,7 @@ async function callLLMDirect(
     prefixCache: 0,
   });
   const requestPrompt = useDeveloperInstruction ? args.userPrompt : buildInlineSystemPrompt(args);
-  let resolveUsage!: (usage: LLMUsage) => void;
-  let rejectUsage!: (reason?: unknown) => void;
-  const usagePromise = new Promise<LLMUsage>((resolve, reject) => {
-    resolveUsage = resolve;
-    rejectUsage = reject;
-  });
+  const usageTracker = createUsageTracker(args.model);
   const stream = await ai.models.generateContentStream({
     model: args.model,
     contents: requestPrompt,
@@ -355,31 +348,30 @@ async function callLLMDirect(
 
   const dataStream = (async function* () {
     let fullText = '';
-    let latestUsage: LLMUsage = { modelId: args.model };
     try {
       for await (const chunk of stream) {
-        latestUsage = getUsageFromGenAIChunk(chunk, args.model);
+        Object.assign(usageTracker.latestUsage, getUsageFromGenAIChunk(chunk, args.model));
         const text = typeof chunk.text === 'string' ? chunk.text : '';
         fullText += text;
         if (text) {
           yield text;
         }
       }
-      resolveUsage(latestUsage);
+      usageTracker.resolve();
       logLLMEvent('response.received', args, {
         inlineSystemPrompt: useDeveloperInstruction ? 0 : 1,
         prefixCache: 0,
-        inputTokens: latestUsage.inputTokens ?? 0,
-        outputTokens: latestUsage.outputTokens ?? 0,
+        inputTokens: usageTracker.latestUsage.inputTokens ?? 0,
+        outputTokens: usageTracker.latestUsage.outputTokens ?? 0,
       });
       void persistLLMResponse(args, fullText);
     } catch (error) {
-      rejectUsage(error);
-      throw error;
+      usageTracker.fail(error);
+      throw normalizeError(error, args);
     }
   })();
 
-  return { data: dataStream, usage: usagePromise };
+  return { data: dataStream, usage: usageTracker.usage };
 }
 
 async function callLLMWithCachedPrefix(
@@ -398,12 +390,7 @@ async function callLLMWithCachedPrefix(
     prefixCache: 1,
     cachedSystemPrompt: shouldSendSystemPrompt ? 0 : 1,
   });
-  let resolveUsage!: (usage: LLMUsage) => void;
-  let rejectUsage!: (reason?: unknown) => void;
-  const usagePromise = new Promise<LLMUsage>((resolve, reject) => {
-    resolveUsage = resolve;
-    rejectUsage = reject;
-  });
+  const usageTracker = createUsageTracker(args.model);
 
   const stream = await ai.models.generateContentStream({
     model: args.model,
@@ -423,32 +410,31 @@ async function callLLMWithCachedPrefix(
 
   const dataStream = (async function* () {
     let fullText = '';
-    let latestUsage: LLMUsage = { modelId: args.model };
     try {
       for await (const chunk of stream) {
-        latestUsage = getUsageFromGenAIChunk(chunk, args.model);
+        Object.assign(usageTracker.latestUsage, getUsageFromGenAIChunk(chunk, args.model));
         const text = typeof chunk.text === 'string' ? chunk.text : '';
         fullText += text;
         if (text) {
           yield text;
         }
       }
-      resolveUsage(latestUsage);
+      usageTracker.resolve();
       logLLMEvent('response.received', args, {
         inlineSystemPrompt: 0,
         prefixCache: 1,
         cachedSystemPrompt: shouldSendSystemPrompt ? 0 : 1,
-        inputTokens: latestUsage.inputTokens ?? 0,
-        outputTokens: latestUsage.outputTokens ?? 0,
+        inputTokens: usageTracker.latestUsage.inputTokens ?? 0,
+        outputTokens: usageTracker.latestUsage.outputTokens ?? 0,
       });
       void persistLLMResponse(args, fullText);
     } catch (error) {
-      rejectUsage(error);
-      throw error;
+      usageTracker.fail(error);
+      throw normalizeError(error, args);
     }
   })();
 
-  return { data: dataStream, usage: usagePromise };
+  return { data: dataStream, usage: usageTracker.usage };
 }
 
 function logLLMEvent(
@@ -577,29 +563,7 @@ function getUsageFromGenAIChunk(chunk: { usageMetadata?: {
  * @param args - Arguments for the LLM call.
  */
 async function logPromptIfDebug(args: CallArgs): Promise<void> {
-  if (!config.debugMode) return;
-  const timestamp = new Date().toISOString();
-  const entry = {
-    timestamp,
-    model: args.model,
-    responseAs: args.responseAs,
-    temperature: args.temperature,
-    maxOutputTokens: args.maxOutputTokens,
-    systemPrompt: args.systemPrompt,
-    userPrompt: args.userPrompt,
-    prefixCache: args.prefixCache ?? undefined,
-  };
-
-  try {
-    await fs.mkdir(LOG_DIR, { recursive: true });
-    await fs.appendFile(LOG_FILE, `${JSON.stringify(entry)}\n`, 'utf8');
-    console.log(
-      `[llm-debug] ${timestamp} model=${args.model} responseAs=${args.responseAs}\n${formatDebugPrompt(args)}`,
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[llm-debug] failed to persist prompt log: ${message}`);
-  }
+  return;
 }
 
 /**
@@ -609,33 +573,7 @@ async function logPromptIfDebug(args: CallArgs): Promise<void> {
  * @param text - The raw text response from the LLM.
  */
 async function persistLLMResponse(args: CallArgs, text: string): Promise<void> {
-  try {
-    await fs.mkdir(RESPONSE_DIR, { recursive: true });
-    const timestamp = new Date().toISOString();
-    const safeStamp = timestamp.replace(/[:.]/g, '-');
-    const parsed = (() => {
-      if (!text) return null;
-      try {
-        return JSON.parse(text);
-      } catch {
-        return null;
-      }
-    })();
-    const record = {
-      timestamp,
-      model: args.model,
-      responseAs: args.responseAs,
-      text: text || null,
-      parsed: parsed ?? undefined,
-      systemPrompt: config.debugMode ? args.systemPrompt : undefined,
-      userPrompt: config.debugMode ? args.userPrompt : undefined,
-      prompt: config.debugMode ? formatDebugPrompt(args) : undefined,
-    };
-    const filePath = path.join(RESPONSE_DIR, `${safeStamp}_${args.model}.json`);
-    await fs.writeFile(filePath, JSON.stringify(record, null, 2), 'utf8');
-  } catch (error) {
-    console.warn('[llm-response] failed to persist response', error);
-  }
+  return;
 }
 
 /**
@@ -652,9 +590,99 @@ export function extractJsonFromText(text: string): unknown {
   } catch {
     // Some models may wrap JSON in markdown fences
     const unwrapped = unwrapCodeFence(trimmed);
-    if (!unwrapped) return {};
-    try { return JSON.parse(unwrapped) as unknown; } catch { return {}; }
+    if (unwrapped) {
+      try {
+        return JSON.parse(unwrapped) as unknown;
+      } catch {
+        const extracted = extractBestEmbeddedJson(unwrapped);
+        if (extracted !== null) return extracted;
+      }
+    }
+    const extracted = extractBestEmbeddedJson(trimmed);
+    return extracted ?? {};
   }
+}
+
+function extractBestEmbeddedJson(text: string): unknown | null {
+  const candidates = collectBalancedJsonObjectCandidates(text);
+  let bestScore = -1;
+  let bestLength = -1;
+  let bestValue: unknown = null;
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as unknown;
+      const score = scoreJsonCandidate(parsed);
+      if (score > bestScore || (score === bestScore && candidate.length > bestLength)) {
+        bestScore = score;
+        bestLength = candidate.length;
+        bestValue = parsed;
+      }
+    } catch {
+      // ignore invalid candidate
+    }
+  }
+
+  return bestScore >= 0 ? bestValue : null;
+}
+
+function collectBalancedJsonObjectCandidates(text: string): string[] {
+  const candidates: string[] = [];
+  const startIndexes: number[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (char === '{') {
+      startIndexes.push(index);
+      continue;
+    }
+
+    if (char === '}') {
+      const start = startIndexes.pop();
+      if (start === undefined) continue;
+      candidates.push(text.slice(start, index + 1));
+    }
+  }
+
+  return candidates;
+}
+
+function scoreJsonCandidate(value: unknown): number {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return -1;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length === 0) return 0;
+
+  let score = keys.length;
+  if (Array.isArray(record.nodes)) score += 30;
+  if (Array.isArray(record.edges)) score += 30;
+  if (Array.isArray(record.evidence)) score += 30;
+  if (Array.isArray(record.people)) score += 12;
+  if (Array.isArray(record.ideas)) score += 12;
+  if (Array.isArray(record.events)) score += 12;
+  if (Array.isArray(record.entities)) score += 12;
+  if (Array.isArray(record.themes)) score += 12;
+  if (Array.isArray(record.relations)) score += 12;
+  if (Array.isArray(record.questions)) score += 20;
+  if (record.data && typeof record.data === 'object' && !Array.isArray(record.data)) score += 5;
+
+  return score;
 }
 
 /**
@@ -675,8 +703,16 @@ function unwrapCodeFence(s: string): string | null {
  * @param error - The unknown error.
  * @returns A standard Error object.
  */
-function normalizeError(error: unknown): Error {
+function normalizeError(error: unknown, args?: Pick<CallArgs, 'timeoutMs' | 'signal'>): Error {
   if (isAbortError(error)) {
+    if (!args?.signal?.aborted) {
+      const timeoutMs = args?.timeoutMs;
+      return new Error(
+        timeoutMs && Number.isFinite(timeoutMs)
+          ? `LLM request timed out after ${timeoutMs}ms`
+          : 'LLM request timed out',
+      );
+    }
     return error instanceof Error ? error : new Error('Operation aborted');
   }
   if (error instanceof Error) return error;
@@ -701,4 +737,35 @@ function formatDebugPrompt(args: CallArgs): string {
   }
   sections.push('[User Prompt]', args.userPrompt);
   return sections.join('\n');
+}
+
+function createUsageTracker(modelId: string): {
+  latestUsage: LLMUsage;
+  usage: Promise<LLMUsage>;
+  resolve: (usage?: LLMUsage) => void;
+  fail: (error: unknown) => void;
+} {
+  let resolveUsage!: (usage: LLMUsage) => void;
+  let settled = false;
+  const latestUsage: LLMUsage = { modelId };
+  const usage = new Promise<LLMUsage>((resolve) => {
+    resolveUsage = resolve;
+  });
+
+  const resolve = (usageValue?: LLMUsage) => {
+    if (settled) return;
+    settled = true;
+    resolveUsage(usageValue ?? latestUsage);
+  };
+
+  const fail = () => {
+    resolve(latestUsage);
+  };
+
+  return {
+    latestUsage,
+    usage,
+    resolve,
+    fail,
+  };
 }
