@@ -30,6 +30,7 @@ npm install
 ### Running the App
 
 ```bash
+cp reading-app-server/.env.example reading-app-server/.env
 export GEMINI_API_KEY=your_key_here
 export LLM_PROVIDER=gemini
 export MODEL_ID=gemini-2.5-flash-lite         # optional
@@ -52,6 +53,7 @@ Environment variables (`reading-app-server/src/config/runtime-config.ts`):
 | `KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID` | `gemini-2.5-flash-lite` | Knowledge extraction workflow model |
 | `CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID` | `gemini-2.5-flash-lite` | Chapter keywords workflow model |
 | `GEMINI_API_KEY` | `""`               | Google Gemini API key                        |
+| `OPENROUTER_API_KEY` | `""`            | OpenRouter API key when `LLM_PROVIDER=openrouter` |
 | `LLM_DEBUG`      | `0`                | When truthy, log full prompts/responses      |
 | `CACHE_TTL_MS`   | `7 days`           | TTL for in-memory response cache             |
 

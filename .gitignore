@@ -4,6 +4,8 @@ node_modules/
 # macOS
 .DS_Store
 /.VSCodeCounter
+/.env
+reading-app/.env
 reading-app-server/.env
 resource/LLM_response/
 reading-app-server/data/surrealdb/
