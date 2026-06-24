@@ -263,7 +263,7 @@ NODE
   (
     cd "$ROOT_DIR"
     eval "$env_exports"
-    node reading-app-server/scripts/delete-surreal-records.cjs --scope book --bookId "$book_id" "${dry_flag[@]}"
+    node reading-app-server/scripts/delete-surreal-records.cjs --scope book --bookId "$book_id" ${dry_flag+"${dry_flag[@]}"}
   )
 }
 

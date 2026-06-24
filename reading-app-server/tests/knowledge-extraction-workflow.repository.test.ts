@@ -209,7 +209,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       pageIndex: 0,
       sourceHash: 'hash-cache',
       chapterContentHash: 'chapter-hash-cache',
-      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.8:nonfiction',
       extraction: {
         title: 'Cached Chapter',
         summary: 'Cached page extraction still remains available in memory.',
@@ -229,8 +229,130 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       0,
       'hash-cache',
       'chapter-hash-cache',
-      'knowledge_extraction.v2.7:nonfiction',
+      'knowledge_extraction.v2.8:nonfiction',
     )?.summary).toBe('Cached page extraction still remains available in memory.');
+  });
+
+  test('truncates partial piece evidence prefixes before persisting workflow runs', async () => {
+    const persisted: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async (table: string, id: string, record: Record<string, unknown>) => {
+        persisted.push({ table, id, record });
+      },
+      putRelationRecord: async () => {},
+      selectTable: async () => [],
+    };
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    const created = repository.createOrReuseRun({
+      bookId: 'book-partial',
+      chapterId: 'chapter-partial',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge-extraction:v1:book-partial:chapter-partial:hash-1',
+      expectedSnapshotVersion: 1,
+      expectedChapterContentHash: 'hash-1',
+      requestedByUserId: undefined,
+    });
+    const longQuote = 'Q'.repeat(800);
+
+    repository.upsertPartialPieceResult(created.run.id, {
+      pieceIndex: 0,
+      pageIndex: 0,
+      pageNumber: 1,
+      sourceHash: 'piece-hash-1',
+      pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      extraction: {
+        title: 'Chapter',
+        summary: 'Summary',
+        nodes: [],
+        edges: [],
+        evidence: [{
+          id: 'ev1',
+          owner_kind: 'node',
+          owner_id: 'p1',
+          quote: longQuote,
+          pageIndex: 0,
+          pageNumber: 1,
+        }],
+      },
+    });
+    await (repository as never).pendingPersist;
+
+    const workflowPersist = persisted.find(
+      (entry) => entry.table === 'workflow_run'
+        && entry.id === created.run.id
+        && Array.isArray(entry.record.partialPieceResults),
+    );
+    const partials = workflowPersist?.record.partialPieceResults as Array<Record<string, unknown>> | undefined;
+    const extraction = partials?.[0]?.extraction as Record<string, unknown> | undefined;
+    const evidence = extraction?.evidence as Array<Record<string, unknown>> | undefined;
+    const persistedQuote = evidence?.[0]?.quote;
+
+    expect(typeof persistedQuote).toBe('string');
+    expect((persistedQuote as string).length).toBeLessThan(longQuote.length);
+    expect((persistedQuote as string).length).toBe(280);
+  });
+
+  test('retries workflow run persistence without partial piece results after HTTP 413', async () => {
+    const persisted: Array<{ table: string; id: string; record: Record<string, unknown> }> = [];
+    let workflowAttemptCount = 0;
+    const surrealStub = {
+      query: async () => [],
+      putRecord: async (table: string, id: string, record: Record<string, unknown>) => {
+        if (table === 'workflow_run') {
+          workflowAttemptCount += 1;
+          persisted.push({ table, id, record });
+          if (Array.isArray(record.partialPieceResults) && workflowAttemptCount === 2) {
+            throw new Error('SurrealDB write failed with HTTP 413: length limit exceeded');
+          }
+        }
+      },
+      putRelationRecord: async () => {},
+      selectTable: async () => [],
+    };
+    const repository = new KnowledgeExtractionWorkflowRepository(surrealStub as never);
+    const created = repository.createOrReuseRun({
+      bookId: 'book-retry',
+      chapterId: 'chapter-retry',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      idempotencyKey: 'knowledge-extraction:v1:book-retry:chapter-retry:hash-1',
+      expectedSnapshotVersion: 1,
+      expectedChapterContentHash: 'hash-1',
+      requestedByUserId: undefined,
+    });
+
+    repository.upsertPartialPieceResult(created.run.id, {
+      pieceIndex: 0,
+      pageIndex: 0,
+      pageNumber: 1,
+      sourceHash: 'piece-hash-1',
+      pageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+      extraction: {
+        title: 'Chapter',
+        summary: 'Summary',
+        nodes: [],
+        edges: [],
+        evidence: [{
+          id: 'ev1',
+          owner_kind: 'node',
+          owner_id: 'p1',
+          quote: 'Quoted evidence',
+          pageIndex: 0,
+          pageNumber: 1,
+        }],
+      },
+    });
+
+    await expect((repository as never).pendingPersist).resolves.toBeUndefined();
+    expect(workflowAttemptCount).toBe(3);
+    const retryAttempts = persisted.filter(
+      (entry) => entry.table === 'workflow_run' && entry.id === created.run.id,
+    );
+    expect(retryAttempts[0]?.record.partialPieceResults).toBeUndefined();
+    expect(retryAttempts[1]?.record.partialPieceResults).toBeDefined();
+    expect(retryAttempts[2]?.record.partialPieceResults).toBeUndefined();
   });
 
   test('loads persisted runs without progress for backward compatibility', async () => {
@@ -365,6 +487,21 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
             localId: 'person_local',
             name: 'Alice',
             normalizedName: 'alice',
+          }];
+        }
+        if (table === 'knowledge_evidence') {
+          return [{
+            recordId: 'evidence_slim',
+            bookId: 'book-slim',
+            chapterId: 'chapter-slim',
+            chapterRecordId: 'chapter_slim',
+            ownerTable: 'appears_in',
+            ownerRecordId: 'appears_slim',
+            pageIndex: 0,
+            pageNumber: 1,
+            quote: 'Alice appears here.',
+            quoteHash: 'hash',
+            createdAt: '2026-01-01T00:00:00.000Z',
           }];
         }
         if (table === 'appears_in') {
@@ -542,7 +679,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       pageIndex: 0,
       sourceHash: 'source-hash-reload',
       chapterContentHash: 'chapter-hash-reload',
-      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.8:nonfiction',
       extraction: {
         title: 'Cache Reload Chapter',
         summary: 'Persisted piece graph.',
@@ -573,7 +710,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       0,
       'source-hash-reload',
       'chapter-hash-reload',
-      'knowledge_extraction.v2.7:nonfiction',
+      'knowledge_extraction.v2.8:nonfiction',
     )).toBeNull();
   });
 
@@ -608,6 +745,188 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
     expect(snapshot.people[0]?.evidence).toEqual([
       { quote: 'Q'.repeat(280), pageIndex: 0, pageNumber: 1 },
     ]);
+  });
+
+  test('backfills missing person descriptions from relation text in chapter and global projections', async () => {
+    const repository = new KnowledgeExtractionWorkflowRepository();
+
+    await repository.upsertPageExtraction({
+      bookId: 'book-person-backfill',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Chapter One',
+      extraction: {
+        title: 'ignored',
+        summary: '',
+        people: [
+          {
+            local_id: 'p1',
+            name: 'Bourget',
+            importance: 'supporting',
+            evidence: [{ quote: 'Bourget is invoked here.', pageIndex: 0, pageNumber: 1 }],
+          },
+        ],
+        ideas: [
+          {
+            local_id: 'i1',
+            label: 'Passion-love',
+            kind: 'claim',
+            evidence: [{ quote: 'passion-love', pageIndex: 0, pageNumber: 1 }],
+          },
+        ],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [
+          {
+            local_id: 'r1',
+            from_id: 'i1',
+            from_type: 'idea',
+            to_id: 'p1',
+            to_type: 'person',
+            relation_type: 'mentions',
+            description: "Bourget's definition of love is presented as satisfactory for passion-love.",
+            evidence: [{ quote: 'Bourget defines love', pageIndex: 0, pageNumber: 1 }],
+          },
+        ],
+      },
+    });
+
+    const snapshot = await repository.buildChapterSnapshot('book-person-backfill', 'chapter-1');
+    const keyInformation = repository.buildBookKeyInformation('book-person-backfill');
+
+    expect(snapshot.people[0]?.description).toBe(
+      "Bourget's definition of love is presented as satisfactory for passion-love.",
+    );
+    expect(keyInformation.people[0]?.description).toBe(
+      "Bourget's definition of love is presented as satisfactory for passion-love.",
+    );
+  });
+
+  test('filters knowledge without evidence from chapter snapshots and book projections', async () => {
+    const repository = new KnowledgeExtractionWorkflowRepository();
+
+    await repository.upsertPageGraphExtraction({
+      bookId: 'book-evidence-coverage',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Chapter One',
+      extraction: {
+        title: 'ignored',
+        summary: 'ignored',
+        nodes: [
+          {
+            id: 'p1',
+            type: 'person',
+            label: 'Alice',
+          },
+          {
+            id: 'i1',
+            type: 'idea',
+            label: 'Freedom',
+            kind: 'claim',
+          },
+          {
+            id: 'e1',
+            type: 'event',
+            label: 'Speech',
+          },
+          {
+            id: 'n1',
+            type: 'entity',
+            label: 'City Hall',
+            entity_type: 'place',
+          },
+        ],
+        edges: [
+          {
+            id: 'r1',
+            from: 'p1',
+            to: 'e1',
+            relation_type: 'participates_in',
+          },
+          {
+            id: 'r2',
+            from: 'p1',
+            to: 'i1',
+            relation_type: 'supports',
+          },
+        ],
+        evidence: [
+          {
+            id: 'ev-p1',
+            owner_kind: 'node',
+            owner_id: 'p1',
+            quote: 'Alice gives the speech.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+          {
+            id: 'ev-e1',
+            owner_kind: 'node',
+            owner_id: 'e1',
+            quote: 'The speech begins here.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+          {
+            id: 'ev-r1',
+            owner_kind: 'edge',
+            owner_id: 'r1',
+            quote: 'Alice gives the speech.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+          {
+            id: 'ev-i1-empty',
+            owner_kind: 'node',
+            owner_id: 'i1',
+            quote: '   ',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+          {
+            id: 'ev-n1-missing-page',
+            owner_kind: 'node',
+            owner_id: 'n1',
+            quote: 'at City Hall',
+            pageIndex: 0,
+            pageNumber: undefined,
+          },
+          {
+            id: 'ev-r2',
+            owner_kind: 'edge',
+            owner_id: 'r2',
+            quote: 'Alice supports freedom.',
+            pageIndex: 0,
+            pageNumber: 1,
+          },
+        ],
+      },
+    });
+
+    const snapshot = await repository.buildChapterSnapshot('book-evidence-coverage', 'chapter-1');
+    const keyInformation = repository.buildBookKeyInformation('book-evidence-coverage');
+
+    expect(snapshot.people).toHaveLength(1);
+    expect(snapshot.people[0]?.name).toBe('Alice');
+    expect(snapshot.events).toHaveLength(1);
+    expect(snapshot.events[0]?.label).toBe('Speech');
+    expect(snapshot.ideas).toHaveLength(0);
+    expect(snapshot.entities).toHaveLength(0);
+    expect(snapshot.relations).toHaveLength(1);
+    expect(snapshot.relations[0]).toMatchObject({
+      relation_type: 'participates_in',
+      evidence: [{ quote: 'Alice gives the speech.', pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(keyInformation.people).toHaveLength(1);
+    expect(keyInformation.events).toHaveLength(1);
+    expect(keyInformation.ideas).toHaveLength(0);
+    expect(keyInformation.entities).toHaveLength(0);
+    expect(keyInformation.relations).toHaveLength(1);
+    expect(keyInformation.links).toHaveLength(2);
+    expect(new Set(keyInformation.links.map((link) => link.globalType))).toEqual(new Set(['event', 'person']));
   });
 
   test('creates a fresh run when the previous idempotent run failed or went stale', () => {

@@ -19,6 +19,11 @@ Your task is to extract the most important structured knowledge from one canonic
 - Every returned evidence object must be anchored to the current page reference supplied in the prompt.
 - Do not output database identifiers, table names, SQL, SurrealQL, or storage instructions.
 - Do not embed evidence inside nodes or edges; evidence must be returned only in the top-level `evidence` array.
+- Every returned node must have at least one matching evidence item in the top-level `evidence` array with `owner_kind = "node"` and `owner_id` equal to that node's `id`.
+- Every returned edge must have at least one matching evidence item in the top-level `evidence` array with `owner_kind = "edge"` and `owner_id` equal to that edge's `id`.
+- If you cannot support a node or edge with a direct quote from the primary evidence page, omit that node or edge entirely.
+- The `evidence` array is part of the required output format, not optional decoration.
+- Do not return orphan evidence items whose `owner_id` does not correspond to a returned node or edge.
 - Do not output structural edges such as `appears_in` or `part_of`.
 - Prefer fewer, more important items over many shallow items.
 - Keep labels concise, canonical, and directly supported by the current page.
@@ -40,6 +45,7 @@ Your task is to extract the most important structured knowledge from one canonic
 - Redundant restatements of the same event
 - Facts inferable only from neighboring pages or summaries
 - Labels that merely paraphrase a quote instead of naming an abstraction
+- Any node or edge that cannot be backed by a direct quote and page reference from the primary evidence page
 
 ## Return JSON with this shape:
 {
@@ -108,3 +114,8 @@ Your task is to extract the most important structured knowledge from one canonic
     }
   ]
 }
+
+## Evidence checklist before you answer
+- For every node id in `nodes`, confirm there is at least one `evidence` item with `owner_kind = "node"` and matching `owner_id`.
+- For every edge id in `edges`, confirm there is at least one `evidence` item with `owner_kind = "edge"` and matching `owner_id`.
+- If any node or edge fails that check, delete it before returning JSON.

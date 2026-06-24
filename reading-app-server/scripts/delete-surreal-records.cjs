@@ -11,6 +11,7 @@ const NODE_TABLE_BY_TYPE = {
   entity: 'entity',
   event: 'event',
 };
+const DELETE_RECORD_ID_BATCH_SIZE = 25;
 
 function loadEnvFiles() {
   const envPaths = [
@@ -273,10 +274,26 @@ function tableForNodeType(nodeType) {
   return NODE_TABLE_BY_TYPE[nodeType] || null;
 }
 
-function buildDeleteByRecordIds(table, field, ids) {
-  const whereClause = buildAnyEquals(field, ids);
-  if (!whereClause) return null;
-  return `DELETE ${table} WHERE ${whereClause};`;
+function chunkArray(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function buildDeleteStatementsByRecordIds(table, field, ids) {
+  const uniqueIds = Array.from(new Set(
+    ids.filter((id) => typeof id === 'string' && id.trim().length > 0),
+  ));
+  if (uniqueIds.length === 0) return [];
+
+  return chunkArray(uniqueIds, DELETE_RECORD_ID_BATCH_SIZE)
+    .map((batch) => {
+      const whereClause = buildAnyEquals(field, batch);
+      return whereClause ? `DELETE ${table} WHERE ${whereClause};` : null;
+    })
+    .filter(Boolean);
 }
 
 function buildScopeDryRunSummary(args) {
@@ -388,26 +405,26 @@ async function buildScopedDeletionPlan(config, args) {
 
   const statements = [];
 
-  const relationDelete = buildDeleteByRecordIds(
+  const relationDeletes = buildDeleteStatementsByRecordIds(
     'related_to',
     'recordId',
     relations.map((row) => row.recordId),
   );
-  if (relationDelete) statements.push(relationDelete);
+  statements.push(...relationDeletes);
 
-  const appearanceDelete = buildDeleteByRecordIds(
+  const appearanceDeletes = buildDeleteStatementsByRecordIds(
     'appears_in',
     'recordId',
     appearances.map((row) => row.recordId),
   );
-  if (appearanceDelete) statements.push(appearanceDelete);
+  statements.push(...appearanceDeletes);
 
-  const partOfDelete = buildDeleteByRecordIds(
+  const partOfDeletes = buildDeleteStatementsByRecordIds(
     'part_of',
     'recordId',
     partOfEdges.map((row) => row.recordId),
   );
-  if (partOfDelete) statements.push(partOfDelete);
+  statements.push(...partOfDeletes);
 
   if (workflowRuns.length > 0) {
     statements.push(`DELETE workflow_run WHERE ${chapterWhere};`);
@@ -422,19 +439,18 @@ async function buildScopedDeletionPlan(config, args) {
     statements.push(`DELETE knowledge_evidence WHERE ${chapterWhere};`);
   }
 
-  const chapterDelete = buildDeleteByRecordIds(
+  const chapterDeletes = buildDeleteStatementsByRecordIds(
     'chapter',
     'recordId',
     chapters.map((row) => row.recordId),
   );
-  if (chapterDelete) statements.push(chapterDelete);
+  statements.push(...chapterDeletes);
 
-  const bookDelete = buildDeleteByRecordIds('book', 'recordId', bookRecordIdsToDelete);
-  if (bookDelete) statements.push(bookDelete);
+  const bookDeletes = buildDeleteStatementsByRecordIds('book', 'recordId', bookRecordIdsToDelete);
+  statements.push(...bookDeletes);
 
   for (const [table, ids] of Object.entries(orphanNodeIdsByTable)) {
-    const deleteSql = buildDeleteByRecordIds(table, 'recordId', Array.from(ids));
-    if (deleteSql) statements.push(deleteSql);
+    statements.push(...buildDeleteStatementsByRecordIds(table, 'recordId', Array.from(ids)));
   }
 
   return {

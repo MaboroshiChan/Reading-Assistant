@@ -68,7 +68,7 @@ import type {
 } from './knowledge-extraction-workflow.types';
 import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
-const PROMPT_VERSION = 'knowledge_extraction.v2.7';
+const PROMPT_VERSION = 'knowledge_extraction.v2.8';
 const FICTION_PROMPT_PATH = resolvePromptPath('knowledge_extraction_fiction.txt');
 const NON_FICTION_PROMPT_PATH = resolvePromptPath('knowledge_extraction_nonfiction.txt');
 
@@ -162,6 +162,16 @@ const asBoolean = (value: unknown): boolean | undefined => {
 
 const asNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const normalizeExcerptText = (value: string): string =>
+  value
+    .normalize('NFKC')
+    .replace(/[\u2018\u2019]/g, '\'')
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 
 const clampProgressPercent = (value: number): number =>
   Math.min(100, Math.max(0, Math.round(value)));
@@ -1345,11 +1355,17 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
     try {
       const parsed = extractJsonFromText(text);
+      const pageTextByPageIndex = this.buildPageTextByPageIndex(
+        input.bookId,
+        input.chapterId,
+        input.piece.pageRefs,
+      );
       return this.sanitizeKnowledgeExtractionGraph(parsed, {
         chapterId: input.chapterId,
         chapterTitle: input.chapterTitle,
         chapterText: input.chapterText,
         allowedPageRefs: input.piece.pageRefs,
+        pageTextByPageIndex,
         promptVariant,
         memoryContext: input.memoryContext,
         primaryPageText: input.piece.rawText,
@@ -1471,6 +1487,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       chapterTitle?: string;
       chapterText?: string;
       allowedPageRefs: KnowledgePageRef[];
+      pageTextByPageIndex?: ReadonlyMap<number, string>;
       promptVariant?: KnowledgePromptVariant;
       memoryContext?: KnowledgeMemoryContext;
       primaryPageText?: string;
@@ -1504,6 +1521,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     const explicitEvidence = this.sanitizeGraphEvidence(
       record.evidence,
       input.allowedPageRefs,
+      input.pageTextByPageIndex,
       nodesById,
       edgeIds,
       nodeIdRedirects,
@@ -1511,6 +1529,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     const embeddedEvidence = this.sanitizeEmbeddedGraphEvidence(
       record,
       input.allowedPageRefs,
+      input.pageTextByPageIndex,
       nodesById,
       edgeIds,
       nodeIdRedirects,
@@ -1532,21 +1551,22 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       chapterTitle?: string;
       chapterText: string;
       allowedPageRefs: KnowledgePageRef[];
+      pageTextByPageIndex?: ReadonlyMap<number, string>;
       promptVariant?: KnowledgePromptVariant;
     },
   ): AnalyzeKnowledgeExtractionData {
     const record = isPlainObject(raw) ? raw : {};
     if (!Array.isArray(record.nodes) && !Array.isArray(record.edges) && !Array.isArray(record.evidence)) {
-      return {
+      return this.enforceEvidenceCoverage({
         title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
         summary: asString(record.summary) ?? this.summarize(input.chapterText, 240),
-        people: this.sanitizePeople(record.people, input.allowedPageRefs) ?? [],
-        ideas: this.sanitizeIdeas(record.ideas, input.allowedPageRefs, input.promptVariant) ?? [],
-        events: this.sanitizeEvents(record.events, input.allowedPageRefs) ?? [],
-        entities: this.sanitizeEntities(record.entities, input.allowedPageRefs) ?? [],
-        themes: this.sanitizeThemes(record.themes, input.allowedPageRefs) ?? [],
-        relations: this.sanitizeRelations(record.relations, input.allowedPageRefs) ?? [],
-      };
+        people: this.sanitizePeople(record.people, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+        ideas: this.sanitizeIdeas(record.ideas, input.allowedPageRefs, input.pageTextByPageIndex, input.promptVariant) ?? [],
+        events: this.sanitizeEvents(record.events, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+        entities: this.sanitizeEntities(record.entities, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+        themes: this.sanitizeThemes(record.themes, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+        relations: this.sanitizeRelations(record.relations, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+      });
     }
 
     const graph = this.sanitizeKnowledgeExtractionGraph(raw, {
@@ -1554,12 +1574,13 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       chapterTitle: input.chapterTitle,
       chapterText: input.chapterText,
       allowedPageRefs: input.allowedPageRefs,
+      pageTextByPageIndex: input.pageTextByPageIndex,
       promptVariant: input.promptVariant,
     });
-    return this.graphToKnowledgeExtractionData({
+    return this.enforceEvidenceCoverage(this.graphToKnowledgeExtractionData({
       ...graph,
       summary: graph.summary || this.summarize(input.chapterText, 240),
-    });
+    }));
   }
 
   private sanitizeStringArray(value: unknown): string[] | undefined {
@@ -1573,19 +1594,23 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
   }
 
-  private sanitizeEvidence(value: unknown, allowedPageRefs: KnowledgePageRef[]): KnowledgeEvidence[] | undefined {
+  private sanitizeEvidence(
+    value: unknown,
+    allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex?: ReadonlyMap<number, string>,
+  ): KnowledgeEvidence[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const allowedPageMap = new Map(
       allowedPageRefs.map((pageRef) => [pageRef.pageIndex, pageRef.pageNumber]),
     );
-    const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
     const evidence = value
       .map((item): KnowledgeEvidence | null => {
         if (!isPlainObject(item)) return null;
         const quote = asString(item.quote);
         if (!quote) return null;
-        const pageIndex = asNumber(item.pageIndex) ?? singleAllowedPage?.pageIndex;
-        const pageNumber = asNumber(item.pageNumber) ?? singleAllowedPage?.pageNumber;
+        const inferredPageRef = this.inferEvidencePageRef(quote, allowedPageRefs, pageTextByPageIndex);
+        const pageIndex = asNumber(item.pageIndex) ?? inferredPageRef?.pageIndex;
+        const pageNumber = asNumber(item.pageNumber) ?? inferredPageRef?.pageNumber;
         if (pageIndex === undefined || pageNumber === undefined) return null;
         if (allowedPageMap.get(pageIndex) !== pageNumber) return null;
         return {
@@ -1774,13 +1799,13 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizeGraphEvidence(
     value: unknown,
     allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex: ReadonlyMap<number, string> | undefined,
     nodesById: Map<string, KnowledgeGraphNode>,
     edgeIds: Set<string>,
     nodeIdRedirects: Map<string, string> = new Map(),
   ): KnowledgeGraphEvidence[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const allowedPageMap = new Map(allowedPageRefs.map((pageRef) => [pageRef.pageIndex, pageRef.pageNumber]));
-    const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
     const evidence: KnowledgeGraphEvidence[] = [];
     const seenIds = new Set<string>();
 
@@ -1795,8 +1820,9 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       if (ownerKind !== 'node' && ownerKind !== 'edge') continue;
       if (ownerKind === 'node' && !nodesById.has(ownerId)) continue;
       if (ownerKind === 'edge' && !edgeIds.has(ownerId)) continue;
-      const pageIndex = asNumber(item.pageIndex) ?? singleAllowedPage?.pageIndex;
-      const pageNumber = asNumber(item.pageNumber) ?? singleAllowedPage?.pageNumber;
+      const inferredPageRef = this.inferEvidencePageRef(quote, allowedPageRefs, pageTextByPageIndex);
+      const pageIndex = asNumber(item.pageIndex) ?? inferredPageRef?.pageIndex;
+      const pageNumber = asNumber(item.pageNumber) ?? inferredPageRef?.pageNumber;
       if (pageIndex === undefined || pageNumber === undefined) continue;
       if (allowedPageMap.get(pageIndex) !== pageNumber) continue;
       const id = asString(item.id) ?? `ev${index + 1}`;
@@ -1818,6 +1844,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizeEmbeddedGraphEvidence(
     record: Record<string, unknown>,
     allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex: ReadonlyMap<number, string> | undefined,
     nodesById: Map<string, KnowledgeGraphNode>,
     edgeIds: Set<string>,
     nodeIdRedirects: Map<string, string> = new Map(),
@@ -1829,7 +1856,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         if (!isPlainObject(item)) continue;
         const ownerId = this.rewriteGraphNodeId(asString(item.id), nodeIdRedirects);
         if (!ownerId || !nodesById.has(ownerId)) continue;
-        const sanitized = this.sanitizeEvidence(item.evidence, allowedPageRefs);
+        const sanitized = this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex);
         for (const [evidenceIndex, evidenceItem] of (sanitized ?? []).entries()) {
           evidence.push({
             id: `embedded-node-${index + 1}-${evidenceIndex + 1}`,
@@ -1848,7 +1875,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
         if (!isPlainObject(item)) continue;
         const ownerId = asString(item.id) ?? `r${index + 1}`;
         if (!edgeIds.has(ownerId)) continue;
-        const sanitized = this.sanitizeEvidence(item.evidence, allowedPageRefs);
+        const sanitized = this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex);
         for (const [evidenceIndex, evidenceItem] of (sanitized ?? []).entries()) {
           evidence.push({
             id: `embedded-edge-${index + 1}-${evidenceIndex + 1}`,
@@ -2846,6 +2873,43 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     };
   }
 
+  private enforceEvidenceCoverage(
+    data: AnalyzeKnowledgeExtractionData,
+  ): AnalyzeKnowledgeExtractionData {
+    const people = data.people.filter((person) => this.hasRequiredEvidence(person.evidence));
+    const ideas = data.ideas.filter((idea) => this.hasRequiredEvidence(idea.evidence));
+    const events = data.events.filter((event) => this.hasRequiredEvidence(event.evidence));
+    const entities = data.entities.filter((entity) => this.hasRequiredEvidence(entity.evidence));
+    const themes = data.themes.filter((theme) => this.hasRequiredEvidence(theme.evidence));
+
+    const keptNodeIds = new Set<string>([
+      ...people.map((person) => person.local_id),
+      ...ideas.map((idea) => idea.local_id),
+      ...events.map((event) => event.local_id),
+      ...entities.map((entity) => entity.local_id),
+      ...themes.map((theme) => theme.local_id),
+    ]);
+
+    const relations = data.relations.filter((relation) =>
+      this.hasRequiredEvidence(relation.evidence)
+      && keptNodeIds.has(relation.from_id)
+      && keptNodeIds.has(relation.to_id));
+
+    return {
+      ...data,
+      people,
+      ideas,
+      events,
+      entities,
+      themes,
+      relations,
+    };
+  }
+
+  private hasRequiredEvidence(evidence: KnowledgeEvidence[] | undefined): boolean {
+    return Array.isArray(evidence) && evidence.length > 0;
+  }
+
   private buildMemoryContext(
     snapshot: AnalyzeKnowledgeExtractionData,
     currentPageIndex?: number,
@@ -3015,6 +3079,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizePeople(
     value: unknown,
     allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex?: ReadonlyMap<number, string>,
   ): KnowledgePerson[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const people = value
@@ -3035,7 +3100,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           description: asString(item.description),
           roles: this.sanitizeStringArray(item.roles),
           traits: this.sanitizeStringArray(item.traits),
-          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
         };
       })
       .filter((item): item is KnowledgePerson => item !== null);
@@ -3045,6 +3110,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizeIdeas(
     value: unknown,
     allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex: ReadonlyMap<number, string> | undefined,
     promptVariant: KnowledgePromptVariant = 'nonfiction',
   ): KnowledgeIdea[] | undefined {
     if (!Array.isArray(value)) return undefined;
@@ -3060,7 +3126,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           label,
           description: asString(item.description),
           kind: normalizedKind,
-          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
         };
         if (!this.shouldKeepIdea(idea, promptVariant)) return null;
         return idea;
@@ -3102,6 +3168,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizeEvents(
     value: unknown,
     allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex?: ReadonlyMap<number, string>,
   ): KnowledgeEvent[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const events = value
@@ -3116,7 +3183,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           participant_local_ids: this.sanitizeStringArray(item.participant_local_ids),
           time_hint: asString(item.time_hint),
           place_hint: asString(item.place_hint),
-          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
         };
       })
       .filter((item): item is KnowledgeEvent => item !== null);
@@ -3126,6 +3193,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizeEntities(
     value: unknown,
     allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex?: ReadonlyMap<number, string>,
   ): KnowledgeEntity[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const entities = value
@@ -3139,7 +3207,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           label,
           type: type as KnowledgeEntity['type'],
           description: asString(item.description),
-          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
         };
       })
       .filter((item): item is KnowledgeEntity => item !== null);
@@ -3149,6 +3217,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizeThemes(
     value: unknown,
     allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex?: ReadonlyMap<number, string>,
   ): KnowledgeTheme[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const themes = value
@@ -3162,7 +3231,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
           label,
           strength: typeof strength === 'number' ? Math.max(0, Math.min(1, strength)) : undefined,
           description: asString(item.description),
-          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
         };
       })
       .filter((item): item is KnowledgeTheme => item !== null);
@@ -3172,6 +3241,7 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
   private sanitizeRelations(
     value: unknown,
     allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex?: ReadonlyMap<number, string>,
   ): KnowledgeRelation[] | undefined {
     if (!Array.isArray(value)) return undefined;
     const relations = value
@@ -3205,11 +3275,46 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
               : 'related_to',
           description: asString(item.description),
           confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
-          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+          evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
         };
       })
       .filter((item): item is KnowledgeRelation => item !== null);
     return relations.length ? relations : undefined;
+  }
+
+  private buildPageTextByPageIndex(
+    bookId: string,
+    chapterId: string,
+    allowedPageRefs: KnowledgePageRef[],
+  ): ReadonlyMap<number, string> {
+    const pageTextByPageIndex = new Map<number, string>();
+    for (const pageRef of allowedPageRefs) {
+      const page = this.bookIngestionRepository.getPage(bookId, chapterId, pageRef.pageIndex);
+      const pageText = asString(page?.pageTextMaterialized);
+      if (pageText) {
+        pageTextByPageIndex.set(pageRef.pageIndex, pageText);
+      }
+    }
+    return pageTextByPageIndex;
+  }
+
+  private inferEvidencePageRef(
+    quote: string,
+    allowedPageRefs: KnowledgePageRef[],
+    pageTextByPageIndex?: ReadonlyMap<number, string>,
+  ): KnowledgePageRef | undefined {
+    const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
+    if (singleAllowedPage) return singleAllowedPage;
+    if (!pageTextByPageIndex || pageTextByPageIndex.size === 0) return undefined;
+
+    const normalizedQuote = normalizeExcerptText(quote);
+    if (!normalizedQuote) return undefined;
+
+    const matchingPageRefs = allowedPageRefs.filter((pageRef) => {
+      const pageText = pageTextByPageIndex.get(pageRef.pageIndex);
+      return pageText ? normalizeExcerptText(pageText).includes(normalizedQuote) : false;
+    });
+    return matchingPageRefs.length === 1 ? matchingPageRefs[0] : undefined;
   }
 
   private createPageRef(pageIndex: number, pageNumber: number): KnowledgePageRef {

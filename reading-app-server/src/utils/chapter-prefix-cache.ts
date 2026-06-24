@@ -1,7 +1,7 @@
 import type { LLMPrefixCacheOptions } from '../../services/llmService';
 
 export const SHARED_CHAPTER_PREFIX_VERSION = 'chapter_context.v1';
-const GEMINI_CACHE_TTL_SECONDS = 3600;
+const GEMINI_CACHE_TTL_SECONDS = 1800;
 
 export type SharedChapterPrefixMetadata = {
   title?: string;

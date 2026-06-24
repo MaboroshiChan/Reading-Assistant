@@ -1,0 +1,4 @@
+interface:
+  display_name: "Chapter People Validation"
+  short_description: "Audit or rerun chapter people coverage"
+  default_prompt: "Use $chapter-person-description-audit to either audit chapter people descriptions in SurrealDB or run a true knowledge extraction workflow rerun before auditing."

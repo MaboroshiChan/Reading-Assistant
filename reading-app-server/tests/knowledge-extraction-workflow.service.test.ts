@@ -322,7 +322,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(seenPageIndexes).toEqual([0, 2]);
     expect(pageCacheSpy).toHaveBeenCalledTimes(2);
     expect(pageCacheSpy).toHaveBeenCalledWith(expect.objectContaining({
-      promptVersion: 'knowledge_extraction.v2.7:fiction',
+      promptVersion: 'knowledge_extraction.v2.8:fiction',
     }));
     expect(replaceSpy).toHaveBeenCalledTimes(1);
 
@@ -1034,7 +1034,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageIndex: 1,
       sourceHash: 'hash-1',
       chapterContentHash: 'chapter-hash-5',
-      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.8:nonfiction',
       extraction: first,
     });
     const second = await (service as never).generateKnowledgeExtractionForPiece({
@@ -1211,7 +1211,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageIndex: 1,
       sourceHash: 'hash-1',
       chapterContentHash: 'chapter-hash-old',
-      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.8:nonfiction',
       extraction: {
         title: 'Stale',
         summary: 'stale',
@@ -1287,7 +1287,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageIndex: 0,
       sourceHash: 'same-source-hash',
       chapterContentHash: 'same-chapter-hash',
-      promptVersion: 'knowledge_extraction.v2.7:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.8:nonfiction',
       extraction: {
         title: 'Stale nonfiction cache',
         summary: 'stale',
@@ -1998,6 +1998,235 @@ describe('KnowledgeExtractionWorkflowService', () => {
     ]);
   });
 
+  test('infers missing page numbers when an excerpt uniquely matches one page in a multi-page chunk', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-multi-page-inference',
+      chapterId: 'chapter-multi-page-inference',
+      chapterIndex: 1,
+      chapterTitle: 'Multi Page Inference',
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: {
+        '0': 'Steven Levitt opens the introduction with a challenge to conventional thinking.',
+      },
+    });
+    bookRepository.upsertPageFragment({
+      bookId: 'book-multi-page-inference',
+      chapterId: 'chapter-multi-page-inference',
+      chapterIndex: 1,
+      chapterTitle: 'Multi Page Inference',
+      pageIndex: 1,
+      sourceHash: 'hash-page-1',
+      pageParagraphs: {
+        '0': 'Pierre Bourget appears in a discussion of naming trends.',
+      },
+    });
+
+    vi.spyOn(llmService, 'createLLMClient').mockReturnValue({
+      complete: vi.fn(),
+      json: vi.fn(async () => ({
+        data: (async function* () {
+          yield JSON.stringify({
+            title: 'Multi Page Inference',
+            summary: 'summary',
+            nodes: [
+              { id: 'p1', type: 'person', label: 'Pierre Bourget' },
+            ],
+            edges: [],
+            evidence: [
+              {
+                id: 'ev1',
+                owner_kind: 'node',
+                owner_id: 'p1',
+                quote: 'Pierre Bourget appears in a discussion of naming trends.',
+              },
+            ],
+          });
+        })(),
+        usage: Promise.resolve({}),
+      })),
+    } as never);
+
+    const result = await (service as never).generateKnowledgeExtractionForPiece({
+      bookId: 'book-multi-page-inference',
+      chapterId: 'chapter-multi-page-inference',
+      chapterIndex: 1,
+      chapterTitle: 'Multi Page Inference',
+      chapterText: 'Steven Levitt opens the introduction with a challenge to conventional thinking.\n\nPierre Bourget appears in a discussion of naming trends.',
+      chapterContentHash: 'chapter-hash-multi-page-inference',
+      piece: {
+        pageIndex: 0,
+        pageNumber: 1,
+        rawText: 'Steven Levitt opens the introduction with a challenge to conventional thinking.\n\nPierre Bourget appears in a discussion of naming trends.',
+        sourceHash: 'hash-piece-multi-page-inference',
+        pieceIndex: 0,
+        totalPieces: 1,
+        pageRefs: [
+          { pageIndex: 0, pageNumber: 1 },
+          { pageIndex: 1, pageNumber: 2 },
+        ],
+      },
+      bookContext: bookContextService.buildBookContextBundle('book-multi-page-inference', 'chapter-multi-page-inference'),
+      chapterContext: bookContextService.buildChapterContextBundle('book-multi-page-inference', 'chapter-multi-page-inference'),
+      pageWindow: {
+        previous: undefined,
+        current: {
+          pageIndex: 0,
+          sourceHash: 'hash-page-0',
+          text: 'Steven Levitt opens the introduction with a challenge to conventional thinking.',
+        },
+        next: {
+          pageIndex: 1,
+          sourceHash: 'hash-page-1',
+          text: 'Pierre Bourget appears in a discussion of naming trends.',
+        },
+      },
+      memoryContext: {
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+      },
+    });
+
+    expect(result.evidence).toEqual([
+      expect.objectContaining({
+        owner_kind: 'node',
+        owner_id: 'p1',
+        quote: 'Pierre Bourget appears in a discussion of naming trends.',
+        pageIndex: 1,
+        pageNumber: 2,
+      }),
+    ]);
+  });
+
+  test('does not infer a page number when the same excerpt appears on multiple allowed pages', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Ambiguous Excerpt',
+      summary: 'summary',
+      people: [
+        {
+          local_id: 'p1',
+          name: 'Alice',
+          evidence: [{ quote: 'Repeated line.' }],
+        },
+      ],
+    }, {
+      chapterId: 'chapter-ambiguous-excerpt',
+      chapterTitle: 'Ambiguous Excerpt',
+      chapterText: 'Repeated line.\n\nRepeated line.',
+      allowedPageRefs: [
+        { pageIndex: 0, pageNumber: 1 },
+        { pageIndex: 1, pageNumber: 2 },
+      ],
+      pageTextByPageIndex: new Map([
+        [0, 'Repeated line.'],
+        [1, 'Repeated line.'],
+      ]),
+    });
+
+    expect(result.people).toEqual([]);
+  });
+
+  test('drops legacy-format knowledge items that do not carry evidence', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Evidence Required',
+      summary: 'summary',
+      people: [
+        {
+          local_id: 'p1',
+          name: 'Alice',
+          evidence: [{ quote: 'Alice speaks.', pageIndex: 0, pageNumber: 1 }],
+        },
+        {
+          local_id: 'p2',
+          name: 'Bob',
+        },
+      ],
+      ideas: [
+        {
+          local_id: 'i1',
+          label: 'A supported idea',
+          kind: 'principle',
+          evidence: [{ quote: 'A supported idea.', pageIndex: 0, pageNumber: 1 }],
+        },
+        {
+          local_id: 'i2',
+          label: 'An unsupported idea',
+          kind: 'principle',
+        },
+      ],
+      relations: [
+        {
+          local_id: 'r1',
+          from_id: 'p1',
+          from_type: 'person',
+          to_id: 'i1',
+          to_type: 'idea',
+          relation_type: 'supports',
+          evidence: [{ quote: 'Alice supports the idea.', pageIndex: 0, pageNumber: 1 }],
+        },
+        {
+          local_id: 'r2',
+          from_id: 'p2',
+          from_type: 'person',
+          to_id: 'i2',
+          to_type: 'idea',
+          relation_type: 'supports',
+          evidence: [{ quote: 'Bob supports the idea.', pageIndex: 0, pageNumber: 1 }],
+        },
+        {
+          local_id: 'r3',
+          from_id: 'p1',
+          from_type: 'person',
+          to_id: 'i1',
+          to_type: 'idea',
+          relation_type: 'supports',
+        },
+      ],
+    }, {
+      chapterId: 'chapter-evidence-required',
+      chapterTitle: 'Evidence Required',
+      chapterText: 'Alice speaks. A supported idea. Alice supports the idea.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.people.map((person: { local_id: string }) => person.local_id)).toEqual(['p1']);
+    expect(result.ideas.map((idea: { local_id: string }) => idea.local_id)).toEqual(['i1']);
+    expect(result.relations.map((relation: { local_id: string }) => relation.local_id)).toEqual(['r1']);
+  });
+
   test('keeps fiction ideas even when nonfiction filters would remove them', async () => {
     const bookRepository = await createBookRepository();
     const workflowRepository = new KnowledgeExtractionWorkflowRepository();
@@ -2095,7 +2324,16 @@ describe('KnowledgeExtractionWorkflowService', () => {
           description: 'Low-signal abstract-to-theme edge.',
         },
       ],
-      evidence: [],
+      evidence: [
+        { id: 'ev1', owner_kind: 'node', owner_id: 'i1', quote: 'Campaign finance incentives matter.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev2', owner_kind: 'node', owner_id: 'e1', quote: 'Political campaigns illustrate campaign finance incentives.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev3', owner_kind: 'node', owner_id: 'p1', quote: 'The example occurs in the United States.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev4', owner_kind: 'node', owner_id: 'ev1', quote: 'Crime wave predictions appear here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev5', owner_kind: 'edge', owner_id: 'r1', quote: 'Political campaigns illustrate campaign finance incentives.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev6', owner_kind: 'edge', owner_id: 'r2', quote: 'Political campaigns support campaign finance incentives.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev7', owner_kind: 'edge', owner_id: 'r3', quote: 'Political campaigns oppose campaign finance incentives.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev8', owner_kind: 'edge', owner_id: 'r4', quote: 'Crime wave predictions occur in the United States.', pageIndex: 0, pageNumber: 1 },
+      ],
     }, {
       chapterId: 'chapter-direction-rules',
       chapterTitle: 'Direction Rules',
@@ -2130,6 +2368,79 @@ describe('KnowledgeExtractionWorkflowService', () => {
       }),
     ]));
     expect(result.relations.find((relation) => relation.local_id === 'r5')).toBeUndefined();
+  });
+
+  test('drops graph-format nodes and edges that lack matching evidence coverage', async () => {
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    const result = (service as never).sanitizeKnowledgeExtraction({
+      title: 'Graph Evidence Coverage',
+      summary: 'summary',
+      nodes: [
+        { id: 'p1', type: 'person', label: 'Alice' },
+        { id: 'p2', type: 'person', label: 'Bob' },
+        { id: 'i1', type: 'idea', label: 'Supported idea', kind: 'principle' },
+      ],
+      edges: [
+        {
+          id: 'r1',
+          from: 'p1',
+          to: 'i1',
+          relation_type: 'supports',
+          description: 'Alice supports the idea.',
+        },
+        {
+          id: 'r2',
+          from: 'p2',
+          to: 'i1',
+          relation_type: 'supports',
+          description: 'Bob supports the idea.',
+        },
+      ],
+      evidence: [
+        {
+          id: 'ev1',
+          owner_kind: 'node',
+          owner_id: 'p1',
+          quote: 'Alice speaks.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
+        {
+          id: 'ev2',
+          owner_kind: 'node',
+          owner_id: 'i1',
+          quote: 'The supported idea is stated here.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
+        {
+          id: 'ev3',
+          owner_kind: 'edge',
+          owner_id: 'r1',
+          quote: 'Alice supports the idea.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
+      ],
+    }, {
+      chapterId: 'chapter-graph-evidence-coverage',
+      chapterTitle: 'Graph Evidence Coverage',
+      chapterText: 'Alice speaks. The supported idea is stated here. Alice supports the idea.',
+      allowedPageRefs: [{ pageIndex: 0, pageNumber: 1 }],
+    });
+
+    expect(result.people.map((person: { local_id: string }) => person.local_id)).toEqual(['p1']);
+    expect(result.ideas.map((idea: { local_id: string }) => idea.local_id)).toEqual(['i1']);
+    expect(result.relations.map((relation: { local_id: string }) => relation.local_id)).toEqual(['r1']);
   });
 
   test('rewrites vague graph relations into more specific semantics', async () => {
@@ -2182,7 +2493,16 @@ describe('KnowledgeExtractionWorkflowService', () => {
           description: 'illustrated by the spending example',
         },
       ],
-      evidence: [],
+      evidence: [
+        { id: 'ev1', owner_kind: 'node', owner_id: 'p1', quote: 'Robert Heilbroner wrote The Worldly Philosophers.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev2', owner_kind: 'node', owner_id: 'n1', quote: 'The Worldly Philosophers is named here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev3', owner_kind: 'node', owner_id: 'i1', quote: 'Economics is a toolkit.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev4', owner_kind: 'node', owner_id: 'e1', quote: 'The spending example appears here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev5', owner_kind: 'edge', owner_id: 'r1', quote: 'Robert Heilbroner wrote The Worldly Philosophers.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev6', owner_kind: 'edge', owner_id: 'r2', quote: 'Robert Heilbroner argued that economics is a toolkit.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev7', owner_kind: 'edge', owner_id: 'r3', quote: 'Robert Heilbroner wrote about economics.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev8', owner_kind: 'edge', owner_id: 'r4', quote: 'The spending example illustrated the point.', pageIndex: 0, pageNumber: 1 },
+      ],
     }, {
       chapterId: 'chapter-semantic-rewrites',
       chapterTitle: 'Semantic Rewrites',
@@ -2230,7 +2550,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
         { id: 'p1', type: 'person', label: 'Forbes' },
         { id: 'p2', type: 'person', label: 'Huffington' },
         { id: 'p3', type: 'person', label: 'Golisano', aliases: ['Michael Huffington', 'Steve Forbes', 'Golisano'] },
-        { id: 'n1', type: 'entity', label: 'Classical economics', entity_type: 'other' },
+        { id: 'n1', type: 'entity', label: 'Huffington Institute', entity_type: 'organization' },
         { id: 'i1', type: 'idea', label: 'Campaign spending and voter appeal', kind: 'principle' },
       ],
       edges: [
@@ -2246,7 +2566,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
           from: 'p2',
           to: 'n1',
           relation_type: 'authored',
-          description: 'founder of a political tradition',
+          description: 'created the Huffington Institute',
         },
         {
           id: 'r3',
@@ -2505,6 +2825,22 @@ describe('KnowledgeExtractionWorkflowService', () => {
           pageIndex: 0,
           pageNumber: 1,
         },
+        {
+          id: 'ev2',
+          owner_kind: 'node',
+          owner_id: 'e1',
+          quote: 'The election example appears on this page.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
+        {
+          id: 'ev3',
+          owner_kind: 'edge',
+          owner_id: 'r1',
+          quote: 'The event illustrates the correlation point.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
       ],
     }, {
       chapterId: 'chapter-idea-dedupe',
@@ -2584,6 +2920,22 @@ describe('KnowledgeExtractionWorkflowService', () => {
           owner_kind: 'node',
           owner_id: 'n1',
           quote: 'Real-estate agents benefit from more transactions.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
+        {
+          id: 'ev2',
+          owner_kind: 'node',
+          owner_id: 'e1',
+          quote: 'The housing market example appears here.',
+          pageIndex: 0,
+          pageNumber: 1,
+        },
+        {
+          id: 'ev3',
+          owner_kind: 'edge',
+          owner_id: 'r1',
+          quote: 'The example illustrates real-estate agent incentives.',
           pageIndex: 0,
           pageNumber: 1,
         },
@@ -2747,7 +3099,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
           type: 'entity',
           label: 'Classical economics',
           entity_type: 'place',
-          description: 'A school of thought associated with Adam Smith.',
+          description: 'An economic tradition associated with Adam Smith.',
         },
         {
           id: 'n2',
@@ -2778,7 +3130,13 @@ describe('KnowledgeExtractionWorkflowService', () => {
           description: 'The amount spent on chewing gum is used to contextualize campaign finance.',
         },
       ],
-      evidence: [],
+      evidence: [
+        { id: 'ev1', owner_kind: 'node', owner_id: 'p1', quote: 'Adam Smith founded classical economics.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev2', owner_kind: 'node', owner_id: 'n1', quote: 'Classical economics is named here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev3', owner_kind: 'node', owner_id: 'n2', quote: 'Campaign finance is discussed here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev4', owner_kind: 'node', owner_id: 'n3', quote: 'Chewing gum is mentioned as a comparison.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev5', owner_kind: 'edge', owner_id: 'r1', quote: 'Adam Smith founded classical economics.', pageIndex: 0, pageNumber: 1 },
+      ],
     }, {
       chapterId: 'chapter-abstract-entity-reclassification',
       chapterTitle: 'Abstract Entity Reclassification',
@@ -2855,7 +3213,11 @@ describe('KnowledgeExtractionWorkflowService', () => {
           description: 'The campaign spending example illustrates the broader principle.',
         },
       ],
-      evidence: [],
+      evidence: [
+        { id: 'ev1', owner_kind: 'node', owner_id: 'i2', quote: 'Correlation does not imply causation.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev2', owner_kind: 'node', owner_id: 'e1', quote: 'Campaign spending is an example on this page.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev3', owner_kind: 'edge', owner_id: 'r1', quote: 'The campaign spending example illustrates the broader principle.', pageIndex: 0, pageNumber: 1 },
+      ],
     }, {
       chapterId: 'chapter-correlation-dedupe',
       chapterTitle: 'Correlation Dedupe',
@@ -3016,7 +3378,11 @@ describe('KnowledgeExtractionWorkflowService', () => {
           description: 'The example takes place in New York City.',
         },
       ],
-      evidence: [],
+      evidence: [
+        { id: 'ev1', owner_kind: 'node', owner_id: 'n1', quote: 'New York City is named here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev2', owner_kind: 'node', owner_id: 'e1', quote: 'The data analysis example appears here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev3', owner_kind: 'edge', owner_id: 'r2', quote: 'The example takes place in New York City.', pageIndex: 0, pageNumber: 1 },
+      ],
     }, {
       chapterId: 'chapter-location-noise',
       chapterTitle: 'Location Noise',
@@ -3076,7 +3442,11 @@ describe('KnowledgeExtractionWorkflowService', () => {
           description: 'An event can happen in the United States.',
         },
       ],
-      evidence: [],
+      evidence: [
+        { id: 'ev1', owner_kind: 'node', owner_id: 'n1', quote: 'The United States is named here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev2', owner_kind: 'node', owner_id: 'e1', quote: 'An election example happened here.', pageIndex: 0, pageNumber: 1 },
+        { id: 'ev3', owner_kind: 'edge', owner_id: 'r3', quote: 'An election example happened in the United States.', pageIndex: 0, pageNumber: 1 },
+      ],
     }, {
       chapterId: 'chapter-invalid-happens-at',
       chapterTitle: 'Invalid Happens At',
