@@ -322,7 +322,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(seenPageIndexes).toEqual([0, 2]);
     expect(pageCacheSpy).toHaveBeenCalledTimes(2);
     expect(pageCacheSpy).toHaveBeenCalledWith(expect.objectContaining({
-      promptVersion: 'knowledge_extraction.v2.9:fiction',
+      promptVersion: 'knowledge_extraction.v2.10:fiction',
     }));
     expect(replaceSpy).toHaveBeenCalledTimes(1);
 
@@ -1034,7 +1034,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageIndex: 1,
       sourceHash: 'hash-1',
       chapterContentHash: 'chapter-hash-5',
-      promptVersion: 'knowledge_extraction.v2.9:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.10:nonfiction',
       extraction: first,
     });
     const second = await (service as never).generateKnowledgeExtractionForPiece({
@@ -1211,7 +1211,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageIndex: 1,
       sourceHash: 'hash-1',
       chapterContentHash: 'chapter-hash-old',
-      promptVersion: 'knowledge_extraction.v2.9:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.10:nonfiction',
       extraction: {
         title: 'Stale',
         summary: 'stale',
@@ -1287,7 +1287,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       pageIndex: 0,
       sourceHash: 'same-source-hash',
       chapterContentHash: 'same-chapter-hash',
-      promptVersion: 'knowledge_extraction.v2.9:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.10:nonfiction',
       extraction: {
         title: 'Stale nonfiction cache',
         summary: 'stale',

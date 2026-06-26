@@ -386,17 +386,19 @@ async function runAutoScenario(baseUrl) {
     { result: latest.result },
   );
   assert(
-    latest.result.ideas.length + latest.result.events.length >= 1,
-    'auto.quality should extract at least one idea or event from the explicit action/lesson',
+    latest.result.events.some((event) => /rule|critic|debate|revis/.test(
+      `${event.label} ${event.description ?? ''}`.toLowerCase(),
+    )),
+    'auto.quality should extract the rule revision / criticism event',
     { result: latest.result },
   );
-  const ideaAndEventLabels = [
-    ...latest.result.ideas.map((idea) => idea.label),
-    ...latest.result.events.map((event) => event.label),
-  ].join(' ').toLowerCase();
+  const ideaText = latest.result.ideas
+    .map((idea) => `${idea.label} ${idea.description ?? ''} ${idea.kind ?? ''}`)
+    .join(' ')
+    .toLowerCase();
   assert(
-    /adapt|learn|rule|critic|debate|revis/.test(ideaAndEventLabels),
-    'auto.quality should name the rule revision, criticism/debate, adaptation, or learning point',
+    /adapt|learn/.test(ideaText),
+    'auto.quality should extract the institutional adaptation / practical learning idea',
     { result: latest.result },
   );
 
