@@ -526,6 +526,119 @@ describe('BookIngestionService', () => {
     ]);
   });
 
+  test('skips auto-submitting chapters whose latest knowledge result matches current content', async () => {
+    const repository = createRepository();
+    const knowledgeRepository = new KnowledgeExtractionWorkflowRepository();
+    const submissions: string[] = [];
+    const workflowService = {
+      submitKnowledgeExtractionWorkflow(request: { chapterId: string }) {
+        submissions.push(request.chapterId);
+        return {
+          workflowRunId: `run-${request.chapterId}`,
+          deduped: false,
+          status: 'queued',
+        };
+      },
+    } as unknown as KnowledgeExtractionWorkflowService;
+    const service = new BookIngestionService(repository, workflowService, knowledgeRepository);
+
+    service.upsertPageFragment({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: { '0': 'chapter one' },
+    });
+
+    const book = repository.getBook('book-1');
+    const chapter = repository.getChapter('book-1', 'chapter-1');
+    expect(book).not.toBeNull();
+    expect(chapter).not.toBeNull();
+
+    const { run } = knowledgeRepository.createOrReuseRun({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      idempotencyKey: 'current-chapter-1',
+      expectedSnapshotVersion: book!.snapshotVersion,
+      expectedChapterContentHash: chapter!.chapterContentHash,
+    });
+    knowledgeRepository.completeRun({
+      workflowRunId: run.id,
+      snapshotVersion: book!.snapshotVersion,
+      chapterContentHash: chapter!.chapterContentHash,
+      result: {
+        title: 'Chapter One',
+        summary: 'Already extracted',
+        people: [],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      },
+    });
+
+    service.upsertPageFragment({
+      bookId: 'book-1',
+      chapterId: 'chapter-2',
+      chapterIndex: 2,
+      pageIndex: 0,
+      sourceHash: 'hash-page-1',
+      pageParagraphs: { '0': 'chapter two' },
+      bookIngestionCompleted: true,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(submissions).toEqual(['chapter-2']);
+  });
+
+  test('skips reentrant auto-submit sweeps for the same book', async () => {
+    const repository = createRepository();
+    const submissions: string[] = [];
+    let service!: BookIngestionService;
+    let triggeredReentrantUpsert = false;
+    const workflowService = {
+      submitKnowledgeExtractionWorkflow(request: { bookId: string; chapterId: string }) {
+        submissions.push(request.chapterId);
+        if (!triggeredReentrantUpsert) {
+          triggeredReentrantUpsert = true;
+          service.upsertPageFragment({
+            bookId: request.bookId,
+            chapterId: 'chapter-2',
+            chapterIndex: 2,
+            pageIndex: 0,
+            sourceHash: 'hash-page-1',
+            pageParagraphs: { '0': 'chapter two' },
+            bookIngestionCompleted: true,
+          });
+        }
+        return {
+          workflowRunId: `run-${request.chapterId}`,
+          deduped: false,
+          status: 'queued',
+        };
+      },
+    } as unknown as KnowledgeExtractionWorkflowService;
+    service = new BookIngestionService(repository, workflowService);
+
+    service.upsertPageFragment({
+      bookId: 'book-1',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: { '0': 'chapter one' },
+      bookIngestionCompleted: true,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(repository.getChapter('book-1', 'chapter-2')).not.toBeNull();
+    expect(submissions).toEqual(['chapter-1']);
+  });
+
   test('continues auto-submitting later chapters when one chapter submission fails', async () => {
     const repository = createRepository();
     const attemptedChapterIds: string[] = [];

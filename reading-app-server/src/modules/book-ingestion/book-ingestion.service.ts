@@ -46,6 +46,7 @@ export class BookIngestionService {
   private readonly repository: BookIngestionRepository;
   private readonly knowledgeExtractionWorkflowService?: KnowledgeExtractionWorkflowService;
   private readonly knowledgeExtractionWorkflowRepository?: KnowledgeExtractionWorkflowRepository;
+  private readonly autoSubmittingBookIds = new Set<string>();
 
   constructor(
     @Inject(BookIngestionRepository) repository: BookIngestionRepository,
@@ -366,6 +367,15 @@ export class BookIngestionService {
   }
 
   private async submitKnowledgeExtractionWorkflowAfterBookIngestion(bookId: string): Promise<void> {
+    if (this.autoSubmittingBookIds.has(bookId)) {
+      bookIngestionLog('knowledge_extraction_workflow.auto_submit_skipped', {
+        bookId,
+        reason: 'already_running',
+      });
+      return;
+    }
+
+    this.autoSubmittingBookIds.add(bookId);
     try {
       const book = this.repository.getBook(bookId);
       if (!book) {
@@ -387,9 +397,27 @@ export class BookIngestionService {
       });
 
       let submittedCount = 0;
+      let skippedCount = 0;
       let failedCount = 0;
       for (const chapter of chapters) {
         try {
+          const latestResult = this.knowledgeExtractionWorkflowRepository?.getLatestResult(
+            book.bookId,
+            chapter.chapterId,
+          );
+          if (latestResult?.chapterContentHash === chapter.chapterContentHash) {
+            skippedCount += 1;
+            bookIngestionLog('knowledge_extraction_workflow.auto_submit_chapter_skipped', {
+              bookId: book.bookId,
+              chapterId: chapter.chapterId,
+              chapterIndex: chapter.chapterIndex,
+              snapshotVersion: book.snapshotVersion,
+              chapterContentHash: chapter.chapterContentHash,
+              reason: 'latest_result_current',
+            });
+            continue;
+          }
+
           const response = this.knowledgeExtractionWorkflowService?.submitKnowledgeExtractionWorkflow({
             bookId: book.bookId,
             chapterId: chapter.chapterId,
@@ -427,6 +455,7 @@ export class BookIngestionService {
         snapshotVersion: book.snapshotVersion,
         chapterCount: chapters.length,
         submittedCount,
+        skippedCount,
         failedCount,
       });
     } catch (error) {
@@ -434,6 +463,8 @@ export class BookIngestionService {
         bookId,
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      this.autoSubmittingBookIds.delete(bookId);
     }
   }
 
