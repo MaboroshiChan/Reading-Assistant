@@ -39,6 +39,10 @@ Prefer an argument graph or causal graph over a topic cloud.
 - Prefer nodes and edges that explain who acts, what happens, what is argued, and what causes what.
 - For `ideas`, extract only chapter-level abstractions, principles, conflicts, or durable questions.
 - Do not turn sentence-level observations, one-off comparisons, examples, rhetorical setup lines, or local subpoints into `ideas`.
+- For short but information-dense pages, do not return only a person/entity when the page also states a substantive action, argument, causal sequence, or lesson.
+- If an institution, group, person, or work performs a meaningful action on the primary page, represent that action as an `event` when the quote can support it.
+- If the page explicitly frames an action, example, or sequence as evidence of a broader lesson, mechanism, adaptation, principle, or learning process, extract that broader point as an `idea`.
+- Empty `ideas` and empty `events` are appropriate only when the primary page is mostly metadata, setting, transition, recap, or isolated background with no clear claim or action.
 - If an item is primarily an example, anecdote, statistic, comparison, or supporting observation, keep it out of `ideas` even if it sounds interesting.
 - If the page mostly recaps earlier chapter claims, extract only the few claims or actors materially advanced on this page instead of replaying the whole chapter graph.
 - Prefer noun-phrase or compact principle labels for `ideas`; avoid long clause-like labels that restate a sentence.

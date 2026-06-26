@@ -68,7 +68,7 @@ import type {
 } from './knowledge-extraction-workflow.types';
 import { WorkflowQueueService } from '../workflow-queue/workflow-queue.service';
 
-const PROMPT_VERSION = 'knowledge_extraction.v2.8';
+const PROMPT_VERSION = 'knowledge_extraction.v2.9';
 const FICTION_PROMPT_PATH = resolvePromptPath('knowledge_extraction_fiction.txt');
 const NON_FICTION_PROMPT_PATH = resolvePromptPath('knowledge_extraction_nonfiction.txt');
 

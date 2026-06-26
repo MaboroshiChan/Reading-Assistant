@@ -380,6 +380,25 @@ async function runAutoScenario(baseUrl) {
   assert(latest.chapterIndex === scenario.chapterIndex, 'auto.latest.chapterIndex mismatch', { latest, scenario });
   assert(latest.snapshotVersion === upsert.snapshotVersion, 'auto.latest.snapshotVersion mismatch', { upsert, latest });
   assert(latest.chapterContentHash === upsert.chapterContentHash, 'auto.latest.chapterContentHash mismatch', { upsert, latest });
+  assert(
+    latest.result.entities.some((entity) => entity.label.toLowerCase().includes('committee')),
+    'auto.quality should extract the committee entity',
+    { result: latest.result },
+  );
+  assert(
+    latest.result.ideas.length + latest.result.events.length >= 1,
+    'auto.quality should extract at least one idea or event from the explicit action/lesson',
+    { result: latest.result },
+  );
+  const ideaAndEventLabels = [
+    ...latest.result.ideas.map((idea) => idea.label),
+    ...latest.result.events.map((event) => event.label),
+  ].join(' ').toLowerCase();
+  assert(
+    /adapt|learn|rule|critic|debate|revis/.test(ideaAndEventLabels),
+    'auto.quality should name the rule revision, criticism/debate, adaptation, or learning point',
+    { result: latest.result },
+  );
 
   if (typeof latest.workflowRunId === 'string' && latest.workflowRunId.length > 0) {
     const status = await pollWorkflowStatus(baseUrl, latest.workflowRunId);

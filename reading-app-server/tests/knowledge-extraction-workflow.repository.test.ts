@@ -209,7 +209,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       pageIndex: 0,
       sourceHash: 'hash-cache',
       chapterContentHash: 'chapter-hash-cache',
-      promptVersion: 'knowledge_extraction.v2.8:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.9:nonfiction',
       extraction: {
         title: 'Cached Chapter',
         summary: 'Cached page extraction still remains available in memory.',
@@ -229,7 +229,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       0,
       'hash-cache',
       'chapter-hash-cache',
-      'knowledge_extraction.v2.8:nonfiction',
+      'knowledge_extraction.v2.9:nonfiction',
     )?.summary).toBe('Cached page extraction still remains available in memory.');
   });
 
@@ -679,7 +679,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       pageIndex: 0,
       sourceHash: 'source-hash-reload',
       chapterContentHash: 'chapter-hash-reload',
-      promptVersion: 'knowledge_extraction.v2.8:nonfiction',
+      promptVersion: 'knowledge_extraction.v2.9:nonfiction',
       extraction: {
         title: 'Cache Reload Chapter',
         summary: 'Persisted piece graph.',
@@ -710,7 +710,7 @@ describe('KnowledgeExtractionWorkflowRepository', () => {
       0,
       'source-hash-reload',
       'chapter-hash-reload',
-      'knowledge_extraction.v2.8:nonfiction',
+      'knowledge_extraction.v2.9:nonfiction',
     )).toBeNull();
   });
 
