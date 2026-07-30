@@ -1,4 +1,3 @@
-import path from 'node:path';
 import fs from 'node:fs/promises';
 import type {
   AnalyzeSentenceData,
@@ -13,14 +12,15 @@ import type {
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { createLLMClient, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
-import { buildStableCacheKey, makeAnchor, sortAnchors, withBufferedStream } from './shared';
+import { resolvePromptPath } from '../src/utils/prompt-path';
+import { buildStableCacheKey, makeAnchor, sortAnchors } from './shared';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'sentence';
 const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'sentence.v5';
-const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
-const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'key_words', 'discourse_function', 'dependency_light', 'modal_markers'];
+const PROMPT_PATH = resolvePromptPath('sentence.txt');
+const TASK_ORDER: readonly SentenceTask[] = ['semantic_roles', 'discourse_function', 'dependency_light', 'modal_markers'];
 
 export type SentenceTask = 'semantic_roles' | 'key_words' | 'discourse_function' | 'dependency_light' | 'modal_markers';
 export { PROMPT_VERSION as SENTENCE_PROMPT_VERSION };
@@ -316,14 +316,17 @@ export const handleSentence = async (
   const started = Date.now();
   const { data: stream, usage: usagePromise } = await buildSentenceData(req, signal);
 
-  const tappedStream = withBufferedStream(stream, async ({ text, completed }) => {
-    if (!completed) return;
+  const sanitizedStream = (async function* () {
+    let text = '';
+    for await (const chunk of stream) {
+      text += chunk;
+    }
+    const object = coerceSentenceResponse(extractJsonFromText(text));
+    const data: AnalyzeSentenceData = mapSentenceResponse(object, req);
+    yield JSON.stringify(data);
 
     try {
       const usage = await usagePromise;
-      const object = coerceSentenceResponse(extractJsonFromText(text));
-      const data: AnalyzeSentenceData = mapSentenceResponse(object, req);
-
       const response: ResponseEnvelopeSentence = {
         request_id: req.request_id,
         status: 'ok',
@@ -340,9 +343,9 @@ export const handleSentence = async (
     } catch (error) {
       console.warn('[sentence] failed to cache response', error);
     }
-  });
+  })();
 
-  return { data: tappedStream, usage: usagePromise };
+  return { data: sanitizedStream, usage: usagePromise };
 };
 
 export { buildPrompt as buildSentencePrompt, buildTasks as buildSentenceTasks };
@@ -433,26 +436,6 @@ const mapSentenceResponse = (
     })()
     : undefined;
 
-  const keyWords = shouldInclude('key_words') && payload.key_phrase
-    ? (() => {
-      const words: Array<{ word: string; color: 'red' | 'green' }> = [];
-      // Support both string (legacy/single) and array
-      const raw = payload.key_phrase;
-      const candidates = Array.isArray(raw) ? raw : [raw];
-
-      for (const phrase of candidates) {
-        if (!phrase || typeof phrase !== 'string') continue;
-        words.push({ word: phrase, color: 'green' });
-        const span = findSpan(text, phrase);
-        if (span) {
-          const anchor = makeAnchor({ sentenceId, span, text: phrase });
-          anchorIndex.set(anchor.anchor_hash, anchor);
-        }
-      }
-      return words.length ? words : undefined;
-    })()
-    : undefined;
-
   // Map 'discourse_function' task to the new classification fields
   const classification = shouldInclude('discourse_function') ? {
     discourse_function: payload.function,
@@ -498,7 +481,6 @@ const mapSentenceResponse = (
 
   return {
     semantic_roles: semanticRoles,
-    key_words: keyWords,
     ...classification,
     dependency_light: dependencyLight,
     modal_markers: modalMarkers,

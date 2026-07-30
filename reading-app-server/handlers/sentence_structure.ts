@@ -12,11 +12,12 @@ import * as cache from '../services/cache';
 import { buildStableCacheKey, hashString, withBufferedStream } from './shared';
 import { handlerLog } from './logger';
 import { createLLMClient, extractJsonFromText, type CallReturn } from '../services/llmService';
+import { resolvePromptPath } from '../src/utils/prompt-path';
 
 const CACHE_PREFIX = 'sentence-structure';
 const CACHE_VERSION = 'v1';
 const PROMPT_VERSION = 'sentence_structure.v1';
-const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'sentence_structure.txt');
+const PROMPT_PATH = resolvePromptPath('sentence_structure.txt');
 const TASK_ORDER = ['micro_roles', 'cue_interaction', 'contrast_resolution'] as const;
 type SentenceStructureTask = typeof TASK_ORDER[number];
 const MAX_CLAUSE_DEPTH = 4;

@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildChunkPrefixCache = exports.buildSharedChapterPrefixCache = exports.buildSharedChapterPrefix = exports.buildSharedChapterPrefixCacheKey = exports.SHARED_CHAPTER_PREFIX_VERSION = void 0;
 exports.SHARED_CHAPTER_PREFIX_VERSION = 'chapter_context.v1';
-const GEMINI_CACHE_TTL_SECONDS = 3600;
+const GEMINI_CACHE_TTL_SECONDS = 1800;
 const clean = (value) => value
     .replace(/[^a-zA-Z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')

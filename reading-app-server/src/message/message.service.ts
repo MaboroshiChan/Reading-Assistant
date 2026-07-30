@@ -10,7 +10,6 @@ import { handleSkeleton } from '../../handlers/skeleton';
 import { handleSentenceStructure } from '../../handlers/sentence_structure';
 import { handleQuiz } from '../../handlers/quiz';
 import { handleKnowledgeExtraction } from '../../handlers/knowledge_extraction';
-import { handleChapterKeywords } from '../../handlers/chapter_keywords';
 import { errorResponse, validateEnvelope } from '../../../packages/contracts/src';
 import { isAbortError } from '../utils/abort';
 
@@ -60,8 +59,12 @@ export const dispatchEnvelope = async (
       result = await handleParagraph(envelope, signal);
       break;
     case 'analyze.chapter-keywords.v1':
-      result = await handleChapterKeywords(envelope, signal);
-      break;
+      return errorResponse(
+        envelope.request_id,
+        'E.FEATURE_DISABLED',
+        410,
+        'Chapter key sentence and key word generation moved to iOS local Foundation Models.',
+      );
     case 'analyze.sentence.v1':
       result = await handleSentence(envelope, signal);
       break;

@@ -6,6 +6,7 @@ import { MessageController } from './message/message.controller';
 import { MessageService } from './message/message.service';
 import { BookIngestionModule } from './modules/book-ingestion/book-ingestion.module';
 import { KnowledgeExtractionWorkflowModule } from './modules/knowledge-extraction-workflow/knowledge-extraction-workflow.module';
+import { ChapterKeywordsWorkflowModule } from './modules/chapter-keywords-workflow/chapter-keywords-workflow.module';
 import { QuizWorkflowModule } from './modules/quiz-workflow/quiz-workflow.module';
 import { WorkflowQueueModule } from './modules/workflow-queue/workflow-queue.module';
 import { SurrealModule } from './modules/surrealDB/surrealdb.module';
@@ -23,6 +24,7 @@ import { PreReadingWorkflowModule } from './modules/pre-reading-workflow/pre-rea
     BookIngestionModule,
     WorkflowQueueModule,
     KnowledgeExtractionWorkflowModule,
+    ChapterKeywordsWorkflowModule,
     PreReadingWorkflowModule,
     QuizWorkflowModule,
     ChapterOpenAnalysisModule,

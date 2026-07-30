@@ -15,6 +15,7 @@ const message_controller_1 = require("./message/message.controller");
 const message_service_1 = require("./message/message.service");
 const book_ingestion_module_1 = require("./modules/book-ingestion/book-ingestion.module");
 const knowledge_extraction_workflow_module_1 = require("./modules/knowledge-extraction-workflow/knowledge-extraction-workflow.module");
+const chapter_keywords_workflow_module_1 = require("./modules/chapter-keywords-workflow/chapter-keywords-workflow.module");
 const quiz_workflow_module_1 = require("./modules/quiz-workflow/quiz-workflow.module");
 const workflow_queue_module_1 = require("./modules/workflow-queue/workflow-queue.module");
 const surrealdb_module_1 = require("./modules/surrealDB/surrealdb.module");
@@ -35,6 +36,7 @@ exports.AppModule = AppModule = __decorate([
             book_ingestion_module_1.BookIngestionModule,
             workflow_queue_module_1.WorkflowQueueModule,
             knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule,
+            chapter_keywords_workflow_module_1.ChapterKeywordsWorkflowModule,
             pre_reading_workflow_module_1.PreReadingWorkflowModule,
             quiz_workflow_module_1.QuizWorkflowModule,
             chapter_open_analysis_module_1.ChapterOpenAnalysisModule,

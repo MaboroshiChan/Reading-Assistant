@@ -18,12 +18,12 @@ const node_crypto_1 = require("node:crypto");
 const book_ingestion_repository_1 = require("../book-ingestion/book-ingestion.repository");
 const workflow_queue_service_1 = require("../workflow-queue/workflow-queue.service");
 const workflow_logger_1 = require("../workflow.logger");
-const chapter_keywords_llm_1 = require("./chapter-keywords-llm");
 const chapter_keywords_workflow_repository_1 = require("./chapter-keywords-workflow.repository");
 const WORKFLOW_VERSION = 'v1';
 const TARGET_CHUNK_CHARACTERS = 2400;
 const MAX_PARAGRAPHS_PER_CHUNK = 6;
 const OVERLAP_PARAGRAPHS = 1;
+const FEATURE_DISABLED_MESSAGE = 'Chapter key sentence and key word generation moved to iOS local Foundation Models.';
 const isPlainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value);
 const asString = (value) => typeof value === 'string' && value.trim() ? value.trim() : undefined;
 const asNumber = (value) => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -83,18 +83,10 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
         this.workflowQueueService = workflowQueueService;
     }
     onApplicationBootstrap() {
-        for (const run of this.chapterKeywordsWorkflowRepository.listRecoverableRuns()) {
-            (0, workflow_logger_1.workflowLog)('run.recovered', {
-                workflowKind: run.kind,
-                workflowRunId: run.id,
-                bookId: run.bookId,
-                chapterId: run.chapterId,
-                chapterIndex: run.chapterIndex,
-                workflowVersion: run.workflowVersion,
-                status: run.status,
-            });
-            this.workflowQueueService.enqueue(() => this.executeRun(run.id));
-        }
+        (0, workflow_logger_1.workflowLog)('feature.disabled', {
+            workflowKind: 'chapter_keywords',
+            reason: 'moved_to_ios_foundation_models',
+        });
     }
     parseSubmitRequest(rawBody) {
         if (!rawBody || rawBody.trim() === '') {
@@ -173,197 +165,37 @@ let ChapterKeywordsWorkflowService = class ChapterKeywordsWorkflowService {
         const mode = parsed.mode === undefined ? 'resume' : this.requireRestartMode(parsed.mode);
         return { mode };
     }
-    submitChapterKeywordsWorkflow(request) {
-        const book = this.bookIngestionRepository.getBook(request.bookId);
-        const chapter = this.bookIngestionRepository.getChapter(request.bookId, request.chapterId);
-        if (!book || !chapter) {
-            throw new common_1.NotFoundException('Chapter not found in canonical ingestion state');
-        }
-        if (chapter.chapterIndex !== request.chapterIndex) {
-            throw new common_1.ConflictException('chapterIndex does not match canonical chapter state');
-        }
-        if (request.expectedSnapshotVersion !== undefined
-            && request.expectedSnapshotVersion !== book.snapshotVersion) {
-            throw new common_1.ConflictException('expectedSnapshotVersion does not match canonical book state');
-        }
-        if (request.expectedChapterContentHash !== undefined
-            && request.expectedChapterContentHash !== chapter.chapterContentHash) {
-            throw new common_1.ConflictException('expectedChapterContentHash does not match canonical chapter state');
-        }
-        if (chapter.chapterTextMaterialized.trim().length === 0) {
-            throw new common_1.ConflictException('Canonical chapter text is empty; ingest pages before submitting chapter keywords workflow');
-        }
-        const input = {
-            ...request,
-            idempotencyKey: request.idempotencyKey ?? this.buildDefaultIdempotencyKey(request.bookId, request.chapterId, request.workflowVersion, chapter.chapterContentHash),
-            expectedSnapshotVersion: request.expectedSnapshotVersion ?? book.snapshotVersion,
-            expectedChapterContentHash: request.expectedChapterContentHash ?? chapter.chapterContentHash,
-        };
-        const { run, deduped } = this.chapterKeywordsWorkflowRepository.createOrReuseRun(input);
-        if (!deduped) {
-            this.workflowQueueService.enqueue(() => this.executeRun(run.id));
-        }
-        const canonicalRun = deduped
-            ? this.chapterKeywordsWorkflowRepository.getRun(run.id) ?? run
-            : run;
-        (0, workflow_logger_1.workflowLog)('run.submitted', {
-            workflowKind: canonicalRun.kind,
-            workflowRunId: canonicalRun.id,
-            bookId: canonicalRun.bookId,
-            chapterId: canonicalRun.chapterId,
-            chapterIndex: canonicalRun.chapterIndex,
-            workflowVersion: canonicalRun.workflowVersion,
-            deduped,
-            status: canonicalRun.status,
+    submitChapterKeywordsWorkflow(_request) {
+        this.featureDisabled();
+    }
+    getWorkflowStatus(_workflowRunId) {
+        this.featureDisabled();
+    }
+    restartWorkflow(_workflowRunId, _request) {
+        this.featureDisabled();
+    }
+    getWorkflowResult(_workflowRunId) {
+        this.featureDisabled();
+    }
+    getLatestChapterKeywords(_bookId, _chapterId) {
+        this.featureDisabled();
+    }
+    featureDisabled() {
+        throw new common_1.GoneException({
+            status: 'error',
+            error: {
+                code: 'E.FEATURE_DISABLED',
+                http: 410,
+                message: FEATURE_DISABLED_MESSAGE,
+            },
         });
-        return this.toSubmitResponse(canonicalRun, deduped);
-    }
-    getWorkflowStatus(workflowRunId) {
-        const run = this.requireRun(workflowRunId);
-        return this.toStatusResponse(run);
-    }
-    restartWorkflow(workflowRunId, request) {
-        const run = this.requireRun(workflowRunId);
-        const restartMode = request.mode ?? 'resume';
-        if (run.status === 'queued' || run.status === 'running') {
-            return {
-                ...this.toStatusResponse(run),
-                restartMode,
-            };
-        }
-        if (run.status === 'completed') {
-            throw new common_1.ConflictException('Chapter keywords workflow is already completed and cannot be restarted');
-        }
-        if (run.status === 'stale') {
-            throw new common_1.ConflictException('Chapter keywords workflow is stale and cannot be restarted');
-        }
-        const book = this.bookIngestionRepository.getBook(run.bookId);
-        const chapter = this.bookIngestionRepository.getChapter(run.bookId, run.chapterId);
-        if (!book || !chapter) {
-            throw new common_1.NotFoundException('Chapter not found in canonical ingestion state');
-        }
-        if (run.expectedSnapshotVersion !== undefined
-            && run.expectedSnapshotVersion !== book.snapshotVersion) {
-            throw new common_1.ConflictException('Canonical book snapshot changed; submit a new chapter keywords workflow');
-        }
-        if (run.expectedChapterContentHash !== undefined
-            && run.expectedChapterContentHash !== chapter.chapterContentHash) {
-            throw new common_1.ConflictException('Canonical chapter content changed; submit a new chapter keywords workflow');
-        }
-        const restarted = this.chapterKeywordsWorkflowRepository.restartFailedRun(workflowRunId, restartMode);
-        if (!restarted) {
-            throw new common_1.ConflictException('Chapter keywords workflow cannot be restarted from its current state');
-        }
-        this.workflowQueueService.enqueue(() => this.executeRun(restarted.id));
-        return {
-            ...this.toStatusResponse(restarted),
-            restartMode,
-        };
-    }
-    getWorkflowResult(workflowRunId) {
-        const run = this.requireRun(workflowRunId);
-        if (run.status !== 'completed'
-            || !run.output
-            || run.snapshotVersion === undefined
-            || !run.chapterContentHash) {
-            throw new common_1.ConflictException('Chapter keywords workflow result is not available yet');
-        }
-        return {
-            workflowRunId: run.id,
-            kind: run.kind,
-            bookId: run.bookId,
-            chapterId: run.chapterId,
-            chapterIndex: run.chapterIndex,
-            workflowVersion: run.workflowVersion,
-            resultVersion: run.resultVersion,
-            producer: run.producer,
-            qualityTier: run.qualityTier,
-            snapshotVersion: run.snapshotVersion,
-            chapterContentHash: run.chapterContentHash,
-            createdAt: run.createdAt,
-            updatedAt: run.updatedAt,
-            result: run.output,
-        };
-    }
-    getLatestChapterKeywords(bookId, chapterId) {
-        const result = this.chapterKeywordsWorkflowRepository.getLatestResult(bookId, chapterId);
-        if (!result) {
-            throw new common_1.NotFoundException('No completed chapter keywords workflow result found for chapter');
-        }
-        return this.toLatestResponse(result);
     }
     async executeRun(workflowRunId) {
-        const runningRun = this.chapterKeywordsWorkflowRepository.markRunning(workflowRunId);
-        if (!runningRun)
-            return;
-        const book = this.bookIngestionRepository.getBook(runningRun.bookId);
-        const chapter = this.bookIngestionRepository.getChapter(runningRun.bookId, runningRun.chapterId);
-        if (!book || !chapter) {
-            this.chapterKeywordsWorkflowRepository.failRun(workflowRunId, 'CHAPTER_KEYWORDS_CHAPTER_NOT_FOUND', 'Canonical chapter state was not found during workflow execution.');
-            return;
-        }
-        if (runningRun.expectedSnapshotVersion !== undefined
-            && runningRun.expectedSnapshotVersion !== book.snapshotVersion) {
-            this.chapterKeywordsWorkflowRepository.markStale(workflowRunId, 'CHAPTER_KEYWORDS_CANONICAL_BOOK_STALE', 'Canonical book snapshot changed before chapter keywords workflow execution completed.');
-            return;
-        }
-        if (runningRun.expectedChapterContentHash !== undefined
-            && runningRun.expectedChapterContentHash !== chapter.chapterContentHash) {
-            this.chapterKeywordsWorkflowRepository.markStale(workflowRunId, 'CHAPTER_KEYWORDS_CANONICAL_CHAPTER_STALE', 'Canonical chapter content changed before chapter keywords workflow execution completed.');
-            return;
-        }
-        if (chapter.chapterTextMaterialized.trim().length === 0) {
-            this.chapterKeywordsWorkflowRepository.failRun(workflowRunId, 'CHAPTER_KEYWORDS_EMPTY_CHAPTER_TEXT', 'Canonical chapter text is empty; unable to generate chapter keywords.');
-            return;
-        }
-        try {
-            const chunks = this.planChunks(runningRun.bookId, runningRun.chapterId);
-            if (!chunks.length) {
-                this.chapterKeywordsWorkflowRepository.failRun(workflowRunId, 'CHAPTER_KEYWORDS_NO_SENTENCES', 'No text sentences were found in the canonical chapter state.');
-                return;
-            }
-            const promptVariant = this.promptVariantForBook(runningRun.bookId);
-            const totalParagraphCount = new Set(chunks.flatMap((chunk) => chunk.sentences.map((sentence) => paragraphKey(sentence.ref)))).size;
-            const resumeState = this.restoreChunkProgress(workflowRunId, runningRun, chunks);
-            const mergedByParagraph = resumeState.mergedByParagraph;
-            if (resumeState.startChunkIndex === 0) {
-                this.chapterKeywordsWorkflowRepository.updateRunCheckpoint(workflowRunId, this.buildChunkCheckpoint(chunks, -1));
-            }
-            for (const chunk of chunks.slice(resumeState.startChunkIndex)) {
-                const result = await (0, chapter_keywords_llm_1.analyzeChapterKeywordsChunk)({
-                    docId: runningRun.bookId,
-                    chapterId: runningRun.chapterId,
-                    chapterIndex: runningRun.chapterIndex,
-                    chunkId: chunk.id,
-                    chunkIndex: chunk.index,
-                    totalChunks: chunk.total,
-                    chunkText: chunk.chunkText,
-                    sentences: chunk.sentences,
-                    contentHash: chapter.chapterContentHash,
-                    promptVariant,
-                });
-                const normalizedChunkResult = {
-                    chunkIndex: chunk.index,
-                    keySentences: this.filterChunkKeySentences(result.key_sentences, promptVariant),
-                };
-                this.chapterKeywordsWorkflowRepository.updatePartialChunkResult(workflowRunId, normalizedChunkResult);
-                this.applyChunkResultToMergedParagraphs(mergedByParagraph, normalizedChunkResult);
-                this.chapterKeywordsWorkflowRepository.updateRunCheckpoint(workflowRunId, this.buildChunkCheckpoint(chunks, chunk.index));
-            }
-            const mergedResult = {
-                key_sentences: this.finalizeMergedKeySentences(Array.from(mergedByParagraph.values()), promptVariant, totalParagraphCount),
-                sentence_keywords: [],
-            };
-            this.chapterKeywordsWorkflowRepository.completeRun({
-                workflowRunId,
-                snapshotVersion: book.snapshotVersion,
-                chapterContentHash: chapter.chapterContentHash,
-                result: mergedResult,
-            });
-        }
-        catch (error) {
-            this.chapterKeywordsWorkflowRepository.failRun(workflowRunId, 'CHAPTER_KEYWORDS_GENERATION_FAILED', error instanceof Error ? error.message : String(error));
-        }
+        (0, workflow_logger_1.workflowLog)('run.disabled', {
+            workflowKind: 'chapter_keywords',
+            workflowRunId,
+            reason: 'moved_to_ios_foundation_models',
+        });
     }
     planChunks(bookId, chapterId) {
         const chapter = this.bookIngestionRepository.getChapter(bookId, chapterId);

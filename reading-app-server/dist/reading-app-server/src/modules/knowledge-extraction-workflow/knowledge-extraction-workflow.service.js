@@ -32,7 +32,7 @@ const quiz_workflow_service_1 = require("../quiz-workflow/quiz-workflow.service"
 const workflow_logger_1 = require("../workflow.logger");
 const knowledge_extraction_workflow_repository_1 = require("./knowledge-extraction-workflow.repository");
 const workflow_queue_service_1 = require("../workflow-queue/workflow-queue.service");
-const PROMPT_VERSION = 'knowledge_extraction.v2.7';
+const PROMPT_VERSION = 'knowledge_extraction.v2.8';
 const FICTION_PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('knowledge_extraction_fiction.txt');
 const NON_FICTION_PROMPT_PATH = (0, prompt_path_1.resolvePromptPath)('knowledge_extraction_nonfiction.txt');
 const ENTITY_TYPES = new Set(['organization', 'place', 'time', 'object', 'other']);
@@ -90,6 +90,14 @@ const asBoolean = (value) => {
     return undefined;
 };
 const asNumber = (value) => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+const normalizeExcerptText = (value) => value
+    .normalize('NFKC')
+    .replace(/[\u2018\u2019]/g, '\'')
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 const clampProgressPercent = (value) => Math.min(100, Math.max(0, Math.round(value)));
 const CONTEXT_HEAVY_IDEA_TOKENS = [
     'book',
@@ -125,6 +133,18 @@ const IDEA_DEDUP_STOPWORDS = new Set([
     'with',
     'within',
 ]);
+const ENTITY_TYPE_PRIORITY = {
+    organization: 5,
+    place: 4,
+    time: 3,
+    object: 2,
+    other: 1,
+};
+const ABSTRACT_ENTITY_IDEA_LABEL_PATTERN = /\b(economics?|philosophy|finance|policy|policies|policing|theory|discipline|movement|tradition|school of thought|school)\b/i;
+const ABSTRACT_ENTITY_IDEA_DESCRIPTION_PATTERN = /\b(discipline|field|school of thought|movement|tradition|policy|principle|theory|approach|framework)\b/i;
+const PLACE_ENTITY_HINT_PATTERN = /\b(city|town|county|state|country|school|university|hospital|office|hall|court|park|street|avenue|road|bridge|station|house|home)\b/i;
+const OBJECT_ENTITY_HINT_PATTERN = /\b(book|report|paper|article|essay|study|novel|memoir|journal|magazine|device|tool|machine|car|house|coin|gum)\b/i;
+const CORRELATION_CAUSATION_IDEA_PATTERN = /\bcorrelation\b.*\bcausation\b|\bcausation\b.*\bcorrelation\b/i;
 const AUTHORED_RELATION_PATTERN = /\b(author(?:ed|s|ing)?|wrote|written|co-?author(?:ed|s|ing)?|published)\b/i;
 const FOUNDED_RELATION_PATTERN = /\b(found(?:ed|er|ing)?|pioneer(?:ed|ing)?|originat(?:ed|ing)?|created)\b/i;
 const MENTIONS_RELATION_PATTERN = /\b(wrote about|writes about|written about|mentioned|mentions|discuss(?:es|ed|ing)?|describ(?:es|ed|ing)?|examines?|about)\b/i;
@@ -134,6 +154,11 @@ const PLACEHOLDER_PERSON_LABEL_PATTERN = /^candidate(?:\s+[a-z0-9]+)?$/i;
 const GENERIC_PERSON_LABELS = new Set([
     'candidate',
     'candidates',
+    'political candidate',
+    'observer',
+    'unknown observer',
+    'czar',
+    'ruler',
     'real estate agent',
     'real-estate agent',
     'real estate agents',
@@ -155,7 +180,7 @@ const GENERIC_PERSON_LABELS = new Set([
     'police officer',
     'police officers',
 ]);
-const LOW_SIGNAL_RELATED_TO_PATTERN = /\b(type of|kind of|used as (?:a )?comparison|point of comparison|part of the data used for analysis|analyzed for|setting for the discussion|context in which|compared to|comparison to|key aspect of|contributing to|applied to)\b/i;
+const LOW_SIGNAL_RELATED_TO_PATTERN = /\b(type of|kind of|used as (?:a )?comparison|point of comparison|part of the data used for analysis|analyzed for|setting for the discussion|context in which|compared to|comparison to|key aspect of|contributing to|applied to|contextualiz(?:e|es|ed|ing)|subject being analyzed)\b/i;
 const PERSON_TITLE_PREFIX_PATTERN = /^(president|senator|governor|representative|general|judge|justice|professor|prof\.?|doctor|dr\.?|mr\.?|mrs\.?|ms\.?|rev\.?|reverend|sir)\s+/i;
 const GENERIC_PERSON_GROUP_PATTERN = /^(?:(?:american|california|chicago|dallas|new york|u s|us|united states)\s+)?(?:real[- ]estate agents?|auto mechanics?|obstetricians?|politicians?|teachers?|students?|doctors?|experts?|police officers?)$/i;
 let cachedFictionSystemPrompt = null;
@@ -380,8 +405,8 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             restartMode,
         };
     }
-    getWorkflowResult(workflowRunId) {
-        const run = this.requireRun(workflowRunId);
+    async getWorkflowResult(workflowRunId) {
+        const run = await this.requireRunForResult(workflowRunId);
         if (run.status !== 'completed'
             || !run.output
             || run.snapshotVersion === undefined
@@ -418,8 +443,8 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             result: this.withLatestQuizPreReading(run.output, run.bookId, run.chapterId, run.snapshotVersion, run.chapterContentHash),
         };
     }
-    getLatestChapterKnowledgeExtraction(bookId, chapterId) {
-        const result = this.knowledgeExtractionWorkflowRepository.getLatestResult(bookId, chapterId);
+    async getLatestChapterKnowledgeExtraction(bookId, chapterId) {
+        const result = await this.knowledgeExtractionWorkflowRepository.getLatestResultFromStore(bookId, chapterId);
         if (!result) {
             throw new common_1.NotFoundException('No completed knowledge extraction workflow result found for chapter');
         }
@@ -762,8 +787,10 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             message: '正在保存结果',
         });
         const knowledge = await incrementalRepository.buildChapterSnapshot(input.bookId, input.chapterId);
-        knowledge.title = input.chapterTitle ?? knowledge.title;
-        knowledge.summary = this.summarize(input.chapterText, 240);
+        const title = input.chapterTitle ?? knowledge.title;
+        const summary = this.summarize(input.chapterText, 240);
+        knowledge.title = title;
+        knowledge.summary = summary;
         await this.knowledgeExtractionWorkflowRepository.replaceChapterExtraction({
             bookId: input.bookId,
             chapterId: input.chapterId,
@@ -771,7 +798,10 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             chapterTitle: input.chapterTitle,
             extraction: knowledge,
         });
-        return knowledge;
+        const canonicalKnowledge = await this.knowledgeExtractionWorkflowRepository.buildChapterSnapshot(input.bookId, input.chapterId);
+        canonicalKnowledge.title = title ?? canonicalKnowledge.title;
+        canonicalKnowledge.summary = summary;
+        return canonicalKnowledge;
     }
     async restorePieceProgress(input) {
         const incrementalRepository = new knowledge_extraction_workflow_repository_1.KnowledgeExtractionWorkflowRepository();
@@ -973,11 +1003,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         }
         try {
             const parsed = (0, llmService_1.extractJsonFromText)(text);
+            const pageTextByPageIndex = this.buildPageTextByPageIndex(input.bookId, input.chapterId, input.piece.pageRefs);
             return this.sanitizeKnowledgeExtractionGraph(parsed, {
                 chapterId: input.chapterId,
                 chapterTitle: input.chapterTitle,
                 chapterText: input.chapterText,
                 allowedPageRefs: input.piece.pageRefs,
+                pageTextByPageIndex,
                 promptVariant,
                 memoryContext: input.memoryContext,
                 primaryPageText: input.piece.rawText,
@@ -1087,39 +1119,42 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         const nodesById = new Map(nodes.map((node) => [node.id, node]));
         const edges = this.normalizeGraphEdges(this.sanitizeGraphEdges(record.edges, nodesById, nodeIdRedirects) ?? [], nodesById) ?? [];
         const edgeIds = new Set(edges.map((edge) => edge.id));
+        const explicitEvidence = this.sanitizeGraphEvidence(record.evidence, input.allowedPageRefs, input.pageTextByPageIndex, nodesById, edgeIds, nodeIdRedirects) ?? [];
+        const embeddedEvidence = this.sanitizeEmbeddedGraphEvidence(record, input.allowedPageRefs, input.pageTextByPageIndex, nodesById, edgeIds, nodeIdRedirects) ?? [];
         return {
             title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
             summary: asString(record.summary) ?? '',
             nodes,
             edges,
-            evidence: this.sanitizeGraphEvidence(record.evidence, input.allowedPageRefs, nodesById, edgeIds, nodeIdRedirects) ?? [],
+            evidence: this.mergeGraphEvidence(explicitEvidence, embeddedEvidence),
         };
     }
     sanitizeKnowledgeExtraction(raw, input) {
         const record = isPlainObject(raw) ? raw : {};
         if (!Array.isArray(record.nodes) && !Array.isArray(record.edges) && !Array.isArray(record.evidence)) {
-            return {
+            return this.enforceEvidenceCoverage({
                 title: asString(record.title) ?? input.chapterTitle ?? `Chapter ${input.chapterId}`,
                 summary: asString(record.summary) ?? this.summarize(input.chapterText, 240),
-                people: this.sanitizePeople(record.people, input.allowedPageRefs) ?? [],
-                ideas: this.sanitizeIdeas(record.ideas, input.allowedPageRefs, input.promptVariant) ?? [],
-                events: this.sanitizeEvents(record.events, input.allowedPageRefs) ?? [],
-                entities: this.sanitizeEntities(record.entities, input.allowedPageRefs) ?? [],
-                themes: this.sanitizeThemes(record.themes, input.allowedPageRefs) ?? [],
-                relations: this.sanitizeRelations(record.relations, input.allowedPageRefs) ?? [],
-            };
+                people: this.sanitizePeople(record.people, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+                ideas: this.sanitizeIdeas(record.ideas, input.allowedPageRefs, input.pageTextByPageIndex, input.promptVariant) ?? [],
+                events: this.sanitizeEvents(record.events, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+                entities: this.sanitizeEntities(record.entities, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+                themes: this.sanitizeThemes(record.themes, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+                relations: this.sanitizeRelations(record.relations, input.allowedPageRefs, input.pageTextByPageIndex) ?? [],
+            });
         }
         const graph = this.sanitizeKnowledgeExtractionGraph(raw, {
             chapterId: input.chapterId,
             chapterTitle: input.chapterTitle,
             chapterText: input.chapterText,
             allowedPageRefs: input.allowedPageRefs,
+            pageTextByPageIndex: input.pageTextByPageIndex,
             promptVariant: input.promptVariant,
         });
-        return this.graphToKnowledgeExtractionData({
+        return this.enforceEvidenceCoverage(this.graphToKnowledgeExtractionData({
             ...graph,
             summary: graph.summary || this.summarize(input.chapterText, 240),
-        });
+        }));
     }
     sanitizeStringArray(value) {
         if (!Array.isArray(value))
@@ -1132,11 +1167,10 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             return undefined;
         return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
     }
-    sanitizeEvidence(value, allowedPageRefs) {
+    sanitizeEvidence(value, allowedPageRefs, pageTextByPageIndex) {
         if (!Array.isArray(value))
             return undefined;
         const allowedPageMap = new Map(allowedPageRefs.map((pageRef) => [pageRef.pageIndex, pageRef.pageNumber]));
-        const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
         const evidence = value
             .map((item) => {
             if (!isPlainObject(item))
@@ -1144,8 +1178,9 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             const quote = asString(item.quote);
             if (!quote)
                 return null;
-            const pageIndex = asNumber(item.pageIndex) ?? singleAllowedPage?.pageIndex;
-            const pageNumber = asNumber(item.pageNumber) ?? singleAllowedPage?.pageNumber;
+            const inferredPageRef = this.inferEvidencePageRef(quote, allowedPageRefs, pageTextByPageIndex);
+            const pageIndex = asNumber(item.pageIndex) ?? inferredPageRef?.pageIndex;
+            const pageNumber = asNumber(item.pageNumber) ?? inferredPageRef?.pageNumber;
             if (pageIndex === undefined || pageNumber === undefined)
                 return null;
             if (allowedPageMap.get(pageIndex) !== pageNumber)
@@ -1243,12 +1278,24 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                     const entityType = asString(item.entity_type);
                     if (!entityType || !ENTITY_TYPES.has(entityType))
                         continue;
+                    const description = asString(item.description);
+                    const normalizedEntityType = this.canonicalizeGraphEntityType(label, entityType, description);
+                    if (this.shouldReclassifyEntityNodeAsIdea(label, normalizedEntityType, description)) {
+                        nodes.push({
+                            id,
+                            type: 'idea',
+                            label,
+                            kind: 'principle',
+                            description,
+                        });
+                        break;
+                    }
                     nodes.push({
                         id,
                         type,
                         label,
-                        entity_type: entityType,
-                        description: asString(item.description),
+                        entity_type: normalizedEntityType,
+                        description,
                     });
                     break;
                 }
@@ -1309,11 +1356,10 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         }
         return edges.length ? edges : undefined;
     }
-    sanitizeGraphEvidence(value, allowedPageRefs, nodesById, edgeIds, nodeIdRedirects = new Map()) {
+    sanitizeGraphEvidence(value, allowedPageRefs, pageTextByPageIndex, nodesById, edgeIds, nodeIdRedirects = new Map()) {
         if (!Array.isArray(value))
             return undefined;
         const allowedPageMap = new Map(allowedPageRefs.map((pageRef) => [pageRef.pageIndex, pageRef.pageNumber]));
-        const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
         const evidence = [];
         const seenIds = new Set();
         for (const [index, item] of value.entries()) {
@@ -1332,8 +1378,9 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 continue;
             if (ownerKind === 'edge' && !edgeIds.has(ownerId))
                 continue;
-            const pageIndex = asNumber(item.pageIndex) ?? singleAllowedPage?.pageIndex;
-            const pageNumber = asNumber(item.pageNumber) ?? singleAllowedPage?.pageNumber;
+            const inferredPageRef = this.inferEvidencePageRef(quote, allowedPageRefs, pageTextByPageIndex);
+            const pageIndex = asNumber(item.pageIndex) ?? inferredPageRef?.pageIndex;
+            const pageNumber = asNumber(item.pageNumber) ?? inferredPageRef?.pageNumber;
             if (pageIndex === undefined || pageNumber === undefined)
                 continue;
             if (allowedPageMap.get(pageIndex) !== pageNumber)
@@ -1352,6 +1399,72 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             });
         }
         return evidence.length ? evidence : undefined;
+    }
+    sanitizeEmbeddedGraphEvidence(record, allowedPageRefs, pageTextByPageIndex, nodesById, edgeIds, nodeIdRedirects = new Map()) {
+        const evidence = [];
+        if (Array.isArray(record.nodes)) {
+            for (const [index, item] of record.nodes.entries()) {
+                if (!isPlainObject(item))
+                    continue;
+                const ownerId = this.rewriteGraphNodeId(asString(item.id), nodeIdRedirects);
+                if (!ownerId || !nodesById.has(ownerId))
+                    continue;
+                const sanitized = this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex);
+                for (const [evidenceIndex, evidenceItem] of (sanitized ?? []).entries()) {
+                    evidence.push({
+                        id: `embedded-node-${index + 1}-${evidenceIndex + 1}`,
+                        owner_kind: 'node',
+                        owner_id: ownerId,
+                        quote: evidenceItem.quote,
+                        pageIndex: evidenceItem.pageIndex,
+                        pageNumber: evidenceItem.pageNumber,
+                    });
+                }
+            }
+        }
+        if (Array.isArray(record.edges)) {
+            for (const [index, item] of record.edges.entries()) {
+                if (!isPlainObject(item))
+                    continue;
+                const ownerId = asString(item.id) ?? `r${index + 1}`;
+                if (!edgeIds.has(ownerId))
+                    continue;
+                const sanitized = this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex);
+                for (const [evidenceIndex, evidenceItem] of (sanitized ?? []).entries()) {
+                    evidence.push({
+                        id: `embedded-edge-${index + 1}-${evidenceIndex + 1}`,
+                        owner_kind: 'edge',
+                        owner_id: ownerId,
+                        quote: evidenceItem.quote,
+                        pageIndex: evidenceItem.pageIndex,
+                        pageNumber: evidenceItem.pageNumber,
+                    });
+                }
+            }
+        }
+        return evidence.length ? evidence : undefined;
+    }
+    mergeGraphEvidence(primary, fallback) {
+        if (primary.length === 0)
+            return fallback;
+        if (fallback.length === 0)
+            return primary;
+        const merged = [];
+        const seen = new Set();
+        for (const item of [...primary, ...fallback]) {
+            const key = [
+                item.owner_kind,
+                item.owner_id,
+                item.pageIndex,
+                item.pageNumber,
+                item.quote,
+            ].join('|');
+            if (seen.has(key))
+                continue;
+            seen.add(key);
+            merged.push(item);
+        }
+        return merged;
     }
     normalizeGraphPersonIdentity(person, memoryContext, primaryPageText, chapterText) {
         const prepared = this.prepareGraphPersonLabel(person.label);
@@ -1581,6 +1694,24 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 continue;
             }
             if (node.type !== 'idea') {
+                if (node.type !== 'entity') {
+                    deduplicated.push(node);
+                    continue;
+                }
+                const duplicateIndex = deduplicated.findIndex((candidate) => candidate.type === 'entity' && this.areSameEntityNode(candidate, node));
+                if (duplicateIndex < 0) {
+                    deduplicated.push(node);
+                    continue;
+                }
+                const existing = deduplicated[duplicateIndex];
+                const merged = this.mergeEntityNodes(existing, node);
+                deduplicated[duplicateIndex] = merged;
+                const canonicalId = merged.id;
+                nodeIdRedirects.set(existing.id, canonicalId);
+                nodeIdRedirects.set(node.id, canonicalId);
+                continue;
+            }
+            if (node.type !== 'idea') {
                 deduplicated.push(node);
                 continue;
             }
@@ -1674,6 +1805,12 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         };
     }
     preferIdeaNode(left, right) {
+        const leftContextScore = this.ideaContextSpecificityScore(left.label);
+        const rightContextScore = this.ideaContextSpecificityScore(right.label);
+        if (rightContextScore < leftContextScore)
+            return right;
+        if (rightContextScore > leftContextScore)
+            return left;
         const leftWords = left.label.trim().split(/\s+/).filter(Boolean).length;
         const rightWords = right.label.trim().split(/\s+/).filter(Boolean).length;
         if (rightWords < leftWords)
@@ -1691,6 +1828,9 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             return false;
         if (leftPhrase === rightPhrase)
             return true;
+        if (this.isCorrelationCausationIdea(left.label) && this.isCorrelationCausationIdea(right.label)) {
+            return true;
+        }
         if (leftPhrase.includes(rightPhrase) || rightPhrase.includes(leftPhrase))
             return true;
         const leftTokens = this.ideaDedupTokens(left.label);
@@ -1720,6 +1860,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             .map((token) => token.trim())
             .filter((token) => token.length > 2
             && !IDEA_DEDUP_STOPWORDS.has(token));
+    }
+    ideaContextSpecificityScore(label) {
+        const normalized = this.normalizeIdeaPhrase(label);
+        return CONTEXT_HEAVY_IDEA_TOKENS.filter((token) => normalized.includes(token)).length;
+    }
+    isCorrelationCausationIdea(label) {
+        return CORRELATION_CAUSATION_IDEA_PATTERN.test(label);
     }
     rewriteGraphNodeId(nodeId, nodeIdRedirects) {
         if (!nodeId)
@@ -1805,6 +1952,11 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         if (edge.relation_type === 'happens_at' && toNode.type === 'person') {
             return false;
         }
+        if (edge.relation_type === 'happens_at') {
+            return fromNode.type === 'event'
+                && toNode.type === 'entity'
+                && (toNode.entity_type === 'place' || toNode.entity_type === 'time');
+        }
         if (edge.relation_type === 'located_in') {
             return false;
         }
@@ -1817,6 +1969,79 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             return false;
         }
         return true;
+    }
+    canonicalizeGraphEntityType(label, entityType, description) {
+        if (entityType !== 'other')
+            return entityType;
+        const normalized = this.normalizeEntityLabel(label);
+        const normalizedDescription = description?.trim().toLowerCase() ?? '';
+        if (/(?:^|\s)(company|corporation|corp|inc|agency|association|committee|department|government|firm|organization|party|school|university|bank|club|union|board|office|press|publisher|team|police)(?:$|\s)/.test(normalized)) {
+            return 'organization';
+        }
+        if (/\b(agents|officers|mechanics|teachers|doctors|lawyers|judges|workers|students|voters|officials|economists|realtors|parents|drivers|editors|reporters)\b/.test(normalized)) {
+            return 'organization';
+        }
+        if (PLACE_ENTITY_HINT_PATTERN.test(normalizedDescription)) {
+            return 'place';
+        }
+        if (OBJECT_ENTITY_HINT_PATTERN.test(normalizedDescription)) {
+            return 'object';
+        }
+        return entityType;
+    }
+    shouldReclassifyEntityNodeAsIdea(label, entityType, description) {
+        if (entityType === 'object' || entityType === 'organization' || entityType === 'time') {
+            return false;
+        }
+        const normalizedLabel = this.normalizeEntityLabel(label);
+        const normalizedDescription = description?.trim().toLowerCase() ?? '';
+        if (PLACE_ENTITY_HINT_PATTERN.test(normalizedLabel) || PLACE_ENTITY_HINT_PATTERN.test(normalizedDescription)) {
+            return false;
+        }
+        if (OBJECT_ENTITY_HINT_PATTERN.test(normalizedLabel)) {
+            return false;
+        }
+        if (this.isWorkLikeIdeaLabel(label, description)) {
+            return false;
+        }
+        return ABSTRACT_ENTITY_IDEA_LABEL_PATTERN.test(label)
+            || ABSTRACT_ENTITY_IDEA_DESCRIPTION_PATTERN.test(normalizedDescription);
+    }
+    normalizeEntityLabel(label) {
+        return label
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    areSameEntityNode(left, right) {
+        const leftLabel = this.normalizeEntityLabel(left.label);
+        const rightLabel = this.normalizeEntityLabel(right.label);
+        if (!leftLabel || !rightLabel || leftLabel !== rightLabel)
+            return false;
+        if (left.entity_type === right.entity_type)
+            return true;
+        return left.entity_type === 'other' || right.entity_type === 'other';
+    }
+    mergeEntityNodes(left, right) {
+        const preferred = this.preferEntityNode(left, right);
+        const fallback = preferred.id === left.id ? right : left;
+        return {
+            ...preferred,
+            description: preferred.description ?? fallback.description,
+        };
+    }
+    preferEntityNode(left, right) {
+        const leftPriority = ENTITY_TYPE_PRIORITY[left.entity_type];
+        const rightPriority = ENTITY_TYPE_PRIORITY[right.entity_type];
+        if (rightPriority > leftPriority)
+            return right;
+        if (rightPriority < leftPriority)
+            return left;
+        if ((right.description?.length ?? 0) > (left.description?.length ?? 0))
+            return right;
+        return left;
     }
     normalizeSemanticRelationType(edge, fromNode, toNode) {
         const description = edge.description?.trim();
@@ -1994,6 +2219,35 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             relations,
         };
     }
+    enforceEvidenceCoverage(data) {
+        const people = data.people.filter((person) => this.hasRequiredEvidence(person.evidence));
+        const ideas = data.ideas.filter((idea) => this.hasRequiredEvidence(idea.evidence));
+        const events = data.events.filter((event) => this.hasRequiredEvidence(event.evidence));
+        const entities = data.entities.filter((entity) => this.hasRequiredEvidence(entity.evidence));
+        const themes = data.themes.filter((theme) => this.hasRequiredEvidence(theme.evidence));
+        const keptNodeIds = new Set([
+            ...people.map((person) => person.local_id),
+            ...ideas.map((idea) => idea.local_id),
+            ...events.map((event) => event.local_id),
+            ...entities.map((entity) => entity.local_id),
+            ...themes.map((theme) => theme.local_id),
+        ]);
+        const relations = data.relations.filter((relation) => this.hasRequiredEvidence(relation.evidence)
+            && keptNodeIds.has(relation.from_id)
+            && keptNodeIds.has(relation.to_id));
+        return {
+            ...data,
+            people,
+            ideas,
+            events,
+            entities,
+            themes,
+            relations,
+        };
+    }
+    hasRequiredEvidence(evidence) {
+        return Array.isArray(evidence) && evidence.length > 0;
+    }
     buildMemoryContext(snapshot, currentPageIndex) {
         const relationHintsByNode = new Map();
         for (const relation of snapshot.relations) {
@@ -2130,7 +2384,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
             },
         };
     }
-    sanitizePeople(value, allowedPageRefs) {
+    sanitizePeople(value, allowedPageRefs, pageTextByPageIndex) {
         if (!Array.isArray(value))
             return undefined;
         const people = value
@@ -2152,13 +2406,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 description: asString(item.description),
                 roles: this.sanitizeStringArray(item.roles),
                 traits: this.sanitizeStringArray(item.traits),
-                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
             };
         })
             .filter((item) => item !== null);
         return people.length ? people : undefined;
     }
-    sanitizeIdeas(value, allowedPageRefs, promptVariant = 'nonfiction') {
+    sanitizeIdeas(value, allowedPageRefs, pageTextByPageIndex, promptVariant = 'nonfiction') {
         if (!Array.isArray(value))
             return undefined;
         const ideas = value
@@ -2175,7 +2429,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 label,
                 description: asString(item.description),
                 kind: normalizedKind,
-                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
             };
             if (!this.shouldKeepIdea(idea, promptVariant))
                 return null;
@@ -2215,7 +2469,7 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
         }
         return true;
     }
-    sanitizeEvents(value, allowedPageRefs) {
+    sanitizeEvents(value, allowedPageRefs, pageTextByPageIndex) {
         if (!Array.isArray(value))
             return undefined;
         const events = value
@@ -2232,13 +2486,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 participant_local_ids: this.sanitizeStringArray(item.participant_local_ids),
                 time_hint: asString(item.time_hint),
                 place_hint: asString(item.place_hint),
-                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
             };
         })
             .filter((item) => item !== null);
         return events.length ? events : undefined;
     }
-    sanitizeEntities(value, allowedPageRefs) {
+    sanitizeEntities(value, allowedPageRefs, pageTextByPageIndex) {
         if (!Array.isArray(value))
             return undefined;
         const entities = value
@@ -2254,13 +2508,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 label,
                 type: type,
                 description: asString(item.description),
-                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
             };
         })
             .filter((item) => item !== null);
         return entities.length ? entities : undefined;
     }
-    sanitizeThemes(value, allowedPageRefs) {
+    sanitizeThemes(value, allowedPageRefs, pageTextByPageIndex) {
         if (!Array.isArray(value))
             return undefined;
         const themes = value
@@ -2276,13 +2530,13 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                 label,
                 strength: typeof strength === 'number' ? Math.max(0, Math.min(1, strength)) : undefined,
                 description: asString(item.description),
-                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
             };
         })
             .filter((item) => item !== null);
         return themes.length ? themes : undefined;
     }
-    sanitizeRelations(value, allowedPageRefs) {
+    sanitizeRelations(value, allowedPageRefs, pageTextByPageIndex) {
         if (!Array.isArray(value))
             return undefined;
         const relations = value
@@ -2314,11 +2568,37 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
                     : 'related_to',
                 description: asString(item.description),
                 confidence: typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : undefined,
-                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs),
+                evidence: this.sanitizeEvidence(item.evidence, allowedPageRefs, pageTextByPageIndex),
             };
         })
             .filter((item) => item !== null);
         return relations.length ? relations : undefined;
+    }
+    buildPageTextByPageIndex(bookId, chapterId, allowedPageRefs) {
+        const pageTextByPageIndex = new Map();
+        for (const pageRef of allowedPageRefs) {
+            const page = this.bookIngestionRepository.getPage(bookId, chapterId, pageRef.pageIndex);
+            const pageText = asString(page?.pageTextMaterialized);
+            if (pageText) {
+                pageTextByPageIndex.set(pageRef.pageIndex, pageText);
+            }
+        }
+        return pageTextByPageIndex;
+    }
+    inferEvidencePageRef(quote, allowedPageRefs, pageTextByPageIndex) {
+        const singleAllowedPage = allowedPageRefs.length === 1 ? allowedPageRefs[0] : undefined;
+        if (singleAllowedPage)
+            return singleAllowedPage;
+        if (!pageTextByPageIndex || pageTextByPageIndex.size === 0)
+            return undefined;
+        const normalizedQuote = normalizeExcerptText(quote);
+        if (!normalizedQuote)
+            return undefined;
+        const matchingPageRefs = allowedPageRefs.filter((pageRef) => {
+            const pageText = pageTextByPageIndex.get(pageRef.pageIndex);
+            return pageText ? normalizeExcerptText(pageText).includes(normalizedQuote) : false;
+        });
+        return matchingPageRefs.length === 1 ? matchingPageRefs[0] : undefined;
     }
     createPageRef(pageIndex, pageNumber) {
         return { pageIndex, pageNumber };
@@ -2425,6 +2705,17 @@ let KnowledgeExtractionWorkflowService = class KnowledgeExtractionWorkflowServic
     }
     requireRun(workflowRunId) {
         const run = this.knowledgeExtractionWorkflowRepository.getRun(workflowRunId);
+        if (!run) {
+            (0, workflow_logger_1.workflowLog)('status.read_miss', {
+                workflowKind: 'knowledge_extraction',
+                workflowRunId,
+            });
+            throw new common_1.NotFoundException('Knowledge extraction workflow run not found');
+        }
+        return run;
+    }
+    async requireRunForResult(workflowRunId) {
+        const run = await this.knowledgeExtractionWorkflowRepository.getRunFromStore(workflowRunId);
         if (!run) {
             (0, workflow_logger_1.workflowLog)('status.read_miss', {
                 workflowKind: 'knowledge_extraction',

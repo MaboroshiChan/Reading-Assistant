@@ -9,7 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChapterOpenAnalysisModule = void 0;
 const common_1 = require("@nestjs/common");
 const book_ingestion_module_1 = require("../book-ingestion/book-ingestion.module");
-const chapter_keywords_workflow_module_1 = require("../chapter-keywords-workflow/chapter-keywords-workflow.module");
 const knowledge_extraction_workflow_module_1 = require("../knowledge-extraction-workflow/knowledge-extraction-workflow.module");
 const quiz_workflow_module_1 = require("../quiz-workflow/quiz-workflow.module");
 const workflow_queue_module_1 = require("../workflow-queue/workflow-queue.module");
@@ -26,7 +25,6 @@ exports.ChapterOpenAnalysisModule = ChapterOpenAnalysisModule = __decorate([
             book_ingestion_module_1.BookIngestionModule,
             workflow_queue_module_1.WorkflowQueueModule,
             pre_reading_workflow_module_1.PreReadingWorkflowModule,
-            chapter_keywords_workflow_module_1.ChapterKeywordsWorkflowModule,
             knowledge_extraction_workflow_module_1.KnowledgeExtractionWorkflowModule,
             quiz_workflow_module_1.QuizWorkflowModule,
         ],

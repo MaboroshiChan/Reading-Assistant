@@ -564,8 +564,8 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     };
   }
 
-  getWorkflowResult(workflowRunId: string): GetKnowledgeExtractionWorkflowResultResponseDto {
-    const run = this.requireRun(workflowRunId);
+  async getWorkflowResult(workflowRunId: string): Promise<GetKnowledgeExtractionWorkflowResultResponseDto> {
+    const run = await this.requireRunForResult(workflowRunId);
     if (
       run.status !== 'completed'
       || !run.output
@@ -613,11 +613,11 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
     };
   }
 
-  getLatestChapterKnowledgeExtraction(
+  async getLatestChapterKnowledgeExtraction(
     bookId: string,
     chapterId: string,
-  ): GetLatestChapterKnowledgeExtractionResponseDto {
-    const result = this.knowledgeExtractionWorkflowRepository.getLatestResult(bookId, chapterId);
+  ): Promise<GetLatestChapterKnowledgeExtractionResponseDto> {
+    const result = await this.knowledgeExtractionWorkflowRepository.getLatestResultFromStore(bookId, chapterId);
     if (!result) {
       throw new NotFoundException('No completed knowledge extraction workflow result found for chapter');
     }
@@ -1060,8 +1060,10 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       input.bookId,
       input.chapterId,
     );
-    knowledge.title = input.chapterTitle ?? knowledge.title;
-    knowledge.summary = this.summarize(input.chapterText, 240);
+    const title = input.chapterTitle ?? knowledge.title;
+    const summary = this.summarize(input.chapterText, 240);
+    knowledge.title = title;
+    knowledge.summary = summary;
     await this.knowledgeExtractionWorkflowRepository.replaceChapterExtraction({
       bookId: input.bookId,
       chapterId: input.chapterId,
@@ -1069,7 +1071,13 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
       chapterTitle: input.chapterTitle,
       extraction: knowledge,
     });
-    return knowledge;
+    const canonicalKnowledge = await this.knowledgeExtractionWorkflowRepository.buildChapterSnapshot(
+      input.bookId,
+      input.chapterId,
+    );
+    canonicalKnowledge.title = title ?? canonicalKnowledge.title;
+    canonicalKnowledge.summary = summary;
+    return canonicalKnowledge;
   }
 
   private async restorePieceProgress(input: {
@@ -3451,6 +3459,18 @@ export class KnowledgeExtractionWorkflowService implements OnApplicationBootstra
 
   private requireRun(workflowRunId: string): KnowledgeExtractionWorkflowRunRecord {
     const run = this.knowledgeExtractionWorkflowRepository.getRun(workflowRunId);
+    if (!run) {
+      workflowLog('status.read_miss', {
+        workflowKind: 'knowledge_extraction',
+        workflowRunId,
+      });
+      throw new NotFoundException('Knowledge extraction workflow run not found');
+    }
+    return run;
+  }
+
+  private async requireRunForResult(workflowRunId: string): Promise<KnowledgeExtractionWorkflowRunRecord> {
+    const run = await this.knowledgeExtractionWorkflowRepository.getRunFromStore(workflowRunId);
     if (!run) {
       workflowLog('status.read_miss', {
         workflowKind: 'knowledge_extraction',

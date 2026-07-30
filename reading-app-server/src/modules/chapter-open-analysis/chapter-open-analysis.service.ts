@@ -1,7 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { BookIngestionRepository } from '../book-ingestion/book-ingestion.repository';
-import { ChapterKeywordsWorkflowService } from '../chapter-keywords-workflow/chapter-keywords-workflow.service';
-import { ChapterKeywordsWorkflowRepository } from '../chapter-keywords-workflow/chapter-keywords-workflow.repository';
 import { KnowledgeExtractionWorkflowRepository } from '../knowledge-extraction-workflow/knowledge-extraction-workflow.repository';
 import { KnowledgeExtractionWorkflowService } from '../knowledge-extraction-workflow/knowledge-extraction-workflow.service';
 import { QuizWorkflowRepository } from '../quiz-workflow/quiz-workflow.repository';
@@ -45,10 +43,6 @@ export class ChapterOpenAnalysisService {
     private readonly bookIngestionRepository: BookIngestionRepository,
     @Inject(ChapterOpenAnalysisRepository)
     private readonly chapterOpenAnalysisRepository: ChapterOpenAnalysisRepository,
-    @Inject(ChapterKeywordsWorkflowService)
-    private readonly chapterKeywordsWorkflowService: ChapterKeywordsWorkflowService,
-    @Inject(ChapterKeywordsWorkflowRepository)
-    private readonly chapterKeywordsWorkflowRepository: ChapterKeywordsWorkflowRepository,
     @Inject(KnowledgeExtractionWorkflowService)
     private readonly knowledgeExtractionWorkflowService: KnowledgeExtractionWorkflowService,
     @Inject(KnowledgeExtractionWorkflowRepository)
@@ -250,14 +244,6 @@ export class ChapterOpenAnalysisService {
 
       await this.preReadingWorkflowService.executeRun(preReading.workflowRunId);
 
-      const chapterKeywords = this.chapterKeywordsWorkflowService.submitChapterKeywordsWorkflow({
-        bookId: run.bookId,
-        chapterId: run.chapterId,
-        chapterIndex: run.chapterIndex,
-        workflowVersion: 'v1',
-        expectedSnapshotVersion: book.snapshotVersion,
-        expectedChapterContentHash: chapter.chapterContentHash,
-      });
       const knowledgeExtraction = this.knowledgeExtractionWorkflowService.submitKnowledgeExtractionWorkflow({
         bookId: run.bookId,
         chapterId: run.chapterId,
@@ -269,7 +255,6 @@ export class ChapterOpenAnalysisService {
 
       this.chapterOpenAnalysisRepository.attachChildRuns({
         runId,
-        chapterKeywordsWorkflowRunId: chapterKeywords.workflowRunId,
         knowledgeExtractionWorkflowRunId: knowledgeExtraction.workflowRunId,
       });
       this.reconcileRun(this.chapterOpenAnalysisRepository.getRun(runId) ?? run);
@@ -305,7 +290,7 @@ export class ChapterOpenAnalysisService {
         run: currentRun,
         tasks: {
           preReading: { status: 'failed', workflowRunId: currentRun.preReadingWorkflowRunId, error: currentRun.error },
-          chapterKeywords: { status: 'failed', workflowRunId: currentRun.chapterKeywordsWorkflowRunId, error: currentRun.error },
+          chapterKeywords: { status: 'disabled' },
           knowledgeExtraction: { status: 'failed', workflowRunId: currentRun.knowledgeExtractionWorkflowRunId, error: currentRun.error },
           quiz: { status: 'failed', workflowRunId: currentRun.quizWorkflowRunId, error: currentRun.error },
         },
@@ -354,17 +339,6 @@ export class ChapterOpenAnalysisService {
       currentRun.bookId,
       currentRun.chapterId,
     ) ?? null;
-    const chapterKeywordsRun = currentRun.chapterKeywordsWorkflowRunId
-      ? this.chapterKeywordsWorkflowRepository.getRun(currentRun.chapterKeywordsWorkflowRunId)
-      : null;
-    const latestChapterKeywordsRun = chapterKeywordsRun
-      ?? (typeof this.chapterKeywordsWorkflowRepository.findLatestRunForChapter === 'function'
-        ? this.chapterKeywordsWorkflowRepository.findLatestRunForChapter(currentRun.bookId, currentRun.chapterId)
-        : null);
-    const chapterKeywordsLatest = this.chapterKeywordsWorkflowRepository.getLatestResult(
-      currentRun.bookId,
-      currentRun.chapterId,
-    );
     const knowledgeRun = currentRun.knowledgeExtractionWorkflowRunId
       ? this.knowledgeExtractionWorkflowRepository.getRun(currentRun.knowledgeExtractionWorkflowRunId)
       : null;
@@ -397,10 +371,7 @@ export class ChapterOpenAnalysisService {
       preReadingLatest && matchesExpected(preReadingLatest.snapshotVersion, preReadingLatest.chapterContentHash)
         ? preReadingLatest.result
         : null;
-    const chapterKeywordsResult =
-      chapterKeywordsLatest && matchesExpected(chapterKeywordsLatest.snapshotVersion, chapterKeywordsLatest.chapterContentHash)
-        ? chapterKeywordsLatest.result
-        : null;
+    const chapterKeywordsResult = null;
     const knowledgeResult =
       knowledgeLatest && matchesExpected(knowledgeLatest.snapshotVersion, knowledgeLatest.chapterContentHash)
         ? knowledgeLatest.result
@@ -420,19 +391,7 @@ export class ChapterOpenAnalysisService {
         latestPreReadingRun?.id,
         latestPreReadingRun?.error,
       );
-    const chapterKeywordsTask = chapterKeywordsResult
-      ? {
-        status: 'completed' as ChapterOpenAnalysisTaskStatus,
-        workflowRunId: chapterKeywordsLatest?.workflowRunId ?? latestChapterKeywordsRun?.id,
-      }
-      : (preReadingTask.status === 'queued' || preReadingTask.status === 'running')
-        && !latestChapterKeywordsRun
-        ? { status: 'blocked' as const, blockedBy: 'preReading' as const }
-        : this.taskFromChildRun(
-          latestChapterKeywordsRun?.status,
-          latestChapterKeywordsRun?.id,
-          latestChapterKeywordsRun?.error,
-        );
+    const chapterKeywordsTask: ChapterOpenAnalysisTaskState = { status: 'disabled' };
     const knowledgeTask = knowledgeResult
       ? {
         status: 'completed' as ChapterOpenAnalysisTaskStatus,
@@ -482,18 +441,17 @@ export class ChapterOpenAnalysisService {
 
     const completedCount = [
       Boolean(preReadingResult),
-      Boolean(chapterKeywordsResult),
       Boolean(knowledgeResult),
       Boolean(quizResult),
     ].filter(Boolean).length;
-    const hasActiveTask = [preReadingTask, chapterKeywordsTask, knowledgeTask, quizTask]
+    const hasActiveTask = [preReadingTask, knowledgeTask, quizTask]
       .some((task) => task.status === 'queued' || task.status === 'running' || task.status === 'blocked');
-    const hasTerminalFailure = [preReadingTask, chapterKeywordsTask, knowledgeTask, quizTask]
+    const hasTerminalFailure = [preReadingTask, knowledgeTask, quizTask]
       .some((task) => task.status === 'failed' || task.status === 'stale');
 
     const aggregateStatus = (() => {
       if (currentRun.status === 'stale') return 'stale' as const;
-      if (completedCount === 4) return 'completed' as const;
+      if (completedCount === 3) return 'completed' as const;
       if (hasActiveTask) return 'running' as const;
       if (hasTerminalFailure) return completedCount > 0 ? 'partial' as const : 'failed' as const;
       return completedCount > 0 ? 'partial' as const : currentRun.status;
@@ -502,7 +460,6 @@ export class ChapterOpenAnalysisService {
       aggregateStatus,
       knowledgeTask,
       knowledgeRun: latestKnowledgeRun,
-      chapterKeywordsTask,
       preReadingTask,
     });
 
@@ -585,10 +542,6 @@ export class ChapterOpenAnalysisService {
 
     const preReadingRun = this.preReadingWorkflowRepository?.findLatestRunForChapter(bookId, chapterId) ?? null;
     const preReadingLatest = this.preReadingWorkflowRepository?.getLatestResult(bookId, chapterId) ?? null;
-    const chapterKeywordsRun = typeof this.chapterKeywordsWorkflowRepository.findLatestRunForChapter === 'function'
-      ? this.chapterKeywordsWorkflowRepository.findLatestRunForChapter(bookId, chapterId)
-      : null;
-    const chapterKeywordsLatest = this.chapterKeywordsWorkflowRepository.getLatestResult(bookId, chapterId);
     const knowledgeRun = typeof this.knowledgeExtractionWorkflowRepository.findLatestRunForChapter === 'function'
       ? this.knowledgeExtractionWorkflowRepository.findLatestRunForChapter(bookId, chapterId)
       : null;
@@ -601,8 +554,6 @@ export class ChapterOpenAnalysisService {
     if (
       !preReadingRun
       && !preReadingLatest
-      && !chapterKeywordsRun
-      && !chapterKeywordsLatest
       && !knowledgeRun
       && !knowledgeLatest
       && !quizRun
@@ -616,10 +567,6 @@ export class ChapterOpenAnalysisService {
       preReadingRun?.updatedAt,
       preReadingLatest?.createdAt,
       preReadingLatest?.updatedAt,
-      chapterKeywordsRun?.createdAt,
-      chapterKeywordsRun?.updatedAt,
-      chapterKeywordsLatest?.createdAt,
-      chapterKeywordsLatest?.updatedAt,
       knowledgeRun?.createdAt,
       knowledgeRun?.updatedAt,
       knowledgeLatest?.createdAt,
@@ -647,7 +594,6 @@ export class ChapterOpenAnalysisService {
       snapshotVersion: book.snapshotVersion,
       chapterContentHash: chapter.chapterContentHash,
       preReadingWorkflowRunId: preReadingRun?.id ?? preReadingLatest?.workflowRunId,
-      chapterKeywordsWorkflowRunId: chapterKeywordsRun?.id ?? chapterKeywordsLatest?.workflowRunId,
       knowledgeExtractionWorkflowRunId: knowledgeRun?.id ?? knowledgeLatest?.workflowRunId,
       quizWorkflowRunId: quizRun?.id ?? quizLatest?.workflowRunId,
       createdAt,
@@ -660,7 +606,6 @@ export class ChapterOpenAnalysisService {
     aggregateStatus: ChapterOpenAnalysisRunRecord['status'];
     knowledgeTask: ChapterOpenAnalysisTaskState;
     knowledgeRun: { progress?: { percent?: number; stage?: string; message?: string } } | null;
-    chapterKeywordsTask: ChapterOpenAnalysisTaskState;
     preReadingTask: ChapterOpenAnalysisTaskState;
   }): ChapterOpenAnalysisProgress | undefined {
     if (args.aggregateStatus !== 'running') {
@@ -688,14 +633,6 @@ export class ChapterOpenAnalysisService {
         percent: 0,
         stage: 'queued_pre_reading',
         message: '章节导读正在排队',
-      };
-    }
-
-    if (args.chapterKeywordsTask.status === 'running' || args.chapterKeywordsTask.status === 'queued') {
-      return {
-        percent: 0,
-        stage: 'queued',
-        message: '正在排队',
       };
     }
 

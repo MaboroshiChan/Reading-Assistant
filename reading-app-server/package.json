@@ -5,7 +5,7 @@
   "main": "dist/reading-app-server/src/main.js",
   "scripts": {
     "dev": "tsx src/main.ts",
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node scripts/copy-prompts.cjs",
     "start": "node dist/reading-app-server/src/main.js",
     "smoke:knowledge-extraction": "node scripts/knowledge-extraction-smoke.cjs",
     "eval:graph-dto": "node scripts/evaluate-graph-dto-from-ingestion.cjs",

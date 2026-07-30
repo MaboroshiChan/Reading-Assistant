@@ -1,5 +1,6 @@
 import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
+import { config } from '../../config/runtime-config';
 import type {
   AnalyzeKnowledgeExtractionData,
   AnalyzeKnowledgeExtractionGraphData,
@@ -501,6 +502,41 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
     return this.runs.get(normalizeWorkflowRunId(workflowRunId)) ?? null;
   }
 
+  async getRunFromStore(workflowRunId: string): Promise<KnowledgeExtractionWorkflowRunRecord | null> {
+    if (!this.shouldReadThroughSurreal()) {
+      return this.getRun(workflowRunId);
+    }
+
+    const persistedRun = await this.surrealService!.selectRecord<KnowledgeExtractionWorkflowPersistedRunRecord>(
+      'workflow_run',
+      normalizeWorkflowRunId(workflowRunId),
+    );
+    if (!persistedRun) {
+      return null;
+    }
+
+    const normalizedRunId = normalizeWorkflowRunId(persistedRun.id);
+    const rebuiltSnapshot = await this.getLatestResultFromStore(persistedRun.bookId, persistedRun.chapterId);
+    if (
+      persistedRun.status === 'completed'
+      && rebuiltSnapshot
+      && persistedRun.snapshotVersion === rebuiltSnapshot.snapshotVersion
+      && persistedRun.chapterContentHash === rebuiltSnapshot.chapterContentHash
+    ) {
+      return {
+        ...persistedRun,
+        id: normalizedRunId,
+        output: rebuiltSnapshot.result,
+      };
+    }
+
+    return {
+      ...persistedRun,
+      id: normalizedRunId,
+      output: this.isFullResultPayload(persistedRun.output) ? persistedRun.output : undefined,
+    };
+  }
+
   listRecoverableRuns(): KnowledgeExtractionWorkflowRunRecord[] {
     return Array.from(this.runs.values())
       .filter((run) => run.status === 'queued' || run.status === 'running')
@@ -764,6 +800,34 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
 
   getLatestResult(bookId: string, chapterId: string): KnowledgeExtractionWorkflowStoredResult | null {
     return this.latestResultsByChapter.get(chapterKey(bookId, chapterId)) ?? null;
+  }
+
+  async getLatestResultFromStore(
+    bookId: string,
+    chapterId: string,
+  ): Promise<KnowledgeExtractionWorkflowStoredResult | null> {
+    if (!this.shouldReadThroughSurreal()) {
+      return this.getLatestResult(bookId, chapterId);
+    }
+
+    const snapshot = await this.surrealService!.selectRecord<KnowledgeExtractionWorkflowPersistedStoredResult>(
+      'chapter_knowledge_snapshot',
+      this.makeChapterSnapshotRecordId(bookId, chapterId),
+    );
+    if (!snapshot) {
+      return null;
+    }
+
+    const rebuiltResult = await this.buildChapterSnapshot(snapshot.bookId, snapshot.chapterId);
+    const persistedResult = this.extractPersistedSummary(snapshot.result);
+    if (persistedResult?.title) rebuiltResult.title = persistedResult.title;
+    if (persistedResult?.summary) rebuiltResult.summary = persistedResult.summary;
+
+    return {
+      ...snapshot,
+      workflowRunId: normalizeWorkflowRunId(snapshot.workflowRunId),
+      result: rebuiltResult,
+    };
   }
 
   findLatestRunForChapter(bookId: string, chapterId: string): KnowledgeExtractionWorkflowRunRecord | null {
@@ -3154,6 +3218,10 @@ export class KnowledgeExtractionWorkflowRepository implements OnModuleInit {
       encodeSegment(chapterContentHash),
       encodeSegment(promptVersion),
     ].join('_');
+  }
+
+  private shouldReadThroughSurreal(): boolean {
+    return config.knowledgeExtractionReadThroughSurreal && Boolean(this.surrealService);
   }
 
   private makeEvidenceOwnerKey(ownerTable: EvidenceOwnerTable, ownerRecordId: string): string {

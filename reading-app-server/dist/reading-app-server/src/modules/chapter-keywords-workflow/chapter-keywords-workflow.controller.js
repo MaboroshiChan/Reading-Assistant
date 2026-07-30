@@ -8,77 +8,71 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __param = (this && this.__param) || function (paramIndex, decorator) {
-    return function (target, key) { decorator(target, key, paramIndex); }
-};
+var ChapterKeywordsWorkflowController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChapterKeywordsWorkflowController = void 0;
 const common_1 = require("@nestjs/common");
-const chapter_keywords_workflow_service_1 = require("./chapter-keywords-workflow.service");
 let ChapterKeywordsWorkflowController = class ChapterKeywordsWorkflowController {
-    chapterKeywordsWorkflowService;
-    constructor(chapterKeywordsWorkflowService) {
-        this.chapterKeywordsWorkflowService = chapterKeywordsWorkflowService;
+    static { ChapterKeywordsWorkflowController_1 = this; }
+    static disabledMessage = 'Chapter key sentence and key word generation moved to iOS local Foundation Models.';
+    submitChapterKeywordsWorkflow() {
+        throw this.featureDisabled();
     }
-    submitChapterKeywordsWorkflow(rawBody) {
-        const request = this.chapterKeywordsWorkflowService.parseSubmitRequest(rawBody);
-        return this.chapterKeywordsWorkflowService.submitChapterKeywordsWorkflow(request);
+    getWorkflowStatus() {
+        throw this.featureDisabled();
     }
-    getWorkflowStatus(workflowRunId) {
-        return this.chapterKeywordsWorkflowService.getWorkflowStatus(workflowRunId);
+    getWorkflowResult() {
+        throw this.featureDisabled();
     }
-    getWorkflowResult(workflowRunId) {
-        return this.chapterKeywordsWorkflowService.getWorkflowResult(workflowRunId);
+    restartWorkflow() {
+        throw this.featureDisabled();
     }
-    restartWorkflow(workflowRunId, rawBody) {
-        const request = this.chapterKeywordsWorkflowService.parseRestartRequest(rawBody);
-        return this.chapterKeywordsWorkflowService.restartWorkflow(workflowRunId, request);
+    getLatestChapterKeywords() {
+        throw this.featureDisabled();
     }
-    getLatestChapterKeywords(bookId, chapterId) {
-        return this.chapterKeywordsWorkflowService.getLatestChapterKeywords(bookId, chapterId);
+    featureDisabled() {
+        return new common_1.GoneException({
+            status: 'error',
+            error: {
+                code: 'E.FEATURE_DISABLED',
+                http: 410,
+                message: ChapterKeywordsWorkflowController_1.disabledMessage,
+            },
+        });
     }
 };
 exports.ChapterKeywordsWorkflowController = ChapterKeywordsWorkflowController;
 __decorate([
     (0, common_1.Post)('workflows/chapter-keywords'),
-    __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Object)
 ], ChapterKeywordsWorkflowController.prototype, "submitChapterKeywordsWorkflow", null);
 __decorate([
     (0, common_1.Get)('workflows/chapter-keywords/:workflowRunId'),
-    __param(0, (0, common_1.Param)('workflowRunId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Object)
 ], ChapterKeywordsWorkflowController.prototype, "getWorkflowStatus", null);
 __decorate([
     (0, common_1.Get)('workflows/chapter-keywords/:workflowRunId/result'),
-    __param(0, (0, common_1.Param)('workflowRunId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Object)
 ], ChapterKeywordsWorkflowController.prototype, "getWorkflowResult", null);
 __decorate([
     (0, common_1.Post)('workflows/chapter-keywords/:workflowRunId/restart'),
-    __param(0, (0, common_1.Param)('workflowRunId')),
-    __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Object)
 ], ChapterKeywordsWorkflowController.prototype, "restartWorkflow", null);
 __decorate([
     (0, common_1.Get)('books/:bookId/chapters/:chapterId/chapter-keywords'),
-    __param(0, (0, common_1.Param)('bookId')),
-    __param(1, (0, common_1.Param)('chapterId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", []),
     __metadata("design:returntype", Object)
 ], ChapterKeywordsWorkflowController.prototype, "getLatestChapterKeywords", null);
-exports.ChapterKeywordsWorkflowController = ChapterKeywordsWorkflowController = __decorate([
-    (0, common_1.Controller)('v1'),
-    __param(0, (0, common_1.Inject)(chapter_keywords_workflow_service_1.ChapterKeywordsWorkflowService)),
-    __metadata("design:paramtypes", [chapter_keywords_workflow_service_1.ChapterKeywordsWorkflowService])
+exports.ChapterKeywordsWorkflowController = ChapterKeywordsWorkflowController = ChapterKeywordsWorkflowController_1 = __decorate([
+    (0, common_1.Controller)('v1')
 ], ChapterKeywordsWorkflowController);
 //# sourceMappingURL=chapter-keywords-workflow.controller.js.map

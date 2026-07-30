@@ -225,13 +225,16 @@ const handleParagraph = async (req, signal) => {
     }
     const started = Date.now();
     const { data: stream, usage: usagePromise } = await buildParagraphData(req, signal);
-    const tappedStream = (0, shared_1.withBufferedStream)(stream, async ({ text, completed }) => {
-        if (!completed)
-            return;
+    const sanitizedStream = (async function* () {
+        let text = '';
+        for await (const chunk of stream) {
+            text += chunk;
+        }
+        const object = coerceParagraphResponse((0, llmService_1.extractJsonFromText)(text));
+        const data = mapParagraphResponse(object, req);
+        yield JSON.stringify(data);
         try {
             const usage = await usagePromise;
-            const object = coerceParagraphResponse((0, llmService_1.extractJsonFromText)(text));
-            const data = mapParagraphResponse(object, req);
             const response = {
                 request_id: req.request_id,
                 status: 'ok',
@@ -249,8 +252,8 @@ const handleParagraph = async (req, signal) => {
         catch (error) {
             console.warn('[paragraph] failed to cache response', error);
         }
-    });
-    return { data: tappedStream, usage: usagePromise };
+    })();
+    return { data: sanitizedStream, usage: usagePromise };
 };
 exports.handleParagraph = handleParagraph;
 /**
@@ -419,15 +422,6 @@ const mapParagraphResponse = (payload, req) => {
     const sentences = payload.sentences?.length
         ? payload.sentences
             .map((sentence) => {
-            const keyWords = sentence.key_words
-                ?.map((item) => {
-                const word = asString(item.word);
-                const color = item.color === 'green' ? 'green' : item.color === 'red' ? 'red' : undefined;
-                if (!word || !color)
-                    return null;
-                return { word, color };
-            })
-                .filter((item) => item !== null);
             const relation = sentence.relation && (asString(sentence.relation.type) || typeof sentence.relation.targetSentenceId === 'number')
                 ? {
                     type: asString(sentence.relation.type),
@@ -443,15 +437,13 @@ const mapParagraphResponse = (payload, req) => {
                 mood: asString(sentence.mood),
                 purpose: asString(sentence.purpose),
                 relation,
-                key_words: keyWords?.length ? keyWords : undefined,
             };
         })
             .filter((sentence) => sentence.function ||
             sentence.type ||
             sentence.mood ||
             sentence.purpose ||
-            sentence.relation ||
-            sentence.key_words?.length)
+            sentence.relation)
         : undefined;
     const anchorList = anchorIndex.size ? (0, shared_1.sortAnchors)(Array.from(anchorIndex.values())) : undefined;
     return {
@@ -600,18 +592,6 @@ const coerceClaim = (value) => {
 const coerceSentence = (value) => {
     if (!isRecord(value))
         return null;
-    const keyWords = Array.isArray(value.key_words)
-        ? value.key_words
-            .map((item) => {
-            if (!isRecord(item))
-                return null;
-            return {
-                word: asString(item.word),
-                color: asString(item.color),
-            };
-        })
-            .filter((item) => item !== null)
-        : undefined;
     const relation = isRecord(value.relation)
         ? {
             type: asString(value.relation.type),
@@ -626,14 +606,12 @@ const coerceSentence = (value) => {
         mood: asString(value.mood),
         purpose: asString(value.purpose),
         relation,
-        key_words: keyWords,
     };
     if (!sentence.function &&
         !sentence.type &&
         !sentence.mood &&
         !sentence.purpose &&
-        !sentence.relation &&
-        !sentence.key_words?.length) {
+        !sentence.relation) {
         return null;
     }
     return sentence;

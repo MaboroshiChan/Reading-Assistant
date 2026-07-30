@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { BookIngestionModule } from '../book-ingestion/book-ingestion.module';
-import { ChapterKeywordsWorkflowModule } from '../chapter-keywords-workflow/chapter-keywords-workflow.module';
 import { KnowledgeExtractionWorkflowModule } from '../knowledge-extraction-workflow/knowledge-extraction-workflow.module';
 import { QuizWorkflowModule } from '../quiz-workflow/quiz-workflow.module';
 import { WorkflowQueueModule } from '../workflow-queue/workflow-queue.module';
@@ -14,7 +13,6 @@ import { ChapterOpenAnalysisService } from './chapter-open-analysis.service';
     BookIngestionModule,
     WorkflowQueueModule,
     PreReadingWorkflowModule,
-    ChapterKeywordsWorkflowModule,
     KnowledgeExtractionWorkflowModule,
     QuizWorkflowModule,
   ],

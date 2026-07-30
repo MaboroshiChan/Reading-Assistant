@@ -4,7 +4,6 @@ import path from 'node:path';
 import { ConflictException } from '@nestjs/common';
 import { describe, expect, test, vi } from 'vitest';
 import { BookIngestionRepository } from '../src/modules/book-ingestion/book-ingestion.repository';
-import { ChapterKeywordsWorkflowRepository } from '../src/modules/chapter-keywords-workflow/chapter-keywords-workflow.repository';
 import { ChapterOpenAnalysisRepository } from '../src/modules/chapter-open-analysis/chapter-open-analysis.repository';
 import { ChapterOpenAnalysisService } from '../src/modules/chapter-open-analysis/chapter-open-analysis.service';
 import { KnowledgeExtractionWorkflowRepository } from '../src/modules/knowledge-extraction-workflow/knowledge-extraction-workflow.repository';
@@ -20,7 +19,6 @@ const createBookRepository = async (): Promise<BookIngestionRepository> => {
 const createService = (
   bookRepository: BookIngestionRepository,
   enqueue = vi.fn(),
-  chapterKeywordsRepository = new ChapterKeywordsWorkflowRepository(),
   knowledgeExtractionRepository = new KnowledgeExtractionWorkflowRepository(),
   quizRepository = new QuizWorkflowRepository(),
   preReadingRepository = new PreReadingWorkflowRepository(),
@@ -28,8 +26,6 @@ const createService = (
   return new ChapterOpenAnalysisService(
     bookRepository,
     new ChapterOpenAnalysisRepository(),
-    {} as never,
-    chapterKeywordsRepository,
     {} as never,
     knowledgeExtractionRepository,
     quizRepository,
@@ -40,7 +36,7 @@ const createService = (
 };
 
 describe('ChapterOpenAnalysisService', () => {
-  test('finishes pre-reading before submitting insight workflows', async () => {
+  test('finishes pre-reading before submitting enabled insight workflows', async () => {
     const bookRepository = await createBookRepository();
     bookRepository.upsertPageFragment({
       bookId: 'book-order',
@@ -57,13 +53,6 @@ describe('ChapterOpenAnalysisService', () => {
     const service = new ChapterOpenAnalysisService(
       bookRepository,
       new ChapterOpenAnalysisRepository(),
-      {
-        submitChapterKeywordsWorkflow: vi.fn(() => {
-          order.push('chapterKeywords');
-          return { workflowRunId: 'keywords-run' };
-        }),
-      } as never,
-      new ChapterKeywordsWorkflowRepository(),
       {
         submitKnowledgeExtractionWorkflow: vi.fn(() => {
           order.push('knowledgeExtraction');
@@ -98,7 +87,6 @@ describe('ChapterOpenAnalysisService', () => {
     expect(order).toEqual([
       'preReadingSubmitted',
       'preReadingCompleted',
-      'chapterKeywords',
       'knowledgeExtraction',
     ]);
   });
@@ -157,7 +145,7 @@ describe('ChapterOpenAnalysisService', () => {
     expect(response.snapshotVersion).toBe(latestBook.snapshotVersion);
     expect(response.chapterContentHash).toBe(stableChapterHash);
     expect(response.tasks.preReading.status).toBe('queued');
-    expect(response.tasks.chapterKeywords.status).toBe('blocked');
+    expect(response.tasks.chapterKeywords.status).toBe('disabled');
     expect(response.tasks.knowledgeExtraction.status).toBe('blocked');
     expect(response.tasks.quiz.status).toBe('blocked');
     expect(enqueue).toHaveBeenCalledTimes(1);
@@ -287,7 +275,6 @@ describe('ChapterOpenAnalysisService', () => {
     const service = createService(
       bookRepository,
       vi.fn(),
-      new ChapterKeywordsWorkflowRepository(),
       knowledgeRepository,
       new QuizWorkflowRepository(),
     );

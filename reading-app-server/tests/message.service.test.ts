@@ -132,7 +132,7 @@ describe('message service', () => {
     }
   });
 
-  test('sanitizes and caches chapter keyword LLM responses', async () => {
+  test('returns feature disabled for chapter keyword message requests', async () => {
     const payload = {
       doc_id: 'book-sanitize-1',
       chapter_id: 'chapter-sanitize-1',
@@ -156,52 +156,8 @@ describe('message service', () => {
         },
       ],
     };
-    const llmJson = JSON.stringify({
-      key_sentences: [
-        {
-          sentence_ref: payload.sentences[0].ref,
-          sentence_text: payload.sentences[0].text,
-          importance: 1.7,
-          reason: 'Core claim',
-        },
-        {
-          sentence_ref: payload.sentences[1].ref,
-          sentence_text: 'Second rewritten sentence.',
-          importance: 0.5,
-          reason: 'Invalid rewrite',
-        },
-        {
-          sentence_ref: { page_index: 9, paragraph_index: 9, paragraph_id: 9, sentence_id: 9 },
-          sentence_text: 'Unknown sentence.',
-          importance: 0.5,
-          reason: 'Unknown ref',
-        },
-        {
-          sentence_ref: payload.sentences[2].ref,
-          sentence_text: payload.sentences[2].text,
-          importance: -0.25,
-          reason: 123,
-        },
-      ],
-      sentence_keywords: [
-        {
-          sentence_ref: payload.sentences[0].ref,
-          sentence_text: payload.sentences[0].text,
-          keywords: [{ word: 'First', color: 'red' }],
-        },
-      ],
-    });
-    const jsonSpy = vi.fn(async () => ({
-      data: (async function* () {
-        yield llmJson;
-      })(),
-      usage: Promise.resolve({
-        modelId: 'mock-model',
-        inputTokens: 11,
-        outputTokens: 22,
-      }),
-    }));
-    const createLLMClientSpy = vi.spyOn(llmService, 'createLLMClient').mockReturnValue({
+    const jsonSpy = vi.fn();
+    vi.spyOn(llmService, 'createLLMClient').mockReturnValue({
       complete: vi.fn(),
       json: jsonSpy,
     } as never);
@@ -214,46 +170,87 @@ describe('message service', () => {
       cache_hint: 'prefer',
     });
 
-    const first = await handleRawMessage(raw);
-    let firstText = '';
-    for await (const chunk of first.stream ?? []) {
-      firstText += chunk;
-    }
-    const firstData = extractJsonFromText(firstText);
-    expect(firstData).toMatchObject({
-      key_sentences: [
-        {
-          sentence_ref: payload.sentences[0].ref,
-          sentence_text: payload.sentences[0].text,
-          importance: 1,
-          reason: 'Core claim',
-        },
-      ],
-      sentence_keywords: [],
+    const result = await handleRawMessage(raw);
+    expect(result.status).toBe('error');
+    expect(result.error).toMatchObject({
+      code: 'E.FEATURE_DISABLED',
+      http: 410,
     });
-    expect((firstData as { key_sentences: unknown[] }).key_sentences).toHaveLength(1);
+    expect(result.error?.message).toContain('iOS local Foundation Models');
+    expect(jsonSpy).not.toHaveBeenCalled();
+  });
 
-    const second = await handleRawMessage(raw);
-    let secondText = '';
-    for await (const chunk of second.stream ?? []) {
-      secondText += chunk;
-    }
-
-    expect(extractJsonFromText(secondText)).toMatchObject({
-      request_id: 'req_chapter_keywords_sanitize_1',
-      served_from: 'cache',
-      data: firstData,
-    });
-    expect(createLLMClientSpy).toHaveBeenCalledWith(expect.objectContaining({
-      prefixCache: expect.objectContaining({
-        cacheKey: expect.stringContaining('chapter_keywords.chunk_prefix:chapter_keywords.v1'),
-        prefix: expect.stringContaining('Canonical chunk text:'),
-        systemPromptMode: 'request',
+  test('does not return backend key words for sentence or paragraph analysis', async () => {
+    const jsonSpy = vi.fn(async (prompt: string) => ({
+      data: (async function* () {
+        if (prompt.includes('Sentence:')) {
+          yield JSON.stringify({
+            semantic_roles: [{ role: 'predicate', text: 'frames', confidence: 0.9 }],
+            key_phrase: ['frames'],
+            function: 'claim',
+          });
+          return;
+        }
+        yield JSON.stringify({
+          summary: 'The paragraph frames a claim.',
+          sentences: [
+            {
+              function: 'claim',
+              type: 'Declarative',
+              key_words: [{ word: 'frames', color: 'green' }],
+            },
+          ],
+        });
+      })(),
+      usage: Promise.resolve({
+        modelId: 'mock-model',
+        inputTokens: 1,
+        outputTokens: 1,
       }),
     }));
-    expect(jsonSpy.mock.calls[0]?.[0]).toContain('Sentence payload JSON:');
-    expect(jsonSpy.mock.calls[0]?.[0]).not.toContain('chunk_text');
-    expect(jsonSpy).toHaveBeenCalledTimes(1);
+    vi.spyOn(llmService, 'createLLMClient').mockReturnValue({
+      complete: vi.fn(),
+      json: jsonSpy,
+    } as never);
+
+    const sentence = await handleRawMessage(JSON.stringify({
+      api_version: 'v1',
+      request_id: 'req_sentence_no_key_words_1',
+      type: 'analyze.sentence.v1',
+      payload: {
+        doc_id: 'doc-no-key-words',
+        sentence_id: 's1',
+        sentence_text: 'The author frames the problem.',
+        options: { tasks: ['semantic_roles', 'key_words', 'discourse_function'] },
+      },
+      cache_hint: 'bypass',
+    }));
+    let sentenceText = '';
+    for await (const chunk of sentence.stream ?? []) {
+      sentenceText += chunk;
+    }
+    const sentenceData = extractJsonFromText(sentenceText) as { key_words?: unknown };
+    expect(sentenceData.key_words).toBeUndefined();
+
+    const paragraph = await handleRawMessage(JSON.stringify({
+      api_version: 'v1',
+      request_id: 'req_paragraph_no_key_words_1',
+      type: 'analyze.paragraph.v1',
+      payload: {
+        doc_id: 'doc-no-key-words',
+        paragraph_id: 'p1',
+        paragraph_text: 'The author frames the problem.',
+      },
+      cache_hint: 'bypass',
+    }));
+    let paragraphText = '';
+    for await (const chunk of paragraph.stream ?? []) {
+      paragraphText += chunk;
+    }
+    const paragraphData = extractJsonFromText(paragraphText) as {
+      sentences?: Array<{ key_words?: unknown }>;
+    };
+    expect(paragraphData.sentences?.[0]?.key_words).toBeUndefined();
   });
 
   test('passes AbortSignal through to llm-backed handlers and preserves abort semantics', async () => {

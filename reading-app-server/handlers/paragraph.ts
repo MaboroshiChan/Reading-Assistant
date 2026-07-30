@@ -1,4 +1,3 @@
-import path from 'node:path';
 import fs from 'node:fs/promises';
 import type {
   AnalyzeParagraphData,
@@ -9,19 +8,19 @@ import type {
 import { config } from '../services/config';
 import * as cache from '../services/cache';
 import { createLLMClient, extractJsonFromText, type LLMUsage, type CallReturn } from '../services/llmService';
+import { resolvePromptPath } from '../src/utils/prompt-path';
 import {
   buildStableCacheKey,
   makeAnchor,
   sortAnchors,
   summarize,
-  withBufferedStream,
 } from './shared';
 import { handlerLog } from './logger';
 
 const CACHE_PREFIX = 'paragraph';
 const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'paragraph.v1.1';
-const PROMPT_PATH = path.join(__dirname, '..', 'prompts', 'v1', 'paragraph.txt');
+const PROMPT_PATH = resolvePromptPath('paragraph.txt');
 const TASK_ORDER: readonly ParagraphTask[] = ['summary', 'roles', 'rhetoric', 'claims', 'tags'];
 
 export type ParagraphTask = 'roles' | 'rhetoric' | 'claims' | 'summary' | 'tags';
@@ -279,14 +278,17 @@ export const handleParagraph = async (
   const started = Date.now();
   const { data: stream, usage: usagePromise } = await buildParagraphData(req, signal);
 
-  const tappedStream = withBufferedStream(stream, async ({ text, completed }) => {
-    if (!completed) return;
+  const sanitizedStream = (async function* () {
+    let text = '';
+    for await (const chunk of stream) {
+      text += chunk;
+    }
+    const object = coerceParagraphResponse(extractJsonFromText(text));
+    const data: AnalyzeParagraphData = mapParagraphResponse(object, req);
+    yield JSON.stringify(data);
 
     try {
       const usage = await usagePromise;
-      const object = coerceParagraphResponse(extractJsonFromText(text));
-      const data: AnalyzeParagraphData = mapParagraphResponse(object, req);
-
       const response: ResponseEnvelopeParagraph = {
         request_id: req.request_id,
         status: 'ok',
@@ -303,9 +305,9 @@ export const handleParagraph = async (
     } catch (error) {
       console.warn('[paragraph] failed to cache response', error);
     }
-  });
+  })();
 
-  return { data: tappedStream, usage: usagePromise };
+  return { data: sanitizedStream, usage: usagePromise };
 };
 
 export { buildPrompt as buildParagraphPrompt, buildTasks as buildParagraphTasks };
@@ -507,15 +509,6 @@ const mapParagraphResponse = (
   const sentences = payload.sentences?.length
     ? payload.sentences
       .map((sentence) => {
-        const keyWords = sentence.key_words
-          ?.map((item) => {
-            const word = asString(item.word);
-            const color = item.color === 'green' ? 'green' : item.color === 'red' ? 'red' : undefined;
-            if (!word || !color) return null;
-            return { word, color };
-          })
-          .filter((item): item is { word: string; color: 'red' | 'green' } => item !== null);
-
         const relation = sentence.relation && (
           asString(sentence.relation.type) || typeof sentence.relation.targetSentenceId === 'number'
         )
@@ -535,7 +528,6 @@ const mapParagraphResponse = (
           mood: asString(sentence.mood),
           purpose: asString(sentence.purpose),
           relation,
-          key_words: keyWords?.length ? keyWords : undefined,
         };
       })
       .filter((sentence) =>
@@ -543,8 +535,7 @@ const mapParagraphResponse = (
         sentence.type ||
         sentence.mood ||
         sentence.purpose ||
-        sentence.relation ||
-        sentence.key_words?.length,
+        sentence.relation,
       )
     : undefined;
 
@@ -704,18 +695,6 @@ const coerceClaim = (value: unknown): LLMParagraphClaim | null => {
 const coerceSentence = (value: unknown): LLMParagraphSentence | null => {
   if (!isRecord(value)) return null;
 
-  const keyWords = Array.isArray(value.key_words)
-    ? value.key_words
-      .map((item) => {
-        if (!isRecord(item)) return null;
-        return {
-          word: asString(item.word),
-          color: asString(item.color),
-        };
-      })
-      .filter((item) => item !== null)
-    : undefined;
-
   const relation = isRecord(value.relation)
     ? {
       type: asString(value.relation.type),
@@ -732,7 +711,6 @@ const coerceSentence = (value: unknown): LLMParagraphSentence | null => {
     mood: asString(value.mood),
     purpose: asString(value.purpose),
     relation,
-    key_words: keyWords,
   };
 
   if (
@@ -740,8 +718,7 @@ const coerceSentence = (value: unknown): LLMParagraphSentence | null => {
     !sentence.type &&
     !sentence.mood &&
     !sentence.purpose &&
-    !sentence.relation &&
-    !sentence.key_words?.length
+    !sentence.relation
   ) {
     return null;
   }

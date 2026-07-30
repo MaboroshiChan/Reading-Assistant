@@ -92,7 +92,8 @@ export type ErrorCode =
   | 'E.BAD_REQUEST'
   | 'E.CONTEXT_MISMATCH'
   | 'E.MODEL_OVERLOADED'
-  | 'E.CANCELLED';
+  | 'E.CANCELLED'
+  | 'E.FEATURE_DISABLED';
 
 export interface EnvelopeError {
   code: ErrorCode;

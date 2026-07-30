@@ -35,9 +35,9 @@ export class KnowledgeExtractionWorkflowController {
   }
 
   @Get('workflows/knowledge-extraction/:workflowRunId/result')
-  getWorkflowResult(
+  async getWorkflowResult(
     @Param('workflowRunId') workflowRunId: string,
-  ): GetKnowledgeExtractionWorkflowResultResponseDto {
+  ): Promise<GetKnowledgeExtractionWorkflowResultResponseDto> {
     return this.knowledgeExtractionWorkflowService.getWorkflowResult(workflowRunId);
   }
 
@@ -51,10 +51,10 @@ export class KnowledgeExtractionWorkflowController {
   }
 
   @Get('books/:bookId/chapters/:chapterId/knowledge-extraction')
-  getLatestChapterKnowledgeExtraction(
+  async getLatestChapterKnowledgeExtraction(
     @Param('bookId') bookId: string,
     @Param('chapterId') chapterId: string,
-  ): GetLatestChapterKnowledgeExtractionResponseDto {
+  ): Promise<GetLatestChapterKnowledgeExtractionResponseDto> {
     return this.knowledgeExtractionWorkflowService.getLatestChapterKnowledgeExtraction(bookId, chapterId);
   }
 }

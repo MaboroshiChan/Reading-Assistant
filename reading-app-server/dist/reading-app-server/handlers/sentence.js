@@ -49,7 +49,7 @@ const CACHE_VERSION = 'v2';
 const PROMPT_VERSION = 'sentence.v5';
 exports.SENTENCE_PROMPT_VERSION = PROMPT_VERSION;
 const PROMPT_PATH = node_path_1.default.join(__dirname, '..', 'prompts', 'v1', 'sentence.txt');
-const TASK_ORDER = ['semantic_roles', 'key_words', 'discourse_function', 'dependency_light', 'modal_markers'];
+const TASK_ORDER = ['semantic_roles', 'discourse_function', 'dependency_light', 'modal_markers'];
 const ROLE_ALIAS = {
     subject: 'subject',
     predicate: 'predicate',
@@ -283,13 +283,16 @@ const handleSentence = async (req, signal) => {
     }
     const started = Date.now();
     const { data: stream, usage: usagePromise } = await buildSentenceData(req, signal);
-    const tappedStream = (0, shared_1.withBufferedStream)(stream, async ({ text, completed }) => {
-        if (!completed)
-            return;
+    const sanitizedStream = (async function* () {
+        let text = '';
+        for await (const chunk of stream) {
+            text += chunk;
+        }
+        const object = coerceSentenceResponse((0, llmService_1.extractJsonFromText)(text));
+        const data = mapSentenceResponse(object, req);
+        yield JSON.stringify(data);
         try {
             const usage = await usagePromise;
-            const object = coerceSentenceResponse((0, llmService_1.extractJsonFromText)(text));
-            const data = mapSentenceResponse(object, req);
             const response = {
                 request_id: req.request_id,
                 status: 'ok',
@@ -307,8 +310,8 @@ const handleSentence = async (req, signal) => {
         catch (error) {
             console.warn('[sentence] failed to cache response', error);
         }
-    });
-    return { data: tappedStream, usage: usagePromise };
+    })();
+    return { data: sanitizedStream, usage: usagePromise };
 };
 exports.handleSentence = handleSentence;
 /**
@@ -387,25 +390,6 @@ const mapSentenceResponse = (payload, req) => {
             return roles.length ? roles : undefined;
         })()
         : undefined;
-    const keyWords = shouldInclude('key_words') && payload.key_phrase
-        ? (() => {
-            const words = [];
-            // Support both string (legacy/single) and array
-            const raw = payload.key_phrase;
-            const candidates = Array.isArray(raw) ? raw : [raw];
-            for (const phrase of candidates) {
-                if (!phrase || typeof phrase !== 'string')
-                    continue;
-                words.push({ word: phrase, color: 'green' });
-                const span = findSpan(text, phrase);
-                if (span) {
-                    const anchor = (0, shared_1.makeAnchor)({ sentenceId, span, text: phrase });
-                    anchorIndex.set(anchor.anchor_hash, anchor);
-                }
-            }
-            return words.length ? words : undefined;
-        })()
-        : undefined;
     // Map 'discourse_function' task to the new classification fields
     const classification = shouldInclude('discourse_function') ? {
         discourse_function: payload.function,
@@ -450,7 +434,6 @@ const mapSentenceResponse = (payload, req) => {
     const anchorList = anchorIndex.size ? (0, shared_1.sortAnchors)(Array.from(anchorIndex.values())) : undefined;
     return {
         semantic_roles: semanticRoles,
-        key_words: keyWords,
         ...classification,
         dependency_light: dependencyLight,
         modal_markers: modalMarkers,

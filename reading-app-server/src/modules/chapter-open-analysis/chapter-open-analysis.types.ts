@@ -16,6 +16,7 @@ export type ChapterOpenAnalysisTaskStatus =
   | 'queued'
   | 'running'
   | 'completed'
+  | 'disabled'
   | 'blocked'
   | 'failed'
   | 'stale';

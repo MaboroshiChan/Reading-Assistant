@@ -128,6 +128,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     delete process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE;
+    delete process.env.KNOWLEDGE_EXTRACTION_READ_THROUGH_SURREAL;
     delete process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_TIMEOUT_MS;
     delete process.env.AUTO_SUBMIT_QUIZ_WORKFLOW;
   });
@@ -326,8 +327,8 @@ describe('KnowledgeExtractionWorkflowService', () => {
     }));
     expect(replaceSpy).toHaveBeenCalledTimes(1);
 
-    const result = service.getWorkflowResult(submit.workflowRunId).result;
-    const latest = service.getLatestChapterKnowledgeExtraction('book-1', 'chapter-1').result;
+    const result = (await service.getWorkflowResult(submit.workflowRunId)).result;
+    const latest = (await service.getLatestChapterKnowledgeExtraction('book-1', 'chapter-1')).result;
     const keyInformation = workflowRepository.buildBookKeyInformation('book-1');
     const personLocalId = result.people[0]?.local_id;
     const ideaLocalId = result.ideas[0]?.local_id;
@@ -399,6 +400,200 @@ describe('KnowledgeExtractionWorkflowService', () => {
       importance: 'main',
     });
     expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
+  });
+
+  test('returns the canonical chapter snapshot after replacing chapter extraction', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const queueService = new WorkflowQueueService();
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      queueService,
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-canonical-snapshot',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Canonical Chapter',
+      pageIndex: 0,
+      sourceHash: 'hash-page-0',
+      pageParagraphs: {
+        '0': 'Alice begins the speech about freedom at City Hall.',
+      },
+      bookMetadata: { isFiction: true },
+    });
+
+    vi.spyOn(service as never, 'generateKnowledgeExtractionForPiece').mockResolvedValue(
+      toGraphExtraction({
+        title: 'ignored',
+        summary: 'ignored',
+        people: [
+          {
+            local_id: 'p1',
+            name: 'Alice',
+            aliases: [],
+            roles: [],
+            traits: [],
+            evidence: [{ quote: 'Alice begins the speech', pageIndex: 0, pageNumber: 1 }],
+          },
+        ],
+        ideas: [],
+        events: [],
+        entities: [],
+        themes: [],
+        relations: [],
+      }),
+    );
+
+    const canonicalSnapshot: AnalyzeKnowledgeExtractionData = {
+      title: 'Canonical Chapter',
+      summary: '',
+      people: [],
+      ideas: [
+        {
+          local_id: 'i-canonical',
+          label: 'Canonical Idea',
+          description: 'Only the canonical snapshot should be returned.',
+          kind: 'claim',
+          evidence: [{ quote: 'Canonical evidence', pageIndex: 4, pageNumber: 5 }],
+        },
+      ],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [],
+    };
+    const canonicalSnapshotSpy = vi
+      .spyOn(workflowRepository, 'buildChapterSnapshot')
+      .mockResolvedValue(canonicalSnapshot);
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-canonical-snapshot',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+    });
+
+    await vi.waitFor(() => {
+      expect(service.getWorkflowStatus(submit.workflowRunId).status).toBe('completed');
+    });
+
+    expect(canonicalSnapshotSpy).toHaveBeenCalledWith('book-canonical-snapshot', 'chapter-1');
+
+    const result = (await service.getWorkflowResult(submit.workflowRunId)).result;
+    const latest = (await service.getLatestChapterKnowledgeExtraction('book-canonical-snapshot', 'chapter-1')).result;
+
+    expect(result.people).toEqual([]);
+    expect(result.ideas).toEqual([
+      expect.objectContaining({
+        label: 'Canonical Idea',
+        evidence: [{ quote: 'Canonical evidence', pageIndex: 4, pageNumber: 5 }],
+      }),
+    ]);
+    expect(latest.ideas).toEqual(result.ideas);
+  });
+
+  test('reads knowledge extraction result paths through Surreal-backed repository methods when enabled', async () => {
+    process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE = '0';
+    process.env.KNOWLEDGE_EXTRACTION_READ_THROUGH_SURREAL = '1';
+
+    const bookRepository = await createBookRepository();
+    const workflowRepository = new KnowledgeExtractionWorkflowRepository();
+    const bookContextService = new BookContextService(bookRepository, workflowRepository);
+    const service = new KnowledgeExtractionWorkflowService(
+      bookRepository,
+      bookContextService,
+      workflowRepository,
+      new WorkflowQueueService(),
+    );
+
+    bookRepository.upsertPageFragment({
+      bookId: 'book-read-through',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      chapterTitle: 'Read Through',
+      pageIndex: 0,
+      sourceHash: 'hash-read-through-0',
+      pageParagraphs: {
+        '0': 'Stored chapter content.',
+      },
+    });
+
+    const submit = service.submitKnowledgeExtractionWorkflow({
+      bookId: 'book-read-through',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+    });
+
+    const storedResult: AnalyzeKnowledgeExtractionData = {
+      title: 'Stored title',
+      summary: 'Stored summary',
+      people: [],
+      ideas: [{
+        local_id: 'idea-stored',
+        label: 'Stored idea',
+        description: 'Loaded from read-through path',
+        kind: 'principle',
+        evidence: [{ quote: 'Stored quote', pageIndex: 0, pageNumber: 1 }],
+      }],
+      events: [],
+      entities: [],
+      themes: [],
+      relations: [],
+    };
+
+    const getRunFromStoreSpy = vi.spyOn(workflowRepository, 'getRunFromStore').mockResolvedValue({
+      id: submit.workflowRunId,
+      kind: 'knowledge_extraction',
+      status: 'completed',
+      bookId: 'book-read-through',
+      chapterId: 'chapter-1',
+      chapterIndex: 1,
+      workflowVersion: 'v1',
+      idempotencyKey: 'read-through-key',
+      producer: 'server',
+      qualityTier: 'server_final',
+      deduped: false,
+      resultVersion: 'v1',
+      output: storedResult,
+      createdAt: '2026-06-25T00:00:00.000Z',
+      updatedAt: '2026-06-25T00:00:00.000Z',
+      completedAt: '2026-06-25T00:00:00.000Z',
+      snapshotVersion: 7,
+      chapterContentHash: 'hash-7',
+    });
+    const getLatestResultFromStoreSpy = vi
+      .spyOn(workflowRepository, 'getLatestResultFromStore')
+      .mockResolvedValue({
+        workflowRunId: submit.workflowRunId,
+        bookId: 'book-read-through',
+        chapterId: 'chapter-1',
+        chapterIndex: 1,
+        workflowVersion: 'v1',
+        resultVersion: 'v1',
+        producer: 'server',
+        qualityTier: 'server_final',
+        snapshotVersion: 7,
+        chapterContentHash: 'hash-7',
+        result: storedResult,
+        createdAt: '2026-06-25T00:00:00.000Z',
+        updatedAt: '2026-06-25T00:00:00.000Z',
+      });
+
+    const result = await service.getWorkflowResult(submit.workflowRunId);
+    const latest = await service.getLatestChapterKnowledgeExtraction('book-read-through', 'chapter-1');
+
+    expect(result.result.ideas[0]?.label).toBe('Stored idea');
+    expect(latest.result.ideas[0]?.label).toBe('Stored idea');
+    expect(getRunFromStoreSpy).toHaveBeenCalledWith(submit.workflowRunId);
+    expect(getLatestResultFromStoreSpy).toHaveBeenCalledWith('book-read-through', 'chapter-1');
   });
 
   test('builds pieces from consecutive pages in pairs', async () => {
@@ -883,7 +1078,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
     expect(service.getWorkflowStatus(submit.workflowRunId).progress).toBeUndefined();
 
     expect(workflowRepository.getLatestResult('book-fail-1', 'chapter-fail-1')).toBeNull();
-    expect(() => service.getWorkflowResult(submit.workflowRunId)).toThrowError(ConflictException);
+    await expect(service.getWorkflowResult(submit.workflowRunId)).rejects.toThrowError(ConflictException);
 
     const snapshot = await workflowRepository.buildChapterSnapshot('book-fail-1', 'chapter-fail-1');
     expect(snapshot.people).toEqual([]);
@@ -3642,7 +3837,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       },
     });
 
-    const latest = service.getLatestChapterKnowledgeExtraction('book-preread', 'chapter-preread');
+    const latest = await service.getLatestChapterKnowledgeExtraction('book-preread', 'chapter-preread');
     expect(latest.result.teaser).toBe(
       'A public decision is coming, but the chapter first teaches you how to watch it.',
     );
@@ -3652,7 +3847,7 @@ describe('KnowledgeExtractionWorkflowService', () => {
       'What should you watch for when private doubt becomes public action?',
     ]);
 
-    const result = service.getWorkflowResult(knowledgeRun.run.id);
+    const result = await service.getWorkflowResult(knowledgeRun.run.id);
     expect(result.result.teaser).toBe(
       'A public decision is coming, but the chapter first teaches you how to watch it.',
     );
@@ -3763,6 +3958,8 @@ describe('KnowledgeExtractionWorkflowService', () => {
       expect(quizService.submitQuizWorkflow).toHaveBeenCalledTimes(1);
     });
 
-    expect(service.getWorkflowResult(submit.workflowRunId).result.title).toBe('Auto Fail');
+    await expect(service.getWorkflowResult(submit.workflowRunId)).resolves.toMatchObject({
+      result: expect.objectContaining({ title: 'Auto Fail' }),
+    });
   });
 });

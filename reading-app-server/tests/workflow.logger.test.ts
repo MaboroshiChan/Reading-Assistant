@@ -101,9 +101,9 @@ describe('workflow logging', () => {
     });
 
     quizService.getWorkflowResult(quizSubmit.workflowRunId);
-    knowledgeService.getWorkflowResult(knowledgeSubmit.workflowRunId);
+    await knowledgeService.getWorkflowResult(knowledgeSubmit.workflowRunId);
     quizService.getLatestChapterQuiz('book-1', 'chapter-1');
-    knowledgeService.getLatestChapterKnowledgeExtraction('book-1', 'chapter-1');
+    await knowledgeService.getLatestChapterKnowledgeExtraction('book-1', 'chapter-1');
 
     await flushWorkflowLogs();
 

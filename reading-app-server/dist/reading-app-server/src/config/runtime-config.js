@@ -37,9 +37,11 @@ const createAppConfig = () => ({
     model: process.env.MODEL_ID ?? defaultModelForProvider(),
     quizWorkflowModel: process.env.QUIZ_WORKFLOW_MODEL_ID ?? defaultModelForProvider(),
     knowledgeExtractionWorkflowModel: process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_MODEL_ID ?? defaultModelForProvider(),
+    // Deprecated: chapter keyword/key sentence generation moved to iOS local Foundation Models.
+    // This remains readable for legacy tooling only and is not used by active runtime paths.
     chapterKeywordsWorkflowModel: process.env.CHAPTER_KEYWORDS_WORKFLOW_MODEL_ID ?? defaultModelForProvider(),
     timeoutMs: 50_000,
-    knowledgeExtractionWorkflowTimeoutMs: Number(process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_TIMEOUT_MS ?? 120_000),
+    knowledgeExtractionWorkflowTimeoutMs: Number(process.env.KNOWLEDGE_EXTRACTION_WORKFLOW_TIMEOUT_MS ?? 3_600_000),
     cacheMax: 500,
     cacheTtlMs: 7 * 24 * 3600_000,
     debugMode: process.env.LLM_DEBUG === '1' || process.env.DEBUG_LLM === '1',
@@ -48,6 +50,7 @@ const createAppConfig = () => ({
     autoSubmitKnowledgeExtractionWorkflow: process.env.AUTO_SUBMIT_KNOWLEDGE_EXTRACTION_WORKFLOW === '1',
     autoSubmitQuizWorkflow: process.env.AUTO_SUBMIT_QUIZ_WORKFLOW !== '0',
     requireKnowledgeExtractionCache: process.env.KNOWLEDGE_EXTRACTION_REQUIRE_CACHE === '1',
+    knowledgeExtractionReadThroughSurreal: process.env.KNOWLEDGE_EXTRACTION_READ_THROUGH_SURREAL === '1',
     llmProvider: getLlmProvider(),
     surrealUrl: process.env.SURREAL_URL ?? '',
     surrealNamespace: process.env.SURREAL_NS ?? '',

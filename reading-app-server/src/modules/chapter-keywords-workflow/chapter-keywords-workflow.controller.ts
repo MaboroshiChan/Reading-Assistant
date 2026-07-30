@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
+import { Controller, Get, GoneException, Post } from '@nestjs/common';
 import type {
   GetChapterKeywordsWorkflowResultResponseDto,
   GetChapterKeywordsWorkflowStatusResponseDto,
@@ -6,55 +6,49 @@ import type {
   RestartChapterKeywordsWorkflowResponseDto,
   SubmitChapterKeywordsWorkflowResponseDto,
 } from './chapter-keywords-workflow.dto';
-import { ChapterKeywordsWorkflowService } from './chapter-keywords-workflow.service';
 
 @Controller('v1')
 export class ChapterKeywordsWorkflowController {
-  private readonly chapterKeywordsWorkflowService: ChapterKeywordsWorkflowService;
-
-  constructor(
-    @Inject(ChapterKeywordsWorkflowService)
-    chapterKeywordsWorkflowService: ChapterKeywordsWorkflowService,
-  ) {
-    this.chapterKeywordsWorkflowService = chapterKeywordsWorkflowService;
-  }
+  private static readonly disabledMessage =
+    'Chapter key sentence and key word generation moved to iOS local Foundation Models.';
 
   @Post('workflows/chapter-keywords')
-  submitChapterKeywordsWorkflow(
-    @Body() rawBody: string | undefined,
-  ): SubmitChapterKeywordsWorkflowResponseDto {
-    const request = this.chapterKeywordsWorkflowService.parseSubmitRequest(rawBody);
-    return this.chapterKeywordsWorkflowService.submitChapterKeywordsWorkflow(request);
+  submitChapterKeywordsWorkflow(): SubmitChapterKeywordsWorkflowResponseDto {
+    throw this.featureDisabled();
   }
 
   @Get('workflows/chapter-keywords/:workflowRunId')
   getWorkflowStatus(
-    @Param('workflowRunId') workflowRunId: string,
   ): GetChapterKeywordsWorkflowStatusResponseDto {
-    return this.chapterKeywordsWorkflowService.getWorkflowStatus(workflowRunId);
+    throw this.featureDisabled();
   }
 
   @Get('workflows/chapter-keywords/:workflowRunId/result')
   getWorkflowResult(
-    @Param('workflowRunId') workflowRunId: string,
   ): GetChapterKeywordsWorkflowResultResponseDto {
-    return this.chapterKeywordsWorkflowService.getWorkflowResult(workflowRunId);
+    throw this.featureDisabled();
   }
 
   @Post('workflows/chapter-keywords/:workflowRunId/restart')
   restartWorkflow(
-    @Param('workflowRunId') workflowRunId: string,
-    @Body() rawBody: string | undefined,
   ): RestartChapterKeywordsWorkflowResponseDto {
-    const request = this.chapterKeywordsWorkflowService.parseRestartRequest(rawBody);
-    return this.chapterKeywordsWorkflowService.restartWorkflow(workflowRunId, request);
+    throw this.featureDisabled();
   }
 
   @Get('books/:bookId/chapters/:chapterId/chapter-keywords')
   getLatestChapterKeywords(
-    @Param('bookId') bookId: string,
-    @Param('chapterId') chapterId: string,
   ): GetLatestChapterKeywordsResponseDto {
-    return this.chapterKeywordsWorkflowService.getLatestChapterKeywords(bookId, chapterId);
+    throw this.featureDisabled();
+  }
+
+  private featureDisabled(): GoneException {
+    return new GoneException({
+      status: 'error',
+      error: {
+        code: 'E.FEATURE_DISABLED',
+        http: 410,
+        message: ChapterKeywordsWorkflowController.disabledMessage,
+      },
+    });
   }
 }
